@@ -5,37 +5,33 @@
 //TODO: store drop methods of stored values too for correct deallocation
 //TODO: macro for more efficient tuple inserting through use of destructering
 
-use std::{
-    alloc::Layout,
-    ptr::NonNull,
-};
+use std::{alloc::Layout, ptr::NonNull};
 
 pub struct ThinBlobVec {
-    pub data : NonNull<u8>,
-    pub layout : Layout,
+    pub data: NonNull<u8>,
+    pub layout: Layout,
 }
 
-impl ThinBlobVec{
-
+impl ThinBlobVec {
     pub fn new(layout: Layout) -> Self {
         Self {
             data: NonNull::dangling(),
-            layout
+            layout,
         }
     }
 
-    pub unsafe fn dealloc(&mut self, cap: usize, drop_fn: Option<unsafe fn(*mut u8)>){
+    pub unsafe fn dealloc(&mut self, cap: usize, drop_fn: Option<unsafe fn(*mut u8)>) {
         if cap == 0 {
             return;
         }
 
         //call drop on every type erased entry
-        let alloc_size = cap*self.layout.size();
+        let alloc_size = cap * self.layout.size();
 
-        if let Some(drop_fn) = drop_fn{
-            for i in 0..cap{
-              let elem_ptr = self.data.add(self.layout.size()*i);
-              drop_fn(elem_ptr.as_ptr());
+        if let Some(drop_fn) = drop_fn {
+            for i in 0..cap {
+                let elem_ptr = self.data.add(self.layout.size() * i);
+                drop_fn(elem_ptr.as_ptr());
             }
         }
 
@@ -45,8 +41,7 @@ impl ThinBlobVec{
         std::alloc::dealloc(self.data.as_ptr(), cur_array_layout);
     }
 
-
-    pub unsafe fn dealloc_typed<T>(&mut self, cap: usize){
+    pub unsafe fn dealloc_typed<T>(&mut self, cap: usize) {
         self.dealloc(cap, Some(Self::drop_ptr::<T>));
     }
 
@@ -55,12 +50,11 @@ impl ThinBlobVec{
         let _ = std::ptr::drop_in_place(typed_ptr);
     }
 
-
     /**
      * Grows dynamic array by doubling the supplied capacity.
      * Returns new capacity of the new allocation.
      */
-    pub unsafe fn grow(&mut self, cap: usize) -> usize{
+    pub unsafe fn grow(&mut self, cap: usize) -> usize {
         let (new_ptr, new_cap) = if cap == 0 {
             let new_cap = 4;
             let cur_array_layout =
@@ -87,16 +81,12 @@ impl ThinBlobVec{
         new_cap
     }
 
-
     /**
      * Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
      *
      */
-    pub unsafe fn push_untyped(&mut self, cap: usize, len: usize, value_ptr: NonNull<u8>) -> usize{
-        let new_cap = if len == cap {
-            self.grow(cap)
-        }
-        else{cap};
+    pub unsafe fn push_untyped(&mut self, cap: usize, len: usize, value_ptr: NonNull<u8>) -> usize {
+        let new_cap = if len == cap { self.grow(cap) } else { cap };
 
         let base_offset = self.layout.size() * len;
         let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
@@ -106,32 +96,34 @@ impl ThinBlobVec{
         new_cap
     }
 
-    pub unsafe fn push_typed<T>(&mut self, cap: usize, len: usize, mut value: T) -> usize{
-        let new_cap = self.push_untyped(cap, len, NonNull::new_unchecked(&mut value as *mut T).cast());
+    pub unsafe fn push_typed<T>(&mut self, cap: usize, len: usize, mut value: T) -> usize {
+        let new_cap = self.push_untyped(
+            cap,
+            len,
+            NonNull::new_unchecked(&mut value as *mut T).cast(),
+        );
         std::mem::forget(value);
         new_cap
     }
 
-    pub unsafe fn get_ptr_untyped(
-        &mut self, index: usize, layout: Layout
-    ) -> NonNull<u8>{
-        self.data.add(index*layout.size())
+    pub unsafe fn get_ptr_untyped(&mut self, index: usize, layout: Layout) -> NonNull<u8> {
+        self.data.add(index * layout.size())
     }
 
-    pub unsafe fn get_typed<T>(
-        &mut self, index: usize 
-    ) -> &T{
-        & *self.get_ptr_untyped(index, Layout::new::<T>()).cast().as_ptr()
+    pub unsafe fn get_typed<T>(&mut self, index: usize) -> &T {
+        &*self
+            .get_ptr_untyped(index, Layout::new::<T>())
+            .cast()
+            .as_ptr()
     }
 
-    pub unsafe fn get_mut_typed<T>(
-        &mut self, index: usize 
-    ) -> &mut T{
-        &mut *self.get_ptr_untyped(index, Layout::new::<T>()).cast().as_ptr()
+    pub unsafe fn get_mut_typed<T>(&mut self, index: usize) -> &mut T {
+        &mut *self
+            .get_ptr_untyped(index, Layout::new::<T>())
+            .cast()
+            .as_ptr()
     }
 }
-
-
 
 #[cfg(test)]
 mod test {
@@ -146,18 +138,17 @@ mod test {
     #[test]
     fn it_works() {
         let mut bv = ThinBlobVec::new(Layout::new::<comp1>());
-        unsafe{
-           bv.push_typed(0, 0, comp1(23, 435, 2, 5));
-           bv.push_typed(4, 1, comp1(23, 435, 2, 5));
-           bv.push_typed(4, 2, comp1(23, 435, 2, 5));
-           let cap = bv.push_typed(4, 3, comp1(23, 435, 2, 5));
-           bv.push_typed(cap, 4, comp1(23, 435, 2, 5));
-           let cap = bv.push_typed(0, 5, comp1(23, 435, 2, 5));
-           let v : &mut comp1 = bv.get_mut_typed(0);
-           let v : &mut comp1 = bv.get_mut_typed(4);
+        unsafe {
+            bv.push_typed(0, 0, comp1(23, 435, 2, 5));
+            bv.push_typed(4, 1, comp1(23, 435, 2, 5));
+            bv.push_typed(4, 2, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(4, 3, comp1(23, 435, 2, 5));
+            bv.push_typed(cap, 4, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(0, 5, comp1(23, 435, 2, 5));
+            let v: &mut comp1 = bv.get_mut_typed(0);
+            let v: &mut comp1 = bv.get_mut_typed(4);
 
-           bv.dealloc_typed::<comp1>(cap);
+            bv.dealloc_typed::<comp1>(cap);
         }
-
     }
 }

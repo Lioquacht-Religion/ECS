@@ -62,5 +62,8 @@ fn test_system1(prm: Res<i32>, prm2: Res<usize>) {
 }
 
 fn test_system3(prm: (Res<i32>, Res<u64>), prm2: Res<(usize, usize)>) {
-    println!("testsystem3 tuple res: {}, {}, {}, {}", prm.0.value, prm.1.value, prm2.value.0, prm2.value.1);
+    println!(
+        "testsystem3 tuple res: {}, {}, {}, {}",
+        prm.0.value, prm.1.value, prm2.value.0, prm2.value.1
+    );
 }

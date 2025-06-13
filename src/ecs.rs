@@ -1,9 +1,9 @@
 pub mod component;
 pub mod entity;
 pub mod query;
+pub mod storages;
 pub mod system;
 pub mod world;
-pub mod storages;
 
 use std::{
     alloc::Layout,

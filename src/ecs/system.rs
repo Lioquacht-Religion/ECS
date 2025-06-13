@@ -67,7 +67,7 @@ impl<'res, T: 'static> SystemParam for Res<'res, T> {
 
     unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
         Res {
-            value: (& *world_data.get()).resources.get().unwrap(),
+            value: (&*world_data.get()).resources.get().unwrap(),
         }
     }
 }
@@ -119,7 +119,7 @@ all_tuples!(
     T9,
     T10
 );
- 
+
 pub struct FunctionSystem<Input, F> {
     pub f: F,
     pub marker: PhantomData<fn() -> Input>,
