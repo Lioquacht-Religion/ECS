@@ -1,21 +1,22 @@
 // main.rs file for testing ECS package directly
 
+use std::usize;
+
 use ecs::{
-    ecs::{system::Res, world::World},
+    ecs::{component::Component, system::Res, world::World},
     utils::tuple_types::TupleTypesExt,
 };
 
-fn main() {
-    let t = (0, 0, 0, 0, 0);
+struct UsizeWrapper(usize);
+impl Component for UsizeWrapper{}
 
+fn main() {
+    let t = (UsizeWrapper(0),UsizeWrapper(0),UsizeWrapper(0),);
     t.self_layouts();
 
-    let t1 = (0, 0);
-    println!("layouts: {:?}", t1.self_layouts());
+    println!("layouts: {:?}", t.self_layouts());
     let t2 = (0, 0, ("errf", "wsvfer"), 0, 0, (23, 232));
-    println!("layouts: {:?}", t2.self_layouts());
-
-    t1.self_type_ids();
+    //println!("layouts: {:?}", t2.self_layouts());
 
     let t2: u32 = 0;
     let t3: () = ();

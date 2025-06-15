@@ -43,19 +43,14 @@ impl From<ComponentId> for usize {
 
 pub struct Archetype {
     pub(crate) archetype_id: ArchetypeId,
-    pub(crate) hash: ArchetypeHash,
-    pub(crate) table_id: u32, //TODO: specific Storage ID type?
-    //pub(crate) comp_type_ids: Vec<TypeId>,
+    //pub(crate) comp_type_ids: Vec<TypeId>, TODO: is this needed?
     pub(crate) comp_ids: SortedVec<ComponentId>,
 }
 
 impl Archetype {
-    pub fn new(archetype_id: ArchetypeId, table_id: u32, comp_ids: SortedVec<ComponentId>) -> Self {
-        let hash = ArchetypeHash(0);
+    pub fn new(archetype_id: ArchetypeId, comp_ids: SortedVec<ComponentId>) -> Self {
         Self {
             archetype_id,
-            hash,
-            table_id,
             comp_ids,
         }
     }
@@ -136,7 +131,7 @@ pub struct EntityStorage {
     //mapping data
     pub(crate) typeid_compid_map: HashMap<TypeId, ComponentId>,
     pub(crate) compid_archid_map: HashMap<ComponentId, HashSet<ArchetypeId>>,
-    pub(crate) compids_archid_map: HashMap<SortedVec<ComponentId>, HashSet<ArchetypeId>>,
+    pub(crate) compids_archid_map: HashMap<SortedVec<ComponentId>, ArchetypeId>,
 }
 
 impl EntityStorage {
@@ -157,19 +152,26 @@ impl EntityStorage {
     pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
         //TODO; provide SortedVec from outside for reuse, to avoid allocations
         let mut type_ids = Vec::new();
-        T::type_ids(&mut type_ids);
-        let mut comp_ids: Vec<ComponentId> = Vec::new();
+        T::type_ids_rec(&mut type_ids);
+        let mut comp_ids: Vec<ComponentId> = Vec::with_capacity(T::get_tuple_length());
         T::create_or_get_component(self, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
-        //self.compids_archid_map;
+        if let Some(archetype_id) = self.compids_archid_map.get(&comp_ids){
+            return *archetype_id;
+        }
 
         if let Some(_dup_compid) = comp_ids.check_duplicates() {
             //TODO: use dup_compid to get more error info
             panic!("INVALID: Same component contained multiple times inside of entity.");
         }
 
-        todo!()
+        let archetype_id = self.archetypes.len().into();
+        let archetype = Archetype::new(archetype_id, comp_ids);
+        self.archetypes.push(archetype);
+        self.tables_soa.insert(archetype_id, TableSoA::new(archetype_id, self));
+
+        archetype_id
     }
 
     pub fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
@@ -206,9 +208,14 @@ mod test{
     impl Component for Type1{}
 
     #[test]
-    fn it_works(){
+    fn test_entity_storage(){
+        todo!()
+    }
+
+    #[test]
+    fn test_tuple_ext_methods(){
         let t = Type1{f1: 4324};
         let mut vec = Vec::new();
-        t.self_type_ids(&mut vec);
+        t.self_type_ids_rec(&mut vec);
     }
 }

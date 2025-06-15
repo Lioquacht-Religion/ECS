@@ -3,7 +3,7 @@
 
 use std::hash::Hash;
 
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct SortedVec<T: Ord + Eq + Hash> {
     vec: Vec<T>,
 }
