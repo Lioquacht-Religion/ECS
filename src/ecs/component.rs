@@ -1,15 +1,23 @@
 // component.rs
 
+use core::panic;
 use std::{
     alloc::Layout,
-    any::{Any, TypeId},
+    any::TypeId,
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    hash::Hash,
     mem::needs_drop,
     ptr::drop_in_place,
 };
 
-use crate::utils::gen_vec::GenVec;
+use crate::utils::{
+    gen_vec::GenVec,
+    sorted_vec::SortedVec,
+    tuple_types::TupleTypesExt,
+};
+
+use super::storages::table_soa::TableSoA;
 
 pub trait Component: 'static {}
 
@@ -21,8 +29,8 @@ pub struct ComponentInfo {
     pub(crate) drop: Option<unsafe fn(*mut u8)>,
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct ComponentId(u32);
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct ComponentId(pub(crate) u32);
 
 impl From<ComponentId> for usize {
     fn from(value: ComponentId) -> Self {
@@ -34,15 +42,30 @@ impl From<ComponentId> for usize {
 }
 
 pub struct Archetype {
-    pub(crate) id: u32,
-    pub(crate) table_id: u32,
-    pub(crate) type_id: TypeId,
-    pub(crate) comp_type_ids: Vec<TypeId>,
-    pub(crate) comp_info_ids: Vec<ComponentId>,
+    pub(crate) archetype_id: ArchetypeId,
+    pub(crate) hash: ArchetypeHash,
+    pub(crate) table_id: u32, //TODO: specific Storage ID type?
+    //pub(crate) comp_type_ids: Vec<TypeId>,
+    pub(crate) comp_ids: SortedVec<ComponentId>,
+}
+
+impl Archetype {
+    pub fn new(archetype_id: ArchetypeId, table_id: u32, comp_ids: SortedVec<ComponentId>) -> Self {
+        let hash = ArchetypeHash(0);
+        Self {
+            archetype_id,
+            hash,
+            table_id,
+            comp_ids,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct ArchetypeId(u32);
+
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct ArchetypeHash(u32);
 
 impl From<u32> for ArchetypeId {
     fn from(value: u32) -> Self {
@@ -88,7 +111,7 @@ impl ComponentInfo {
         let _ = drop_in_place(typed_ptr);
     }
 
-    pub fn new<T: Component>(comp_id: u32) -> Self {
+    pub fn new<T: 'static>(comp_id: u32) -> Self {
         Self {
             name: Cow::Borrowed(core::any::type_name::<T>()),
             comp_id: ComponentId(comp_id),
@@ -109,12 +132,58 @@ pub struct EntityStorage {
     pub(crate) entities: GenVec<Entity>,
     pub(crate) components: Vec<ComponentInfo>,
     pub(crate) archetypes: Vec<Archetype>,
-    pub(crate) type_arch_map: HashMap<TypeId, ArchetypeId>,
-    pub(crate) tables_soa: Vec<Box<dyn Any>>,
+    pub(crate) tables_soa: HashMap<ArchetypeId, TableSoA>,
+    //mapping data
+    pub(crate) typeid_compid_map: HashMap<TypeId, ComponentId>,
+    pub(crate) compid_archid_map: HashMap<ComponentId, HashSet<ArchetypeId>>,
+    pub(crate) compids_archid_map: HashMap<SortedVec<ComponentId>, HashSet<ArchetypeId>>,
 }
 
 impl EntityStorage {
-    pub fn add_new_component<T: Component>(&mut self) {
+    pub fn new() -> Self {
+        Self {
+            entities: GenVec::new(),
+            components: Vec::new(),
+            archetypes: Vec::new(),
+            tables_soa: HashMap::new(),
+            typeid_compid_map: HashMap::new(),
+            compid_archid_map: HashMap::new(),
+            compids_archid_map: HashMap::new(),
+        }
+    }
+
+    pub fn add_entity() {}
+
+    pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
+        //TODO; provide SortedVec from outside for reuse, to avoid allocations
+        let mut type_ids = Vec::new();
+        T::type_ids(&mut type_ids);
+        let mut comp_ids: Vec<ComponentId> = Vec::new();
+        T::create_or_get_component(self, &mut comp_ids);
+        let comp_ids: SortedVec<ComponentId> = comp_ids.into();
+
+        //self.compids_archid_map;
+
+        if let Some(_dup_compid) = comp_ids.check_duplicates() {
+            //TODO: use dup_compid to get more error info
+            panic!("INVALID: Same component contained multiple times inside of entity.");
+        }
+
+        todo!()
+    }
+
+    pub fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
+        self.create_or_get_component_by_typeid::<T>(TypeId::of::<T>())
+    }
+
+    pub fn create_or_get_component_by_typeid<T: Component>(
+        &mut self,
+        type_id: TypeId,
+    ) -> ComponentId {
+        if let Some(comp_id) = self.typeid_compid_map.get(&type_id) {
+            return *comp_id;
+        }
+
         let comp_id: u32 = self
             .components
             .len()
@@ -122,5 +191,24 @@ impl EntityStorage {
             .expect("Component Ids have increased over their max possible u32 value!");
         let comp_info = ComponentInfo::new::<T>(comp_id);
         self.components.push(comp_info);
+        ComponentId(comp_id)
+    }
+}
+
+
+#[cfg(test)]
+mod test{
+    use crate::utils::tuple_types::TupleTypesExt;
+
+    use super::Component;
+
+    struct Type1{f1: usize}
+    impl Component for Type1{}
+
+    #[test]
+    fn it_works(){
+        let t = Type1{f1: 4324};
+        let mut vec = Vec::new();
+        t.self_type_ids(&mut vec);
     }
 }
