@@ -5,47 +5,58 @@
 //TODO: store drop methods of stored values too for correct deallocation
 //TODO: macro for more efficient tuple inserting through use of destructering
 
-use std::{alloc::Layout, ptr::NonNull};
+use std::{alloc::Layout, marker::PhantomData, ptr::NonNull};
+
+use crate::{ecs::component::Component, utils::tuple_iters::TupleIterator};
 
 pub struct ThinBlobVec {
     pub data: NonNull<u8>,
     pub layout: Layout,
+    pub drop_fn: Option<unsafe fn(*mut u8)>,
 }
 
 impl ThinBlobVec {
-    pub fn new(layout: Layout) -> Self {
+    pub fn new(layout: Layout, drop_fn: Option<unsafe fn(*mut u8)>) -> Self {
         Self {
             data: NonNull::dangling(),
             layout,
+            drop_fn,
         }
     }
 
-    pub unsafe fn dealloc(&mut self, cap: usize, drop_fn: Option<unsafe fn(*mut u8)>) {
+    pub fn new_typed<T>() -> Self {
+        Self {
+            data: NonNull::dangling(),
+            layout: Layout::new::<T>(),
+            drop_fn: Some(Self::drop_ptr::<T>),
+        }
+    }
+
+    pub unsafe fn dealloc(&mut self, cap: usize, len: usize) {
         if cap == 0 {
             return;
         }
 
         //call drop on every type erased entry
-        let alloc_size = cap * self.layout.size();
-
-        if let Some(drop_fn) = drop_fn {
-            for i in 0..cap {
+        if let Some(drop_fn) = self.drop_fn {
+            for i in 0..len {
                 let elem_ptr = self.data.add(self.layout.size() * i);
                 drop_fn(elem_ptr.as_ptr());
             }
         }
 
         //dealloc allocation
+        let alloc_size = cap * self.layout.size();
         let cur_array_layout = Layout::from_size_align(alloc_size, self.layout.align())
             .expect("err dealloc layout creation!");
         std::alloc::dealloc(self.data.as_ptr(), cur_array_layout);
     }
 
-    pub unsafe fn dealloc_typed<T>(&mut self, cap: usize) {
-        self.dealloc(cap, Some(Self::drop_ptr::<T>));
+    pub unsafe fn dealloc_typed<T>(&mut self, cap: usize, len: usize) {
+        self.dealloc(cap, len);
     }
 
-    unsafe fn drop_ptr<T>(ptr: *mut u8) {
+    pub unsafe fn drop_ptr<T>(ptr: *mut u8) {
         let typed_ptr: *mut T = ptr.cast::<T>();
         let _ = std::ptr::drop_in_place(typed_ptr);
     }
@@ -106,11 +117,18 @@ impl ThinBlobVec {
         new_cap
     }
 
-    pub unsafe fn get_ptr_untyped(&mut self, index: usize, layout: Layout) -> NonNull<u8> {
+    pub unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
         self.data.add(index * layout.size())
     }
 
-    pub unsafe fn get_typed<T>(&mut self, index: usize) -> &T {
+    pub unsafe fn get_typed<T>(&self, index: usize) -> &T {
+        &*self
+            .get_ptr_untyped(index, Layout::new::<T>())
+            .cast()
+            .as_ptr()
+    }
+
+    pub unsafe fn get_typed_lifetime<'vec, T>(&self, index: usize) -> &'vec T {
         &*self
             .get_ptr_untyped(index, Layout::new::<T>())
             .cast()
@@ -123,32 +141,133 @@ impl ThinBlobVec {
             .cast()
             .as_ptr()
     }
+
+    pub unsafe fn get_mut_typed_lifetime<'vec, T>(&mut self, index: usize) -> &'vec mut T {
+        &mut *self
+            .get_ptr_untyped(index, Layout::new::<T>())
+            .cast()
+            .as_ptr()
+    }
+
+    pub unsafe fn iter<T: 'static>(&mut self, len: usize) -> ThinBlobIter<T> {
+        ThinBlobIter::new(self, len)
+    }
+
+    pub unsafe fn tuple_iter<T: 'static>(&self) -> ThinBlobIterUnsafe<T> {
+        ThinBlobIterUnsafe::new(self)
+    }
+
+    pub unsafe fn tuple_iter_mut<T: 'static>(&mut self) -> ThinBlobIterMutUnsafe<T> {
+        ThinBlobIterMutUnsafe::new(self)
+    }
+}
+
+pub struct ThinBlobIterUnsafe<'vec, T: 'static> {
+    vec: &'vec ThinBlobVec,
+    marker: PhantomData<T>,
+}
+
+impl<'vec, T: 'static> ThinBlobIterUnsafe<'vec, T> {
+    pub fn new(blob: &'vec ThinBlobVec) -> Self {
+        ThinBlobIterUnsafe {
+            vec: blob,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterUnsafe<'vec, T>{
+    type Item = &'vec T;
+    fn next(&mut self, index: usize) -> Self::Item {
+        unsafe{ 
+            self.vec.get_typed_lifetime(index)
+        }
+    }
+}
+
+pub struct ThinBlobIterMutUnsafe<'vec, T: 'static> {
+    vec: &'vec mut ThinBlobVec,
+    marker: PhantomData<T>,
+}
+
+impl<'vec, T: 'static> ThinBlobIterMutUnsafe<'vec, T> {
+    pub fn new(blob: &'vec mut ThinBlobVec) -> Self {
+        ThinBlobIterMutUnsafe {
+            vec: blob,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterMutUnsafe<'vec, T>{
+    type Item = &'vec mut T;
+    fn next(&mut self, index: usize) -> Self::Item {
+        unsafe{ 
+            self.vec.get_mut_typed_lifetime(index)
+        }
+    }
+}
+
+pub struct ThinBlobIter<'vec, T: 'static> {
+    vec: &'vec mut ThinBlobVec,
+    len: usize,
+    index: usize,
+    marker: PhantomData<T>,
+}
+
+impl<'vec, T: 'static> ThinBlobIter<'vec, T> {
+    pub fn new(blob: &'vec mut ThinBlobVec, len: usize) -> Self {
+        ThinBlobIter {
+            vec: blob,
+            len,
+            index: 0,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'vec, T: 'static> Iterator for ThinBlobIter<'vec, T> {
+    type Item = &'vec T;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.len {
+            None
+        } else {
+            let next = unsafe { self.vec.get_typed_lifetime::<T>(self.index) };
+            self.index += 1;
+            Some(next)
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use std::alloc::Layout;
-
     use super::ThinBlobVec;
 
+    #[derive(Debug)]
     struct comp1(usize, usize, u8, u8);
     struct comp2(usize, u8, u8, u16);
     struct comp3(usize, Box<comp2>);
 
     #[test]
-    fn it_works() {
-        let mut bv = ThinBlobVec::new(Layout::new::<comp1>());
+    fn test_thin_vec() {
+        let mut bv = ThinBlobVec::new_typed::<comp1>();
         unsafe {
-            bv.push_typed(0, 0, comp1(23, 435, 2, 5));
-            bv.push_typed(4, 1, comp1(23, 435, 2, 5));
-            bv.push_typed(4, 2, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(4, 3, comp1(23, 435, 2, 5));
-            bv.push_typed(cap, 4, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(0, 5, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(0, 0, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 1, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 2, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 3, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 4, comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 5, comp1(23, 435, 2, 5));
             let v: &mut comp1 = bv.get_mut_typed(0);
             let v: &mut comp1 = bv.get_mut_typed(4);
 
-            bv.dealloc_typed::<comp1>(cap);
+            for c in bv.iter::<comp1>(6) {
+                println!("{:?}", c);
+            }
+
+            bv.dealloc_typed::<comp1>(cap, 6);
+
+            drop(bv);
         }
     }
 }

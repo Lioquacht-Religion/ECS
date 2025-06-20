@@ -12,12 +12,12 @@ use std::{
 };
 
 use crate::utils::{
-    gen_vec::GenVec,
+    gen_vec::{GenVec, Key},
     sorted_vec::SortedVec,
     tuple_types::TupleTypesExt,
 };
 
-use super::storages::table_soa::TableSoA;
+use super::storages::table_soa::{TableSoA, TableSoaAddable};
 
 pub trait Component: 'static {}
 
@@ -57,7 +57,7 @@ impl Archetype {
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct ArchetypeId(u32);
+pub struct ArchetypeId(pub u32);
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct ArchetypeHash(u32);
@@ -98,7 +98,13 @@ impl From<ArchetypeId> for usize {
 pub struct EntityId(u32);
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct Entity(EntityId, ArchetypeId);
+pub struct EntityKey(Key);
+
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct Entity {
+    archetype_id: ArchetypeId,
+    row_id: u32,
+}
 
 impl ComponentInfo {
     unsafe fn drop_ptr<T>(ptr: *mut u8) {
@@ -147,7 +153,25 @@ impl EntityStorage {
         }
     }
 
-    pub fn add_entity() {}
+    pub fn add_entity<T: TupleTypesExt + TableSoaAddable<Input = T>>(
+        &mut self,
+        input: T,
+    ) -> EntityKey {
+        let archetype_id = self.create_or_get_archetype::<T>();
+        let key = self.entities.insert(Entity {
+            archetype_id,
+            row_id: 0,
+        });
+        let row_id = self
+            .tables_soa
+            .get_mut(&archetype_id)
+            .expect("ERROR: table does not contain archetype id!")
+            .insert(EntityKey(key), input);
+        if let Some(e) = self.entities.get_mut(&key) {
+            e.row_id = row_id;
+        }
+        EntityKey(key)
+    }
 
     pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
         //TODO; provide SortedVec from outside for reuse, to avoid allocations
@@ -157,7 +181,7 @@ impl EntityStorage {
         T::create_or_get_component(self, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
-        if let Some(archetype_id) = self.compids_archid_map.get(&comp_ids){
+        if let Some(archetype_id) = self.compids_archid_map.get(&comp_ids) {
             return *archetype_id;
         }
 
@@ -169,7 +193,8 @@ impl EntityStorage {
         let archetype_id = self.archetypes.len().into();
         let archetype = Archetype::new(archetype_id, comp_ids);
         self.archetypes.push(archetype);
-        self.tables_soa.insert(archetype_id, TableSoA::new(archetype_id, self));
+        self.tables_soa
+            .insert(archetype_id, TableSoA::new(archetype_id, self));
 
         archetype_id
     }
@@ -197,24 +222,25 @@ impl EntityStorage {
     }
 }
 
-
 #[cfg(test)]
-mod test{
+mod test {
     use crate::utils::tuple_types::TupleTypesExt;
 
     use super::Component;
 
-    struct Type1{f1: usize}
-    impl Component for Type1{}
+    struct Type1 {
+        f1: usize,
+    }
+    impl Component for Type1 {}
 
     #[test]
-    fn test_entity_storage(){
+    fn test_entity_storage() {
         todo!()
     }
 
     #[test]
-    fn test_tuple_ext_methods(){
-        let t = Type1{f1: 4324};
+    fn test_tuple_ext_methods() {
+        let t = Type1 { f1: 4324 };
         let mut vec = Vec::new();
         t.self_type_ids_rec(&mut vec);
     }

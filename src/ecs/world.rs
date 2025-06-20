@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 
 use crate::utils::any_map::AnyMap;
 
-use super::system::Systems;
+use super::{component::EntityStorage, system::Systems};
 
 pub struct World {
     pub data: UnsafeCell<WorldData>,
@@ -13,7 +13,7 @@ pub struct World {
 
 pub struct WorldData {
     pub resources: AnyMap,
-    pub components: (),
+    pub entity_storage: EntityStorage,
 }
 
 impl World {
@@ -33,7 +33,7 @@ impl WorldData {
     pub fn new() -> Self {
         WorldData {
             resources: AnyMap::new(),
-            components: (),
+            entity_storage: EntityStorage::new(),
         }
     }
 

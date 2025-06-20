@@ -6,23 +6,26 @@
 
 use std::{alloc::Layout, any::TypeId};
 
-use crate::{all_tuples, ecs::component::{Component, ComponentId, EntityStorage}};
+use crate::{
+    all_tuples,
+    ecs::component::{Component, ComponentId, EntityStorage},
+};
 
 pub trait TupleTypesExt: 'static {
-    fn type_ids() -> Vec<TypeId>{
-       let mut vec: Vec<TypeId> = Vec::with_capacity(Self::get_tuple_length());
-       Self::type_ids_rec(&mut vec);
-       vec
+    fn type_ids() -> Vec<TypeId> {
+        let mut vec: Vec<TypeId> = Vec::with_capacity(Self::get_tuple_length());
+        Self::type_ids_rec(&mut vec);
+        vec
     }
     fn type_ids_rec(vec: &mut Vec<TypeId>);
-    fn type_layouts() -> Vec<Layout>{
-       let mut vec: Vec<Layout> = Vec::with_capacity(Self::get_tuple_length());
-       Self::type_layouts_rec(&mut vec);
-       vec
+    fn type_layouts() -> Vec<Layout> {
+        let mut vec: Vec<Layout> = Vec::with_capacity(Self::get_tuple_length());
+        Self::type_layouts_rec(&mut vec);
+        vec
     }
     fn type_layouts_rec(vec: &mut Vec<Layout>);
 
-    fn self_type_ids(&self) -> Vec<TypeId>{
+    fn self_type_ids(&self) -> Vec<TypeId> {
         Self::type_ids()
     }
     fn self_type_ids_rec(&self, vec: &mut Vec<TypeId>) {
@@ -36,26 +39,26 @@ pub trait TupleTypesExt: 'static {
     }
 
     fn self_get_elem_ptrs(&mut self) -> Vec<*mut u8> {
-       let mut vec: Vec<*mut u8> = Vec::with_capacity(Self::get_tuple_length());
-       self.self_get_elem_ptrs_rec(&mut vec);
-       vec
+        let mut vec: Vec<*mut u8> = Vec::with_capacity(Self::get_tuple_length());
+        self.self_get_elem_ptrs_rec(&mut vec);
+        vec
     }
     fn self_get_elem_ptrs_rec(&mut self, vec: &mut Vec<*mut u8>) {
         vec.push(self as *mut Self as *mut u8);
     }
 
-    fn get_tuple_length() -> usize{
+    fn get_tuple_length() -> usize {
         let mut len = 0;
         Self::get_tuple_length_rec(&mut len);
         len
     }
-    fn self_get_tuple_length(&mut self) -> usize{
+    fn self_get_tuple_length(&mut self) -> usize {
         Self::get_tuple_length()
     }
-    fn get_tuple_length_rec(len: &mut usize){
+    fn get_tuple_length_rec(len: &mut usize) {
         *len += 1;
     }
-    fn create_or_get_component(entity_storage : &mut EntityStorage, vec: &mut Vec<ComponentId>);
+    fn create_or_get_component(entity_storage: &mut EntityStorage, vec: &mut Vec<ComponentId>);
 }
 
 impl<T: Component> TupleTypesExt for T {
@@ -66,7 +69,7 @@ impl<T: Component> TupleTypesExt for T {
         vec.push(Layout::new::<T>());
     }
 
-    fn create_or_get_component(entity_storage : &mut EntityStorage, vec: &mut Vec<ComponentId>){
+    fn create_or_get_component(entity_storage: &mut EntityStorage, vec: &mut Vec<ComponentId>) {
         vec.push(entity_storage.create_or_get_component::<T>());
     }
 }
@@ -74,8 +77,8 @@ impl<T: Component> TupleTypesExt for T {
 impl TupleTypesExt for () {
     fn type_ids_rec(_vec: &mut Vec<TypeId>) {}
     fn type_layouts_rec(_vec: &mut Vec<Layout>) {}
-    fn self_get_elem_ptrs_rec(&mut self, _vec: &mut Vec<*mut u8>){}
-    fn create_or_get_component(_entity_storage : &mut EntityStorage, _vec: &mut Vec<ComponentId>) {
+    fn self_get_elem_ptrs_rec(&mut self, _vec: &mut Vec<*mut u8>) {}
+    fn create_or_get_component(_entity_storage: &mut EntityStorage, _vec: &mut Vec<ComponentId>) {
         unimplemented!()
     }
 }
@@ -137,7 +140,7 @@ mod test {
         assert_eq!(vec_typeids.len(), 5);
         assert_eq!(vec_layouts.len(), 5);
         assert_eq!(vec_ptrs.len(), 5);
-        
+
         assert_eq!(t.self_get_tuple_length(), 5);
 
         let t3: (

@@ -287,9 +287,9 @@ mod test {
     struct comp1(usize, usize, u8, u8);
     struct comp2(usize, u8, u8, u16);
     struct comp3(usize, Box<comp2>);
-    impl Component for comp1{}
-    impl Component for comp2{}
-    impl Component for comp3{}
+    impl Component for comp1 {}
+    impl Component for comp2 {}
+    impl Component for comp3 {}
 
     #[test]
     fn it_works() {

@@ -17,7 +17,7 @@ enum Entry<T> {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct Key {
     id: u32,
     generation: u32,

@@ -2,9 +2,9 @@
 
 use std::{any::TypeId, cell::UnsafeCell, marker::PhantomData};
 
-use super::{system::SystemParam, world::WorldData, Component};
+use super::{component::Component, system::SystemParam, world::WorldData};
 
-pub struct Query<D: QueryData> {
+pub struct Query<D: QueryParam> {
     marker: PhantomData<D>,
 }
 
@@ -13,11 +13,7 @@ pub enum QueryDataInnerType {
     List(Vec<TypeId>),
 }
 
-pub trait QueryData {
-    fn get_type_ids() -> QueryDataInnerType;
-}
-
-impl<C: QueryData> Query<C> {
+impl<C: QueryParam> Query<C> {
     pub fn new() -> Self {
         Self {
             marker: Default::default(),
@@ -25,53 +21,36 @@ impl<C: QueryData> Query<C> {
     }
 }
 
-impl<D: QueryData> SystemParam for Query<D> {
+impl<D: QueryParam> SystemParam for Query<D> {
     type Item<'new> = Query<D>;
     unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
         Self::new()
     }
 }
 
-impl<C: Component + 'static> QueryData for &C {
-    fn get_type_ids() -> QueryDataInnerType {
-        QueryDataInnerType::Single(TypeId::of::<C>())
-    }
+pub trait QueryParam {
+    type Item: QueryParam;
 }
 
-impl<C: Component + 'static> QueryData for &mut C {
-    fn get_type_ids() -> QueryDataInnerType {
-        QueryDataInnerType::Single(TypeId::of::<C>())
-    }
+impl<P1, P2> QueryParam for (P1, P2)
+where
+    P1: QueryParam,
+    P2: QueryParam,
+{
+    type Item = (P1, P1);
 }
 
-impl<D: QueryData> QueryData for Option<D> {
-    fn get_type_ids() -> QueryDataInnerType {
-        D::get_type_ids()
-    }
+impl<'p, T: Component> QueryParam for &'p T {
+    type Item = &'p T;
 }
-
-impl<T1: QueryData, T2: QueryData> QueryData for (T1, T2) {
-    fn get_type_ids() -> QueryDataInnerType {
-        let mut type_ids = Vec::with_capacity(2);
-        match T1::get_type_ids() {
-            QueryDataInnerType::Single(single) => type_ids.push(single),
-            QueryDataInnerType::List(mut list) => {
-                type_ids.append(&mut list);
-            }
-        }
-        match T2::get_type_ids() {
-            QueryDataInnerType::Single(single) => type_ids.push(single),
-            QueryDataInnerType::List(mut list) => {
-                type_ids.append(&mut list);
-            }
-        }
-        QueryDataInnerType::List(type_ids)
-    }
+impl<'p, T: Component> QueryParam for &'p mut T {
+    type Item = &'p mut T;
 }
+//impl<'p, P: QueryParam> QueryParam for Option<P> {}
 
 #[cfg(test)]
 mod test {
-    use crate::ecs::{system::Res, world::World, Component};
+    use crate::ecs::{component::Component, system::Res, world::World};
 
     use super::Query;
 

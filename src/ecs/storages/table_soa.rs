@@ -1,19 +1,22 @@
 // table_soa.rs
 
-use std::{any::TypeId, collections::HashMap};
+use std::{any::TypeId, collections::HashMap, marker::PhantomData};
 
-use crate::ecs::{
-    component::{ArchetypeId, Component, EntityStorage}, Entity
+use crate::{
+    all_tuples,
+    ecs::component::{ArchetypeId, Component, EntityKey, EntityStorage}, utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor, TupleIterator},
 };
 
 use super::thin_blob_vec::ThinBlobVec;
 
+//TODO: entities need to be stored too for querying
 pub struct TableSoA {
-    archetype_id: ArchetypeId,
-    entities: Vec<Entity>,
-    columns: HashMap<TypeId, ThinBlobVec>,
-    cap: usize,
-    free_indexes: Vec<usize>,
+    pub(crate) archetype_id: ArchetypeId,
+    entities: Vec<EntityKey>,
+    pub(crate) columns: HashMap<TypeId, ThinBlobVec>,
+    pub(crate) len: usize,
+    pub(crate) cap: usize,
+    free_indices: Vec<usize>,
 }
 
 impl TableSoA {
@@ -22,81 +25,147 @@ impl TableSoA {
         let archetype = &entity_storage.archetypes[usize::from(archetype_id)];
         archetype.comp_ids.get_vec().iter().for_each(|cid| {
             let cinfo = &entity_storage.components[usize::from(*cid)];
-            columns.insert(cinfo.type_id, ThinBlobVec::new(cinfo.layout));
+            columns.insert(cinfo.type_id, ThinBlobVec::new(cinfo.layout, cinfo.drop));
         });
 
         Self {
             archetype_id,
             entities: Vec::new(),
             columns,
+            len: 0,
             cap: 0,
-            free_indexes: Vec::new(),
+            free_indices: Vec::new(),
         }
     }
 
-    pub fn insert<T: TableSoaAddable<Input = T>>(&mut self, input: T) {
+    /**
+     * Returns the row_id of the inserted input.
+     */
+    pub fn insert<T: TableSoaAddable<Input = T>>(
+        &mut self,
+        entity_key: EntityKey,
+        input: T,
+    ) -> u32 {
+        //TODO: use free indices
+        let row_id = self.len;
         T::insert(self, input);
+        self.update_capacity();
+        self.len += 1;
+        self.entities.push(entity_key);
+        row_id
+            .try_into()
+            .expect("ERROR max u32 row id space reached!")
+    }
+
+    fn update_capacity(&mut self) {
+        if self.cap == 0 {
+            self.cap = 4;
+        }
+        else if self.len >= self.cap {
+            self.cap *= 2;
+        }
     }
 
     pub fn remove() {}
+
+    pub fn tuple_iter<'a, T: TupleIterator, TC: TupleIterConstructor<Construct<'a> = T>>(&'a mut self) -> TableSoaTupleIter<T>{
+        tuple_iters::new::<T, TC>(self)
+    }
+
+    pub fn tuple_iter2<T: TupleIterator>(&mut self) -> T{
+        unimplemented!()
+    }
 }
 
-pub trait TableSoaAddable : 'static{
-    type Input : TableSoaAddable;
+pub trait TableSoaAddable: 'static {
+    type Input: TableSoaAddable;
     fn insert(table_soa: &mut TableSoA, input: Self::Input);
 }
 
-impl<T: Component> TableSoaAddable for T{
+impl<T: Component> TableSoaAddable for T {
     type Input = T;
     fn insert(table_soa: &mut TableSoA, input: Self::Input) {
         /*
         SAFETY:
          Type safety is ensured by comparing of TypeId's.
         */
-         unsafe {
-            table_soa.columns
+        unsafe {
+            table_soa
+                .columns
                 .get_mut(&TypeId::of::<T>())
                 .expect("Type T is not stored inside this table!")
-                .push_typed(table_soa.cap, table_soa.entities.len(), input);
-             }
+                .push_typed(table_soa.cap, table_soa.len, input);
+        }
     }
 }
 
-impl<T1: TableSoaAddable<Input = T1>, T2: TableSoaAddable<Input = T2>, T3: TableSoaAddable<Input = T3>> TableSoaAddable for (T1, T2, T3){
-    type Input = (T1, T2, T3);
-    fn insert(table_soa: &mut TableSoA, input: Self::Input) {
-        let (T1, T2, T3) = input;
-        T1::insert(table_soa, T1);
-        T2::insert(table_soa, T2);
-        T3::insert(table_soa, T3);
+impl Drop for TableSoA{
+    fn drop(&mut self) {
+        unsafe {
+        self.columns.iter_mut()
+            .for_each(|(_k, c)| {c.dealloc(self.cap, self.len);});
+        }
     }
 }
+
+macro_rules! impl_soa_addable_ext {
+    ($($t:ident), *) => {
+       impl<$($t : TableSoaAddable<Input = $t>), *> TableSoaAddable for ($($t),*,){
+            type Input = ($($t,)*);
+            fn insert(table_soa: &mut TableSoA, input: Self::Input) {
+                #[allow(non_snake_case)]
+                let ($($t,)*) = input;
+                $($t::insert(table_soa, $t);)*
+            }
+       }
+    }
+}
+
+#[rustfmt::skip]
+all_tuples!(
+    impl_soa_addable_ext,
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
+);
 
 #[cfg(test)]
 mod tests {
+    use crate::ecs::component::ArchetypeId;
     use crate::ecs::component::Component;
-    use crate::ecs::{component::EntityStorage};
-    use crate::utils::tuple_types::TupleTypesExt;
+    use crate::ecs::component::EntityStorage;
 
     use super::TableSoA;
 
-
     struct Pos(i32);
-    impl Component for Pos{}
+    impl Component for Pos {}
 
     struct Pos2(i32, i32);
-    impl Component for Pos2{}
+    impl Component for Pos2 {}
 
     struct Pos3(i32, i32, i32);
-    impl Component for Pos3{}
+    impl Component for Pos3 {}
 
+    struct Pos4(i32, Box<Pos3>);
+    impl Component for Pos4 {}
 
     #[test]
     fn test_table_soa() {
         let mut es = EntityStorage::new();
-        let archetype_id = es.create_or_get_archetype::<(Pos, Pos3)>();
-        let mut table_soa = TableSoA::new(archetype_id, &es);
+        es.add_entity((Pos(12), Pos3(12, 34, 56)));
+        es.add_entity((Pos3(12, 12, 34), Pos(56)));
+
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos2(213, 23)));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+
+        let table = TableSoA::new(ArchetypeId(0), &es);
+ 
+        /*
+        table_soa.insert(
+            (
+                Pos2(12, 34), Pos3(12, 34, 56),
+                (Pos2(12, 34), Pos3(12, 34, 56))
+            )
+        );
         table_soa.insert((Pos(12), Pos2(12, 34), Pos3(12, 34, 56)));
+        */
     }
 }
- 
