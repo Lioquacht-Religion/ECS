@@ -98,7 +98,7 @@ impl From<ArchetypeId> for usize {
 pub struct EntityId(u32);
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct EntityKey(Key);
+pub struct EntityKey(pub(crate) Key);
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct Entity {
@@ -136,7 +136,7 @@ pub struct EntityStorage {
     pub(crate) tables_soa: HashMap<ArchetypeId, TableSoA>,
     //mapping data
     pub(crate) typeid_compid_map: HashMap<TypeId, ComponentId>,
-    pub(crate) compid_archid_map: HashMap<ComponentId, HashSet<ArchetypeId>>,
+    pub(crate) compid_archids_map: HashMap<ComponentId, HashSet<ArchetypeId>>,
     pub(crate) compids_archid_map: HashMap<SortedVec<ComponentId>, ArchetypeId>,
 }
 
@@ -148,9 +148,28 @@ impl EntityStorage {
             archetypes: Vec::new(),
             tables_soa: HashMap::new(),
             typeid_compid_map: HashMap::new(),
-            compid_archid_map: HashMap::new(),
+            compid_archids_map: HashMap::new(),
             compids_archid_map: HashMap::new(),
         }
+    }
+
+    pub fn find_fitting_archetypes(&self, comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
+        self.compids_archid_map
+            .iter()
+            .filter_map(|(cids, arch_id)| {
+                if cids == comp_ids {
+                    Some(*arch_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub fn find_fitting_archetypes2(&self, comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
+        let archid_set: HashSet<ArchetypeId> = HashSet::new();
+        comp_ids.iter().for_each(|cids| {});
+        unimplemented!()
     }
 
     pub fn add_entity<T: TupleTypesExt + TableSoaAddable<Input = T>>(

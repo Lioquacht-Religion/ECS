@@ -24,6 +24,10 @@ pub struct Key {
 }
 
 impl Key {
+    pub fn new(id: u32, generation: u32) -> Self {
+        Key { id, generation }
+    }
+
     pub fn get_id(&self) -> u32 {
         self.id
     }

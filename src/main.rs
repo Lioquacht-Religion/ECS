@@ -12,9 +12,9 @@ impl Component for UsizeWrapper {}
 
 #[derive(Debug)]
 struct comp1(usize, usize, u8, u8);
-impl Component for comp1{}
+impl Component for comp1 {}
 struct comp3(usize, Box<comp1>);
-impl Component for comp3{}
+impl Component for comp3 {}
 
 fn main() {
     println!("test thin vec");
@@ -23,25 +23,29 @@ fn main() {
     test_table_soa();
 }
 
-    use ecs::ecs::component::EntityStorage;
+use ecs::ecs::component::EntityStorage;
 
-    struct Pos(i32);
-    impl Component for Pos {}
+struct Pos(i32);
+impl Component for Pos {}
 
-    struct Pos2(i32, i32);
-    impl Component for Pos2 {}
+struct Pos2(i32, i32);
+impl Component for Pos2 {}
 
-    struct Pos3(i32, i32, i32);
-    impl Component for Pos3 {}
+struct Pos3(i32, i32, i32);
+impl Component for Pos3 {}
 
-    fn test_table_soa() {
-        let mut es = EntityStorage::new();
-        es.add_entity((Pos(12), Pos3(12, 34, 56)));
-        es.add_entity((Pos3(12, 12, 34), Pos(56)));
+fn test_table_soa() {
+    let mut es = EntityStorage::new();
+    es.add_entity((Pos(12), Pos3(12, 34, 56)));
+    es.add_entity((Pos3(12, 12, 34), Pos(56)));
 
-        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos2(213, 23)));
-        es.add_entity((Pos(12), Pos3(12, 34, 56), comp3(12, Box::new(comp1(1, 1, 1, 1)))));
-    }
+    es.add_entity((Pos(12), Pos3(12, 34, 56), Pos2(213, 23)));
+    es.add_entity((
+        Pos(12),
+        Pos3(12, 34, 56),
+        comp3(12, Box::new(comp1(1, 1, 1, 1))),
+    ));
+}
 
 fn test_thin_vec() {
     let mut bv = ThinBlobVec::new_typed::<comp1>();

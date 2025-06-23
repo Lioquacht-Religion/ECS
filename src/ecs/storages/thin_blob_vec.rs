@@ -176,12 +176,10 @@ impl<'vec, T: 'static> ThinBlobIterUnsafe<'vec, T> {
     }
 }
 
-impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterUnsafe<'vec, T>{
+impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterUnsafe<'vec, T> {
     type Item = &'vec T;
     fn next(&mut self, index: usize) -> Self::Item {
-        unsafe{ 
-            self.vec.get_typed_lifetime(index)
-        }
+        unsafe { self.vec.get_typed_lifetime(index) }
     }
 }
 
@@ -199,12 +197,10 @@ impl<'vec, T: 'static> ThinBlobIterMutUnsafe<'vec, T> {
     }
 }
 
-impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterMutUnsafe<'vec, T>{
+impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterMutUnsafe<'vec, T> {
     type Item = &'vec mut T;
     fn next(&mut self, index: usize) -> Self::Item {
-        unsafe{ 
-            self.vec.get_mut_typed_lifetime(index)
-        }
+        unsafe { self.vec.get_mut_typed_lifetime(index) }
     }
 }
 

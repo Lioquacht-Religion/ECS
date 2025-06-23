@@ -1,10 +1,10 @@
 // world.rs
 
-use std::cell::UnsafeCell;
+use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
 
-use crate::utils::any_map::AnyMap;
+use crate::utils::{any_map::AnyMap, sorted_vec::SortedVec};
 
-use super::{component::EntityStorage, system::Systems};
+use super::{component::{ComponentId, EntityStorage}, query::QueryState, system::Systems};
 
 pub struct World {
     pub data: UnsafeCell<WorldData>,
@@ -12,8 +12,9 @@ pub struct World {
 }
 
 pub struct WorldData {
-    pub resources: AnyMap,
-    pub entity_storage: EntityStorage,
+    pub(crate) resources: AnyMap,
+    pub(crate) entity_storage: EntityStorage,
+    pub(crate) query_data: HashMap<SortedVec<ComponentId>, QueryState>,
 }
 
 impl World {
@@ -34,6 +35,7 @@ impl WorldData {
         WorldData {
             resources: AnyMap::new(),
             entity_storage: EntityStorage::new(),
+            query_data: HashMap::new(),
         }
     }
 

@@ -1,7 +1,7 @@
 //sorted_vec.rs
 //
 
-use std::hash::Hash;
+use std::{hash::Hash, slice::Iter};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct SortedVec<T: Ord + Eq + Hash> {
@@ -21,6 +21,10 @@ impl<T: Ord + Eq + Hash> SortedVec<T> {
 
     pub fn get_vec(&self) -> &[T] {
         &self.vec
+    }
+
+    pub fn iter(&self) -> Iter<T> {
+        self.vec.iter()
     }
 
     pub fn check_duplicates(&self) -> Option<&T> {

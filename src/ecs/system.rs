@@ -106,18 +106,10 @@ macro_rules! impl_systemparam_for_tuples {
     }
 }
 
+#[rustfmt::skip]
 all_tuples!(
     impl_systemparam_for_tuples,
-    T1,
-    T2,
-    T3,
-    T4,
-    T5,
-    T6,
-    T7,
-    T8,
-    T9,
-    T10
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
 );
 
 pub struct FunctionSystem<Input, F> {
@@ -153,18 +145,10 @@ macro_rules! impl_system_for_params {
     };
 }
 
+#[rustfmt::skip]
 all_tuples!(
     impl_system_for_params,
-    T1,
-    T2,
-    T3,
-    T4,
-    T5,
-    T6,
-    T7,
-    T8,
-    T9,
-    T10
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
 );
 
 pub trait IntoSystem<Input> {
@@ -203,18 +187,10 @@ macro_rules! impl_into_system_for_functionsystem {
     }
 }
 
+#[rustfmt::skip]
 all_tuples!(
     impl_into_system_for_functionsystem,
-    T1,
-    T2,
-    T3,
-    T4,
-    T5,
-    T6,
-    T7,
-    T8,
-    T9,
-    T10
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
 );
 
 #[cfg(test)]
