@@ -2,7 +2,13 @@
 
 use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
 
-use crate::{all_tuples, utils::sorted_vec::SortedVec};
+use crate::{
+    all_tuples,
+    utils::{
+        sorted_vec::SortedVec,
+        tuple_iters::{TableSoaTupleIter, TupleIterConstructor, TupleIterator},
+    },
+};
 
 use super::{
     component::{ArchetypeId, Component, ComponentId},
@@ -40,23 +46,64 @@ impl<'w, 's, P: QueryParam> Query<'w, 's, P> {
         }
     }
 
-    pub fn iter(&mut self) -> QueryIter {
-        unimplemented!()
+    pub fn iter(&mut self) -> QueryIter<P> {
+        QueryIter::new(self)
+    }
+
+    unsafe fn get_arch_query_iter(
+        &self,
+        arch_id: ArchetypeId,
+    ) -> TableSoaTupleIter<<P as TupleIterConstructor>::Construct<'w>> {
+        self.world
+            .get()
+            .as_mut()
+            .unwrap()
+            .entity_storage
+            .tables_soa
+            .get_mut(&arch_id)
+            .expect("Table SoA with archetype id could not be found.")
+            .tuple_iter::<P>()
     }
 }
 
-pub struct QueryIter {}
+pub struct QueryIter<'w, 's, T: QueryParam> {
+    query: &'w Query<'w, 's, T>,
+    cur_arch_query: TableSoaTupleIter<T::Construct<'w>>,
+    cur_arch_index: usize,
+}
 
-impl QueryIter{
-    pub fn new() -> Self{
-        unimplemented!()
+impl<'w, 's, T: QueryParam> QueryIter<'w, 's, T> {
+    pub fn new(query: &'w Query<'w, 's, T>) -> Self {
+        let arch_id = query.state.arch_ids[0];
+
+        let arch_query = unsafe{query.get_arch_query_iter(arch_id)}; 
+
+        Self {
+            query,
+            cur_arch_query: arch_query,
+            cur_arch_index: 0,
+        }
     }
 }
 
-impl Iterator for QueryIter {
-    type Item = ();
+impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
+    type Item = <<T as TupleIterConstructor>::Construct<'w> as TupleIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
-        None
+        if let Some(item) = self.cur_arch_query.next() {
+            return Some(item);
+        }
+        self.cur_arch_index += 1;
+        if self.cur_arch_index < self.query.state.arch_ids.len() {
+            let arch_id = self.query.state.arch_ids[self.cur_arch_index];
+            self.cur_arch_query = unsafe { self.query.get_arch_query_iter(arch_id) };
+            if let Some(item) = self.cur_arch_query.next() {
+                return Some(item);
+            }
+            // recurse until next Some item is returned
+            self.next() 
+        } else {
+            None
+        }
     }
 }
 
@@ -66,8 +113,8 @@ impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
         let world_data_ref = world_data.get().as_ref().unwrap();
         let mut comp_ids = Vec::new();
         P::comp_ids_rec(world_data_ref, &mut comp_ids);
-        let comp_ids : SortedVec<ComponentId> = comp_ids.into();
-        if let Some(query_data) = world_data_ref.query_data.get(&comp_ids){
+        let comp_ids: SortedVec<ComponentId> = comp_ids.into();
+        if let Some(query_data) = world_data_ref.query_data.get(&comp_ids) {
             return Self::Item::<'r>::new(world_data, query_data);
         }
 
@@ -75,8 +122,9 @@ impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
 
         let world_data_ref = world_data.get().as_mut().unwrap();
         let arch_ids = world_data_ref
-            .entity_storage.find_fitting_archetypes(&comp_ids);
-        let query_data = QueryState{
+            .entity_storage
+            .find_fitting_archetypes(&comp_ids);
+        let query_data = QueryState {
             //TODO: remove comp_ids? already used as key, remove cloning
             comp_ids: comp_ids.clone(),
             optional_comp_ids: SortedVec::new(),
@@ -85,15 +133,17 @@ impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
             arch_ids,
         };
 
-        world_data_ref.query_data.insert(comp_ids.clone(), query_data);
+        world_data_ref
+            .query_data
+            .insert(comp_ids.clone(), query_data);
 
         let query_data = world_data_ref.query_data.get(&comp_ids).unwrap();
         Query::new(world_data, query_data)
     }
 }
 
-pub trait QueryParam {
-    type Item<'new>: QueryParam;
+pub trait QueryParam: TupleIterConstructor {
+    type QueryItem<'new>: QueryParam;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>);
     fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>);
@@ -101,13 +151,16 @@ pub trait QueryParam {
 }
 
 impl<T: Component> QueryParam for &T {
-    type Item<'new> = &'new T;
+    type QueryItem<'new> = &'new T;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>) {
         vec.push(TypeId::of::<T>());
     }
-    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>){
-        let comp_id = world_data.entity_storage.typeid_compid_map.get(&TypeId::of::<T>())
+    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>) {
+        let comp_id = world_data
+            .entity_storage
+            .typeid_compid_map
+            .get(&TypeId::of::<T>())
             .expect("No component id found for type id.");
         vec.push(*comp_id);
     }
@@ -116,13 +169,16 @@ impl<T: Component> QueryParam for &T {
     }
 }
 impl<T: Component> QueryParam for &mut T {
-    type Item<'new> = &'new mut T;
+    type QueryItem<'new> = &'new mut T;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>) {
         vec.push(TypeId::of::<T>());
     }
-    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>){
-        let comp_id = world_data.entity_storage.typeid_compid_map.get(&TypeId::of::<T>())
+    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>) {
+        let comp_id = world_data
+            .entity_storage
+            .typeid_compid_map
+            .get(&TypeId::of::<T>())
             .expect("No component id found for type id.");
         vec.push(*comp_id);
     }
@@ -136,7 +192,7 @@ macro_rules! impl_query_param_tuples {
     ($($t:ident), *) => {
        impl<$($t : QueryParam), *> QueryParam for ($($t),*,){
            #[allow(unused_parens)]
-               type Item<'new> = ($($t),* );
+               type QueryItem<'new> = ($($t),* );
 
                fn type_ids_rec(vec: &mut Vec<TypeId>){
                    $($t::type_ids_rec(vec);)*
@@ -159,6 +215,8 @@ all_tuples!(
 
 #[cfg(test)]
 mod test {
+    use std::usize;
+
     use crate::ecs::{component::Component, system::Res, world::World};
 
     use super::Query;
@@ -172,12 +230,15 @@ mod test {
     fn test_system1(
         prm: Res<i32>,
         prm2: Res<usize>,
-        query: Query<(&Comp1, &mut Comp2)>,
-        query2: Query<&mut Comp1>,
+        mut query: Query<(&Comp1, &mut Comp2)>,
+        //query2: Query<&mut Comp1>,
     ) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
-        for t in query{
+        for (comp1, comp2) in query.iter() {
+            println!("comp1: {}", comp1.0);
+            println!("comp2: {}", comp2.0);
+            comp2.0 = 2;
         }
     }
 
@@ -185,7 +246,11 @@ mod test {
     fn it_works() {
         let mut world = World::new();
         let num1: i32 = 2324;
+        let num2: usize = 2324;
         world.systems.add_system(test_system1);
         unsafe { (&mut *world.data.get()).add_resource(num1) };
+        unsafe { (&mut *world.data.get()).add_resource(num2) };
+        world.data.get_mut().entity_storage.add_entity((Comp1(12,34), Comp2(56, 78)));
+        world.run();
     }
 }

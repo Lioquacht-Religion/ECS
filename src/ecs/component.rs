@@ -210,10 +210,11 @@ impl EntityStorage {
         }
 
         let archetype_id = self.archetypes.len().into();
-        let archetype = Archetype::new(archetype_id, comp_ids);
+        let archetype = Archetype::new(archetype_id, comp_ids.clone());
         self.archetypes.push(archetype);
         self.tables_soa
             .insert(archetype_id, TableSoA::new(archetype_id, self));
+        self.compids_archid_map.insert(comp_ids, archetype_id);
 
         archetype_id
     }
@@ -237,6 +238,7 @@ impl EntityStorage {
             .expect("Component Ids have increased over their max possible u32 value!");
         let comp_info = ComponentInfo::new::<T>(comp_id);
         self.components.push(comp_info);
+        self.typeid_compid_map.insert(type_id, ComponentId(comp_id));
         ComponentId(comp_id)
     }
 }

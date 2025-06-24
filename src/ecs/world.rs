@@ -4,7 +4,11 @@ use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
 
 use crate::utils::{any_map::AnyMap, sorted_vec::SortedVec};
 
-use super::{component::{ComponentId, EntityStorage}, query::QueryState, system::Systems};
+use super::{
+    component::{ComponentId, EntityStorage},
+    query::QueryState,
+    system::Systems,
+};
 
 pub struct World {
     pub data: UnsafeCell<WorldData>,

@@ -5,7 +5,7 @@ use std::{any::TypeId, collections::HashMap};
 use crate::{
     all_tuples,
     ecs::component::{ArchetypeId, Component, EntityKey, EntityStorage},
-    utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor, TupleIterator},
+    utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
 use super::thin_blob_vec::ThinBlobVec;
@@ -69,16 +69,10 @@ impl TableSoA {
 
     pub fn remove() {}
 
-    pub fn tuple_iter<'a, T: TupleIterator, TC: TupleIterConstructor<Construct<'a> = T>>(
-        &'a mut self,
-    ) -> TableSoaTupleIter<T> {
-        tuple_iters::new_table_soa_iter::<T, TC>(self)
-    }
-
-    pub fn tuple_iter2<'a, TC: TupleIterConstructor>(
+    pub fn tuple_iter<'a, TC: TupleIterConstructor>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
-        tuple_iters::new_table_soa_iter2::<TC>(self)
+        tuple_iters::new_table_soa_iter::<TC>(self)
     }
 }
 
@@ -139,7 +133,6 @@ mod tests {
     use crate::ecs::component::Component;
     use crate::ecs::component::EntityKey;
     use crate::ecs::component::EntityStorage;
-    use crate::ecs::storages::thin_blob_vec::ThinBlobIterMutUnsafe;
     use crate::utils::gen_vec;
 
     use super::TableSoA;
@@ -177,11 +170,7 @@ mod tests {
             (Pos(2312), Pos2(-3412, 934)),
         );
 
-        let iter //: TableSoaTupleIter<(ThinBlobIterMutUnsafe<Pos>, ThinBlobIterMutUnsafe<Pos2>)> 
-            = table
-            .tuple_iter::<(ThinBlobIterMutUnsafe<Pos>, ThinBlobIterMutUnsafe<Pos2>), (&mut Pos, &mut Pos2)>();
-
-        let iter = table.tuple_iter2::<(&mut Pos, &mut Pos2)>();
+        let iter = table.tuple_iter::<(&mut Pos, &mut Pos2)>();
 
         for (pos, pos2) in iter {
             pos.0 = 999;
