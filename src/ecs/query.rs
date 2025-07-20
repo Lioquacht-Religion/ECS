@@ -11,10 +11,10 @@ use crate::{
 };
 
 use super::{
-    component::{ArchetypeId, Component, ComponentId},
-    system::SystemParam,
-    world::WorldData,
+    component::{ArchetypeId, Component, ComponentId}, storages::table_soa::TableSoA, system::SystemParam, world::WorldData
 };
+
+type QueryDataType = TableSoA;
 
 pub struct Query<'w, 's, P: QueryParam> {
     world: &'w UnsafeCell<WorldData>,
@@ -46,14 +46,14 @@ impl<'w, 's, P: QueryParam> Query<'w, 's, P> {
         }
     }
 
-    pub fn iter(&mut self) -> QueryIter<P> {
+    pub fn iter(&mut self) -> QueryIter<'_, '_, P> {
         QueryIter::new(self)
     }
 
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
-    ) -> TableSoaTupleIter<<P as TupleIterConstructor>::Construct<'w>> {
+    ) -> TableSoaTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
         self.world
             .get()
             .as_mut()
@@ -76,7 +76,7 @@ impl<'w, 's, T: QueryParam> QueryIter<'w, 's, T> {
     pub fn new(query: &'w Query<'w, 's, T>) -> Self {
         let arch_id = query.state.arch_ids[0];
 
-        let arch_query = unsafe{query.get_arch_query_iter(arch_id)}; 
+        let arch_query = unsafe { query.get_arch_query_iter(arch_id) };
 
         Self {
             query,
@@ -87,7 +87,7 @@ impl<'w, 's, T: QueryParam> QueryIter<'w, 's, T> {
 }
 
 impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
-    type Item = <<T as TupleIterConstructor>::Construct<'w> as TupleIterator>::Item;
+    type Item = <<T as TupleIterConstructor<QueryDataType>>::Construct<'w> as TupleIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.cur_arch_query.next() {
             return Some(item);
@@ -100,7 +100,7 @@ impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
                 return Some(item);
             }
             // recurse until next Some item is returned
-            self.next() 
+            self.next()
         } else {
             None
         }
@@ -142,7 +142,7 @@ impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
     }
 }
 
-pub trait QueryParam: TupleIterConstructor {
+pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     type QueryItem<'new>: QueryParam;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>);
@@ -250,7 +250,11 @@ mod test {
         world.systems.add_system(test_system1);
         unsafe { (&mut *world.data.get()).add_resource(num1) };
         unsafe { (&mut *world.data.get()).add_resource(num2) };
-        world.data.get_mut().entity_storage.add_entity((Comp1(12,34), Comp2(56, 78)));
+        world
+            .data
+            .get_mut()
+            .entity_storage
+            .add_entity((Comp1(12, 34), Comp2(56, 78)));
         world.run();
     }
 }

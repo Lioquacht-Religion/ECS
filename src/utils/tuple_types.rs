@@ -78,9 +78,7 @@ impl TupleTypesExt for () {
     fn type_ids_rec(_vec: &mut Vec<TypeId>) {}
     fn type_layouts_rec(_vec: &mut Vec<Layout>) {}
     fn self_get_elem_ptrs_rec(&mut self, _vec: &mut Vec<*mut u8>) {}
-    fn create_or_get_component(_entity_storage: &mut EntityStorage, _vec: &mut Vec<ComponentId>) {
-        unimplemented!()
-    }
+    fn create_or_get_component(_entity_storage: &mut EntityStorage, _vec: &mut Vec<ComponentId>) {}
 }
 
 macro_rules! impl_tuple_ext {

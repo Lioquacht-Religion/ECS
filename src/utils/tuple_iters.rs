@@ -7,49 +7,83 @@ use crate::{
     ecs::{
         component::Component,
         storages::{
-            table_soa::TableSoA,
-            thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe},
+            table_aos::TableAoS, table_soa::TableSoA, thin_blob_vec::{ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe, ThinBlobIterUnsafe}
         },
     },
 };
 
-pub trait TupleIterConstructor {
-    type Construct<'c>: TupleIterator;
-    unsafe fn construct<'s>(source: *mut TableSoA) -> Self::Construct<'s>;
+pub trait TupleConstructorSource : 'static{
+    type IterType<'c, T: Component>: TupleIterator
+        where Self: 'c;
+    type IterMutType<'c, T: Component>: TupleIterator
+        where Self: 'c;
+    unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T>;
+    unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T>;
 }
 
-impl<T: Component> TupleIterConstructor for &T {
-    type Construct<'c> = ThinBlobIterUnsafe<'c, T>;
-    unsafe fn construct<'s>(source: *mut TableSoA) -> Self::Construct<'s> {
-        unsafe {
-            (&*source)
+impl TupleConstructorSource for TableSoA{
+    type IterType<'c, T: Component> = ThinBlobIterUnsafe<'c, T>;
+    type IterMutType<'c, T: Component> = ThinBlobIterMutUnsafe<'c, T>;
+    unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
+        self
                 .columns
                 .get(&TypeId::of::<T>())
                 .expect("ERROR: TableSoA does not contain a column with this type id")
                 .tuple_iter()
-        }
     }
-}
-
-impl<T: Component> TupleIterConstructor for &mut T {
-    type Construct<'c> = ThinBlobIterMutUnsafe<'c, T>;
-    unsafe fn construct<'s>(source: *mut TableSoA) -> Self::Construct<'s> {
-        unsafe {
-            (&mut *source)
+    unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
+        self
                 .columns
                 .get_mut(&TypeId::of::<T>())
                 .expect("ERROR: TableSoA does not contain a column with this type id")
                 .tuple_iter_mut()
-        }
+    }
+}
+
+impl TupleConstructorSource for TableAoS{
+    type IterType<'c, T: Component> = ThinBlobInnerTypeIterUnsafe<'c, T>;
+    type IterMutType<'c, T: Component> = ThinBlobInnerTypeIterMutUnsafe<'c, T>;
+    unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
+        let index = self.type_meta_data_map.get(&TypeId::of::<T>())
+                .expect("ERROR: TableAoS does not contain a column with this type id");
+        let offset = self.type_meta_data.get_vec()[*index].ptr_offset;
+        self.vec.tuple_inner_type_iter(offset)
+    }
+    unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
+        let index = self.type_meta_data_map.get(&TypeId::of::<T>())
+                .expect("ERROR: TableAoS does not contain a column with this type id");
+        let offset = self.type_meta_data.get_vec()[*index].ptr_offset;
+        self.vec.tuple_inner_type_iter_mut(offset)
+    }
+}
+
+pub trait TupleIterConstructor<S: TupleConstructorSource> {
+    type Construct<'c>: TupleIterator;
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s>;
+}
+
+impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &T {
+    type Construct<'c> = S::IterType<'c, T>;
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+            (&mut *source)
+                .get_iter()
+    }
+}
+
+impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &mut T {
+    type Construct<'c> = S::IterMutType<'c, T>;
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+            (&mut *source)
+                .get_iter_mut()
     }
 }
 
 macro_rules! impl_tuple_iter_constructor{
     ($($t:ident), *) => {
-       impl<$($t : TupleIterConstructor), *> TupleIterConstructor for ($($t),*,){
-            #[allow(unused_parens)]
+       impl<S: TupleConstructorSource, $($t : TupleIterConstructor<S>), *> TupleIterConstructor<S> for ($($t),*,){
+            #[allow(unused_parens, non_snake_case)]
             type Construct<'c> = ($($t::Construct<'c>), *);
-            unsafe fn construct<'s>(source: *mut TableSoA) -> Self::Construct<'s> {
+            unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
                 ($($t::construct(source)), *)
             }
         }
@@ -62,13 +96,7 @@ all_tuples!(
     T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
 );
 
-//TODO: maybe generize constructor trait
-pub trait TupleConstructorSource<T, E> {
-    type Item: TupleIterator;
-    fn retrieve_tuple(&mut self) -> Self::Item;
-    fn retrieve_elem(&mut self) -> Self::Item;
-    fn retrieve_elem_mut(&mut self) -> Self::Item;
-}
+
 
 pub trait TupleIterator {
     type Item;
@@ -81,7 +109,7 @@ pub struct TableSoaTupleIter<T: TupleIterator> {
     index: usize,
 }
 
-pub fn new_table_soa_iter<'table, TC: TupleIterConstructor>(
+pub fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
     table: &'table mut TableSoA,
 ) -> TableSoaTupleIter<TC::Construct<'table>> {
     unsafe {
@@ -105,14 +133,44 @@ impl<T: TupleIterator> Iterator for TableSoaTupleIter<T> {
     }
 }
 
+pub struct TableAosTupleIter<T: TupleIterator> {
+    tuple_iters: T,
+    len: usize,
+    index: usize,
+}
+
+pub fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
+    table: &'table mut TableAoS,
+) -> TableAosTupleIter<TC::Construct<'table>> {
+    unsafe {
+        TableAosTupleIter {
+            tuple_iters: TC::construct(table),
+            len: table.len,
+            index: 0,
+        }
+    }
+}
+
+impl<T: TupleIterator> Iterator for TableAosTupleIter<T> {
+    type Item = T::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.len {
+            self.index += 1;
+            Some(self.tuple_iters.next(self.index))
+        } else {
+            None
+        }
+    }
+}
+
 macro_rules! impl_tuple_iterator{
     ($($t:ident), *) => {
        impl<$($t : TupleIterator), *> TupleIterator for ($($t),*,){
 
-            #[allow(unused_parens)]
+            #[allow(unused_parens, non_snake_case)]
             type Item = ($($t::Item),* );
             fn next(&mut self, index: usize) -> Self::Item {
-                #[allow(unused_parens)]
+                #[allow(unused_parens, non_snake_case)]
                 let ($($t),*) = self;
                 ($($t.next(index)),*)
             }

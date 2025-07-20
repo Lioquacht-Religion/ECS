@@ -1,0 +1,49 @@
+//table_aos.rs
+
+use std::{alloc::Layout, any::TypeId};
+
+use crate::{ecs::component::{ComponentId, EntityStorage}, utils::tuple_types::TupleTypesExt};
+
+use super::thin_blob_vec::ThinBlobVec;
+
+struct TypeInfo{
+    comp_id: ComponentId,
+    type_id: TypeId,
+    layout: Layout,
+}
+
+pub struct TableAoS{
+    vec: ThinBlobVec,
+    cap: usize,
+    len: usize,
+    type_info: (),
+    free_indices: Vec<usize>,
+}
+
+impl TableAoS{
+
+    pub fn new<T: TupleTypesExt>(entity_storage: &mut EntityStorage) -> Self{
+        unimplemented!()
+    }
+
+    pub unsafe fn insert<T: TupleTypesExt>(&mut self, value: T){
+
+    }
+
+    pub fn get(){}
+
+    pub fn get_mut(){}
+
+    pub fn remove(){}
+
+    pub fn iter(){}
+
+}
+
+#[cfg(test)]
+mod test{
+
+    #[test]
+    fn test1(){
+    }
+}

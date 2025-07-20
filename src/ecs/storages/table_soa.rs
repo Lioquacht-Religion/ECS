@@ -3,12 +3,11 @@
 use std::{any::TypeId, collections::HashMap};
 
 use crate::{
-    all_tuples,
-    ecs::component::{ArchetypeId, Component, EntityKey, EntityStorage},
+    ecs::component::{ArchetypeId, EntityKey, EntityStorage},
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
-use super::thin_blob_vec::ThinBlobVec;
+use super::{table_addable::TableAddable, thin_blob_vec::ThinBlobVec};
 
 //TODO: entities need to be stored too for querying
 pub struct TableSoA {
@@ -17,7 +16,6 @@ pub struct TableSoA {
     pub(crate) columns: HashMap<TypeId, ThinBlobVec>,
     pub(crate) len: usize,
     pub(crate) cap: usize,
-    free_indices: Vec<usize>,
 }
 
 //TODO: make probably every function here unsafe
@@ -36,21 +34,15 @@ impl TableSoA {
             columns,
             len: 0,
             cap: 0,
-            free_indices: Vec::new(),
         }
     }
 
     /**
      * Returns the row_id of the inserted input.
      */
-    pub fn insert<T: TableSoaAddable<Input = T>>(
-        &mut self,
-        entity_key: EntityKey,
-        input: T,
-    ) -> u32 {
-        //TODO: use free indices
+    pub fn insert<T: TableAddable<Input = T>>(&mut self, entity_key: EntityKey, input: T) -> u32 {
         let row_id = self.len;
-        T::insert(self, input);
+        T::insert_soa(self, input);
         self.update_capacity();
         self.len += 1;
         self.entities.push(entity_key);
@@ -69,32 +61,10 @@ impl TableSoA {
 
     pub fn remove() {}
 
-    pub fn tuple_iter<'a, TC: TupleIterConstructor>(
+    pub fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
         tuple_iters::new_table_soa_iter::<TC>(self)
-    }
-}
-
-pub trait TableSoaAddable: 'static {
-    type Input: TableSoaAddable;
-    fn insert(table_soa: &mut TableSoA, input: Self::Input);
-}
-
-impl<T: Component> TableSoaAddable for T {
-    type Input = T;
-    fn insert(table_soa: &mut TableSoA, input: Self::Input) {
-        /*
-        SAFETY:
-         Type safety is ensured by comparing of TypeId's.
-        */
-        unsafe {
-            table_soa
-                .columns
-                .get_mut(&TypeId::of::<T>())
-                .expect("Type T is not stored inside this table!")
-                .push_typed(table_soa.cap, table_soa.len, input);
-        }
     }
 }
 
@@ -107,25 +77,6 @@ impl Drop for TableSoA {
         }
     }
 }
-
-macro_rules! impl_soa_addable_ext {
-    ($($t:ident), *) => {
-       impl<$($t : TableSoaAddable<Input = $t>), *> TableSoaAddable for ($($t),*,){
-            type Input = ($($t,)*);
-            fn insert(table_soa: &mut TableSoA, input: Self::Input) {
-                #[allow(non_snake_case)]
-                let ($($t,)*) = input;
-                $($t::insert(table_soa, $t);)*
-            }
-       }
-    }
-}
-
-#[rustfmt::skip]
-all_tuples!(
-    impl_soa_addable_ext,
-    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
-);
 
 #[cfg(test)]
 mod tests {

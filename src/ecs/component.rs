@@ -12,14 +12,14 @@ use std::{
 };
 
 use crate::utils::{
-    gen_vec::{GenVec, Key},
-    sorted_vec::SortedVec,
-    tuple_types::TupleTypesExt,
+    gen_vec::{GenVec, Key}, sorted_vec::SortedVec, tuple_types::TupleTypesExt
 };
 
-use super::storages::table_soa::{TableSoA, TableSoaAddable};
+use super::storages::{table_addable::TableAddable, table_aos::TableAoS, table_soa::TableSoA};
 
-pub trait Component: 'static {}
+pub trait Component: 'static {
+    const STORAGE : StorageTypes = StorageTypes::TableSoA;
+}
 
 pub struct ComponentInfo {
     pub(crate) name: Cow<'static, str>,
@@ -129,11 +129,16 @@ pub enum StorageTypes {
     SparseSet,
 }
 
+pub struct TableStorage{
+    table_soa: TableSoA,
+    table_aos: TableAoS,
+}
+
 pub struct EntityStorage {
     pub(crate) entities: GenVec<Entity>,
     pub(crate) components: Vec<ComponentInfo>,
     pub(crate) archetypes: Vec<Archetype>,
-    pub(crate) tables_soa: HashMap<ArchetypeId, TableSoA>,
+    pub(crate) tables: HashMap<ArchetypeId, TableStorage>,
     //mapping data
     pub(crate) typeid_compid_map: HashMap<TypeId, ComponentId>,
     pub(crate) compid_archids_map: HashMap<ComponentId, HashSet<ArchetypeId>>,
@@ -146,7 +151,7 @@ impl EntityStorage {
             entities: GenVec::new(),
             components: Vec::new(),
             archetypes: Vec::new(),
-            tables_soa: HashMap::new(),
+            tables: HashMap::new(),
             typeid_compid_map: HashMap::new(),
             compid_archids_map: HashMap::new(),
             compids_archid_map: HashMap::new(),
@@ -172,7 +177,7 @@ impl EntityStorage {
         unimplemented!()
     }
 
-    pub fn add_entity<T: TupleTypesExt + TableSoaAddable<Input = T>>(
+    pub fn add_entity<T: TupleTypesExt + TableAddable<Input = T>>(
         &mut self,
         input: T,
     ) -> EntityKey {
@@ -181,8 +186,9 @@ impl EntityStorage {
             archetype_id,
             row_id: 0,
         });
+
         let row_id = self
-            .tables_soa
+            .tables
             .get_mut(&archetype_id)
             .expect("ERROR: table does not contain archetype id!")
             .insert(EntityKey(key), input);
@@ -241,6 +247,7 @@ impl EntityStorage {
         self.typeid_compid_map.insert(type_id, ComponentId(comp_id));
         ComponentId(comp_id)
     }
+
 }
 
 #[cfg(test)]
