@@ -115,9 +115,9 @@ impl BlobArray {
 
         for (i, tmd) in self.type_meta_data.iter().enumerate() {
             // cast to u8 needed, zero sized types will not be copied such as ()
-            let src: *mut u8 = tup_el_ptrs[i].cast();
+            let src: NonNull<u8> = tup_el_ptrs[i];
             let dst = entry_ptr.add(tmd.offset);
-            std::ptr::copy(src, dst, tmd.layout.size());
+            std::ptr::copy(src.as_ptr(), dst, tmd.layout.size());
         }
 
         self.len += 1;

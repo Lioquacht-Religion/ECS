@@ -1,13 +1,14 @@
 // table_soa.rs
 
-use std::{any::TypeId, collections::HashMap};
+use std::{any::TypeId, collections::HashMap, ptr::NonNull};
 
 use crate::{
-    ecs::component::{ArchetypeId, EntityKey, EntityStorage},
-    utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
+    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage},
+    utils::
+        tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
-use super::{table_addable::TableAddable, thin_blob_vec::ThinBlobVec};
+use super::{table_addable::TableAddable, thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec}};
 
 //TODO: entities need to be stored too for querying
 pub struct TableSoA {
@@ -23,7 +24,7 @@ impl TableSoA {
     pub fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
         let mut columns = HashMap::new();
         let archetype = &entity_storage.archetypes[usize::from(archetype_id)];
-        archetype.comp_ids.get_vec().iter().for_each(|cid| {
+        archetype.soa_comp_ids.get_vec().iter().for_each(|cid| {
             let cinfo = &entity_storage.components[usize::from(*cid)];
             columns.insert(cinfo.type_id, ThinBlobVec::new(cinfo.layout, cinfo.drop));
         });
@@ -37,10 +38,9 @@ impl TableSoA {
         }
     }
 
-    /**
-     * Returns the row_id of the inserted input.
-     */
-    pub fn insert<T: TableAddable<Input = T>>(&mut self, entity_key: EntityKey, input: T) -> u32 {
+    //TODO: probably remove
+    /// Returns the row_id of the inserted input.
+    pub fn insert2<T: TableAddable<Input = T>>(&mut self, entity_key: EntityKey, input: T) -> u32 {
         let row_id = self.len;
         T::insert_soa(self, input);
         self.update_capacity();
@@ -49,6 +49,33 @@ impl TableSoA {
         row_id
             .try_into()
             .expect("ERROR max u32 row id space reached!")
+    }
+
+    ///SAFETY: Caller of this function
+    ///        should forget/leak value of type T,
+    ///        so it does not get dropped.
+    pub unsafe fn insert(
+        &mut self,
+        entity: EntityKey,
+        component_infos: &[ComponentInfo],
+        soa_comp_ids: &[ComponentId],
+        soa_ptrs: &[NonNull<u8>],
+    ) {
+        if soa_comp_ids.len() <= 0 {
+            return;
+        }
+
+        for (i, cid) in soa_comp_ids.iter().enumerate() {
+            let cinfo = &component_infos[cid.0 as usize];
+            self.columns
+                .get_mut(&cinfo.type_id)
+                .expect("Type T is not stored inside this table!")
+                .push_untyped(self.cap, self.len, soa_ptrs[i]);
+        }
+
+        self.update_capacity();
+        self.len += 1;
+        self.entities.push(entity);
     }
 
     fn update_capacity(&mut self) {
@@ -65,6 +92,17 @@ impl TableSoA {
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
         tuple_iters::new_table_soa_iter::<TC>(self)
+    }
+
+    pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T>{
+        self.columns.get(&TypeId::of::<T>())
+            .unwrap()
+            .tuple_iter()
+    }
+    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(&'c mut self) -> ThinBlobIterMutUnsafe<'c, T>{
+        self.columns.get_mut(&TypeId::of::<T>())
+            .unwrap()
+            .tuple_iter_mut()
     }
 }
 

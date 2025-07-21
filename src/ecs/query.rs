@@ -6,15 +6,17 @@ use crate::{
     all_tuples,
     utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{TableSoaTupleIter, TupleIterConstructor, TupleIterator},
+        tuple_iters::{TableSoaTupleIter, TableStorageTupleIter, TupleIterConstructor, TupleIterator},
     },
 };
 
 use super::{
-    component::{ArchetypeId, Component, ComponentId}, storages::table_soa::TableSoA, system::SystemParam, world::WorldData
+    component::{ArchetypeId, Component, ComponentId, TableStorage},
+    system::SystemParam,
+    world::WorldData,
 };
 
-type QueryDataType = TableSoA;
+type QueryDataType = TableStorage;
 
 pub struct Query<'w, 's, P: QueryParam> {
     world: &'w UnsafeCell<WorldData>,
@@ -53,22 +55,22 @@ impl<'w, 's, P: QueryParam> Query<'w, 's, P> {
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
-    ) -> TableSoaTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
+    ) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
         self.world
             .get()
             .as_mut()
             .unwrap()
             .entity_storage
-            .tables_soa
+            .tables
             .get_mut(&arch_id)
-            .expect("Table SoA with archetype id could not be found.")
+            .expect("Table with archetype id could not be found.")
             .tuple_iter::<P>()
     }
 }
 
 pub struct QueryIter<'w, 's, T: QueryParam> {
     query: &'w Query<'w, 's, T>,
-    cur_arch_query: TableSoaTupleIter<T::Construct<'w>>,
+    cur_arch_query: TableStorageTupleIter<T::Construct<'w>>,
     cur_arch_index: usize,
 }
 

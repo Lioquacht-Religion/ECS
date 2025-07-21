@@ -1,14 +1,25 @@
 //table_aos.rs
 
 use core::panic;
-use std::{any::{Any, TypeId}, collections::HashMap, ptr::NonNull};
-
-use crate::{
-    ecs::component::{ArchetypeId, ComponentId, EntityKey, EntityStorage},
-    utils::{sorted_vec::SortedVec, tuple_iters::{self, TableAosTupleIter, TupleIterConstructor, TupleIterator}, tuple_types::TupleTypesExt},
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    ptr::NonNull,
 };
 
-use super::{table_addable::TableAddable, thin_blob_vec::{CompElemPtr, ThinBlobVec}};
+use crate::{
+    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage},
+    utils::{
+        sorted_vec::SortedVec,
+        tuple_iters::{self, TableAosTupleIter, TupleIterConstructor, TupleIterator},
+        tuple_types::TupleTypesExt,
+    },
+};
+
+use super::{
+    table_addable::TableAddable,
+    thin_blob_vec::{CompElemPtr, ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobVec},
+};
 
 #[derive(Debug, Hash, Eq)]
 pub(crate) struct TypeMetaData {
@@ -35,6 +46,7 @@ impl Ord for TypeMetaData {
 }
 
 pub struct TableAoS {
+    //TODO: add compids because of possible storage split
     pub(crate) archetype_id: ArchetypeId,
     pub(crate) entities: Vec<EntityKey>,
     pub(crate) vec: ThinBlobVec,
@@ -48,11 +60,11 @@ impl TableAoS {
     pub fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
         let archetype = &entity_storage.archetypes[usize::from(archetype_id)];
 
-        let comp_ids: &[ComponentId] = &archetype.comp_ids.get_vec();
+        let comp_ids: &[ComponentId] = &archetype.aos_comp_ids.get_vec();
         let mut meta_data: Vec<TypeMetaData> = Vec::with_capacity(comp_ids.len());
 
         let mut comp_id_iter = comp_ids.iter();
-        let mut type_meta_data_map : HashMap<TypeId, usize> = HashMap::with_capacity(comp_ids.len());
+        let mut type_meta_data_map: HashMap<TypeId, usize> = HashMap::with_capacity(comp_ids.len());
 
         if let Some(comp_id) = comp_id_iter.next() {
             let comp_info = &entity_storage.components[comp_id.0 as usize];
@@ -101,22 +113,27 @@ impl TableAoS {
         }
     }
 
-    pub unsafe fn insert<T: TupleTypesExt>(
+    ///SAFETY: Caller of this function
+    ///        should forget/leak value of type T,
+    ///        so it does not get dropped.
+    pub unsafe fn insert(
         &mut self,
         entity: EntityKey,
-        entity_storage: &mut EntityStorage,
-        mut value: T,
+        component_infos: &[ComponentInfo],
+        aos_comp_ids: &[ComponentId],
+        aos_ptrs: &[NonNull<u8>],
     ) {
-        self.entities.push(entity);
-        let mut comp_ids = Vec::with_capacity(T::get_tuple_length());
-        T::create_or_get_component(entity_storage, &mut comp_ids);
-        let mut ptrs = value.self_get_elem_ptrs();
-        let mut comp_elem_ptrs: Vec<CompElemPtr> = Vec::with_capacity(comp_ids.len());
+        if aos_comp_ids.len() <= 0 {
+            return;
+        }
 
-        for _i in 0..comp_ids.len() {
+        self.entities.push(entity);
+        let mut comp_elem_ptrs: Vec<CompElemPtr> = Vec::with_capacity(aos_comp_ids.len());
+
+        for i in 0..aos_comp_ids.len() {
             comp_elem_ptrs.push(CompElemPtr {
-                comp_id: comp_ids.pop().unwrap(),
-                ptr: NonNull::new_unchecked(ptrs.pop().unwrap()),
+                comp_id: *&aos_comp_ids[i],
+                ptr: *&aos_ptrs[i],
             });
         }
 
@@ -126,7 +143,7 @@ impl TableAoS {
         self.vec.push_ptr_vec_untyped(
             &mut self.cap,
             &mut self.len,
-            &entity_storage.components,
+            component_infos,
             &offsets,
             &comp_elem_ptrs.get_vec(),
         );
@@ -140,9 +157,7 @@ impl TableAoS {
 
     pub fn get() {}
 
-    pub(crate) unsafe fn get_by_index<T: TableAddable>(
-        &mut self, index: usize
-    ) -> Option<&mut T>{
+    pub(crate) unsafe fn get_by_index<T: TableAddable>(&mut self, index: usize) -> Option<&mut T> {
         let row_ptr = self.vec.get_ptr_untyped(index, self.vec.layout);
 
         unimplemented!()
@@ -159,6 +174,17 @@ impl TableAoS {
     }
 
     pub fn tuple_iter_mut() {}
+
+    pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobInnerTypeIterUnsafe<'c, T>{
+        let index = self.type_meta_data_map.get(&TypeId::of::<T>()).unwrap();
+        let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
+        self.vec.tuple_inner_type_iter(*offset)
+    }
+    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(&'c mut self) -> ThinBlobInnerTypeIterMutUnsafe<'c, T>{
+        let index = self.type_meta_data_map.get(&TypeId::of::<T>()).unwrap();
+        let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
+        self.vec.tuple_inner_type_iter_mut(*offset)
+    }
 }
 
 impl Drop for TableAoS {

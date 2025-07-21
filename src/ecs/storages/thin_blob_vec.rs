@@ -203,7 +203,11 @@ impl ThinBlobVec {
             .as_ptr()
     }
 
-    pub unsafe fn get_mut_inner_typed_lifetime<'vec, T>(&mut self, index: usize, offset: usize) -> &'vec mut T {
+    pub unsafe fn get_mut_inner_typed_lifetime<'vec, T>(
+        &mut self,
+        index: usize,
+        offset: usize,
+    ) -> &'vec mut T {
         &mut *self
             .get_ptr_untyped(index, self.layout)
             .cast::<T>()
@@ -231,16 +235,19 @@ impl ThinBlobVec {
         ThinBlobIterMutUnsafe::new(self)
     }
 
-    pub unsafe fn tuple_inner_type_iter<T: 'static>(&self, offset: usize) 
-        -> ThinBlobInnerTypeIterUnsafe<'_, T> {
+    pub unsafe fn tuple_inner_type_iter<T: 'static>(
+        &self,
+        offset: usize,
+    ) -> ThinBlobInnerTypeIterUnsafe<'_, T> {
         ThinBlobInnerTypeIterUnsafe::new(self, offset)
     }
 
-    pub unsafe fn tuple_inner_type_iter_mut<T: 'static>(&mut self, offset: usize) 
-        -> ThinBlobInnerTypeIterMutUnsafe<'_, T> {
+    pub unsafe fn tuple_inner_type_iter_mut<T: 'static>(
+        &mut self,
+        offset: usize,
+    ) -> ThinBlobInnerTypeIterMutUnsafe<'_, T> {
         ThinBlobInnerTypeIterMutUnsafe::new(self, offset)
     }
-
 }
 
 pub struct ThinBlobIterUnsafe<'vec, T: 'static> {
@@ -318,7 +325,7 @@ impl<'vec, T: 'static> ThinBlobInnerTypeIterMutUnsafe<'vec, T> {
     pub fn new(blob: &'vec mut ThinBlobVec, offset: usize) -> Self {
         ThinBlobInnerTypeIterMutUnsafe {
             vec: blob,
-            offset, 
+            offset,
             marker: PhantomData,
         }
     }

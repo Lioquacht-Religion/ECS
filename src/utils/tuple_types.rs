@@ -4,11 +4,11 @@
 // - use length function to initialize vec with capacity
 // - add wrapper functions which create their own vecs
 
-use std::{alloc::Layout, any::TypeId};
+use std::{alloc::Layout, any::TypeId, ptr::NonNull};
 
 use crate::{
     all_tuples,
-    ecs::component::{Component, ComponentId, EntityStorage},
+    ecs::component::{Component, ComponentId, EntityStorage, StorageTypes},
 };
 
 pub trait TupleTypesExt: 'static {
@@ -38,13 +38,13 @@ pub trait TupleTypesExt: 'static {
         Self::type_layouts_rec(vec)
     }
 
-    fn self_get_elem_ptrs(&mut self) -> Vec<*mut u8> {
-        let mut vec: Vec<*mut u8> = Vec::with_capacity(Self::get_tuple_length());
+    fn self_get_elem_ptrs(&mut self) -> Vec<NonNull<u8>> {
+        let mut vec: Vec<NonNull<u8>> = Vec::with_capacity(Self::get_tuple_length());
         self.self_get_elem_ptrs_rec(&mut vec);
         vec
     }
-    fn self_get_elem_ptrs_rec(&mut self, vec: &mut Vec<*mut u8>) {
-        vec.push(self as *mut Self as *mut u8);
+    fn self_get_elem_ptrs_rec(&mut self, vec: &mut Vec<NonNull<u8>>) {
+        vec.push(NonNull::new(self as *mut Self as *mut u8).unwrap());
     }
 
     fn get_tuple_length() -> usize {
@@ -59,6 +59,23 @@ pub trait TupleTypesExt: 'static {
         *len += 1;
     }
     fn create_or_get_component(entity_storage: &mut EntityStorage, vec: &mut Vec<ComponentId>);
+    fn get_comp_ids_by_storage(
+        entity_storage: &mut EntityStorage,
+        soa_vec: &mut Vec<ComponentId>,
+        aos_vec: &mut Vec<ComponentId>,
+    );
+    fn self_get_comp_ids_by_storage(
+        entity_storage: &mut EntityStorage,
+        soa_vec: &mut Vec<ComponentId>,
+        aos_vec: &mut Vec<ComponentId>,
+    ) {
+        Self::get_comp_ids_by_storage(entity_storage, soa_vec, aos_vec);
+    }
+    fn self_get_value_ptrs_by_storage(
+        &mut self,
+        soa_vec: &mut Vec<NonNull<u8>>,
+        aos_vec: &mut Vec<NonNull<u8>>,
+    );
 }
 
 impl<T: Component> TupleTypesExt for T {
@@ -72,40 +89,90 @@ impl<T: Component> TupleTypesExt for T {
     fn create_or_get_component(entity_storage: &mut EntityStorage, vec: &mut Vec<ComponentId>) {
         vec.push(entity_storage.create_or_get_component::<T>());
     }
+    fn get_comp_ids_by_storage(
+        entity_storage: &mut EntityStorage,
+        soa_vec: &mut Vec<ComponentId>,
+        aos_vec: &mut Vec<ComponentId>,
+    ) {
+        match T::STORAGE {
+            StorageTypes::TableSoA => soa_vec.push(entity_storage.create_or_get_component::<T>()),
+            StorageTypes::TableAoS => aos_vec.push(entity_storage.create_or_get_component::<T>()),
+            StorageTypes::SparseSet => unimplemented!(),
+        }
+    }
+    fn self_get_value_ptrs_by_storage(
+        &mut self,
+        soa_vec: &mut Vec<NonNull<u8>>,
+        aos_vec: &mut Vec<NonNull<u8>>,
+    ) {
+        match T::STORAGE {
+            StorageTypes::TableSoA => self.self_get_elem_ptrs_rec(soa_vec),
+            StorageTypes::TableAoS => self.self_get_elem_ptrs_rec(aos_vec),
+            StorageTypes::SparseSet => unimplemented!(),
+        }
+    }
 }
 
 impl TupleTypesExt for () {
     fn type_ids_rec(_vec: &mut Vec<TypeId>) {}
     fn type_layouts_rec(_vec: &mut Vec<Layout>) {}
-    fn self_get_elem_ptrs_rec(&mut self, _vec: &mut Vec<*mut u8>) {}
+    fn self_get_elem_ptrs_rec(&mut self, _vec: &mut Vec<NonNull<u8>>) {}
     fn create_or_get_component(_entity_storage: &mut EntityStorage, _vec: &mut Vec<ComponentId>) {}
+    fn get_comp_ids_by_storage(
+        _entity_storage: &mut EntityStorage,
+        _soa_vec: &mut Vec<ComponentId>,
+        _aos_vec: &mut Vec<ComponentId>,
+    ) {
+    }
+    fn self_get_value_ptrs_by_storage(
+        &mut self,
+        _soa_vec: &mut Vec<NonNull<u8>>,
+        _aos_vec: &mut Vec<NonNull<u8>>,
+    ) {
+    }
 }
 
 macro_rules! impl_tuple_ext {
     ($($t:ident), *) => {
        impl<$($t : TupleTypesExt), *> TupleTypesExt for ($($t),*,){
-               fn type_ids_rec(vec: &mut Vec<TypeId>){
-                   $($t::type_ids_rec(vec);)*
-               }
-               fn type_layouts_rec(vec: &mut Vec<Layout>) {
-                   $($t::type_layouts_rec(vec);)*
-               }
-               fn self_get_elem_ptrs_rec(&mut self, vec: &mut Vec<*mut u8>){
-                     #[allow(non_snake_case)]
-                     let ( $($t,)+ ) = self;
-                   $($t::self_get_elem_ptrs_rec($t, vec);)*
-               }
-               fn get_tuple_length() -> usize{
-                   let mut len = 0;
-                   $($t::get_tuple_length_rec(&mut len);)*
-                   len
-               }
-               fn get_tuple_length_rec(len: &mut usize){
-                   $($t::get_tuple_length_rec(len);)*
-               }
-               fn create_or_get_component(entity_storage : &mut EntityStorage, vec: &mut Vec<ComponentId>) {
-                   $($t::create_or_get_component(entity_storage, vec);)*
-               }
+            fn type_ids_rec(vec: &mut Vec<TypeId>){
+               $($t::type_ids_rec(vec);)*
+            }
+            fn type_layouts_rec(vec: &mut Vec<Layout>) {
+               $($t::type_layouts_rec(vec);)*
+            }
+            fn self_get_elem_ptrs_rec(&mut self, vec: &mut Vec<NonNull<u8>>){
+                 #[allow(non_snake_case)]
+                 let ( $($t,)+ ) = self;
+               $($t::self_get_elem_ptrs_rec($t, vec);)*
+            }
+            fn get_tuple_length() -> usize{
+               let mut len = 0;
+               $($t::get_tuple_length_rec(&mut len);)*
+               len
+            }
+            fn get_tuple_length_rec(len: &mut usize){
+               $($t::get_tuple_length_rec(len);)*
+            }
+            fn create_or_get_component(entity_storage : &mut EntityStorage, vec: &mut Vec<ComponentId>) {
+               $($t::create_or_get_component(entity_storage, vec);)*
+            }
+            fn get_comp_ids_by_storage(
+               entity_storage: &mut EntityStorage,
+               soa_vec: &mut Vec<ComponentId>,
+               aos_vec: &mut Vec<ComponentId>
+            ) {
+               $($t::get_comp_ids_by_storage(entity_storage, soa_vec, aos_vec);)*
+            }
+            fn self_get_value_ptrs_by_storage(
+                    &mut self,
+                    soa_vec: &mut Vec<NonNull<u8>>,
+                    aos_vec: &mut Vec<NonNull<u8>>,
+            ) {
+                #[allow(non_snake_case)]
+                let ( $($t,)+ ) = self;
+                $($t::self_get_value_ptrs_by_storage($t, soa_vec, aos_vec);)*
+            }
        }
     };
 }

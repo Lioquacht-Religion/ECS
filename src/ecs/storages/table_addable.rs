@@ -6,8 +6,9 @@ use crate::{all_tuples, ecs::component::Component, utils::tuple_types::TupleType
 
 use super::table_soa::TableSoA;
 
-pub trait TableAddable: 'static + TupleTypesExt{
+pub trait TableAddable: 'static + TupleTypesExt {
     type Input: TableAddable;
+    //unsafe fn insert(){}
     fn insert_soa(table_soa: &mut TableSoA, input: Self::Input);
 }
 
@@ -28,6 +29,7 @@ impl<T: Component> TableAddable for T {
     }
 }
 
+/*
 macro_rules! impl_soa_addable_ext {
     ($($t:ident), *) => {
        impl<$($t : TableAddable<Input = $t>), *> TableAddable for ($($t),*,){
@@ -46,3 +48,4 @@ all_tuples!(
     impl_soa_addable_ext,
     T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
 );
+*/
