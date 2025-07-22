@@ -208,11 +208,12 @@ impl EntityStorage {
         }
     }
 
-    pub fn find_fitting_archetypes(&self, comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
+    //TODO: does still not work
+    pub fn find_fitting_archetypes(&self, query_comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
         self.compids_archid_map
             .iter()
-            .filter_map(|(cids, arch_id)| {
-                if cids == comp_ids {
+            .filter_map(|(arch_cids, arch_id)| {
+                if query_comp_ids.is_subset_of(arch_cids){
                     Some(*arch_id)
                 } else {
                     None

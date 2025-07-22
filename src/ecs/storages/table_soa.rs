@@ -1,6 +1,6 @@
 // table_soa.rs
 
-use std::{any::TypeId, collections::HashMap, ptr::NonNull};
+use std::{any::{type_name, TypeId}, collections::HashMap, ptr::NonNull};
 
 use crate::{
     ecs::component::{
@@ -83,14 +83,19 @@ impl TableSoA {
     }
 
     pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
-        self.columns.get(&TypeId::of::<T>()).unwrap().tuple_iter()
+        let len = self.columns.len();
+        let arch = self.archetype_id.0;
+        self.columns.get(&TypeId::of::<T>())
+            .expect(&format!("No column (with arch: {}; len:'{}') with type id for type: {}.", 
+                    arch, len, type_name::<T>()))
+            .tuple_iter()
     }
     pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
         &'c mut self,
     ) -> ThinBlobIterMutUnsafe<'c, T> {
         self.columns
             .get_mut(&TypeId::of::<T>())
-            .unwrap()
+            .expect(&format!("No column with type id for type: {}.", type_name::<T>()))
             .tuple_iter_mut()
     }
 }
@@ -107,62 +112,115 @@ impl Drop for TableSoA {
 
 #[cfg(test)]
 mod tests {
-    use crate::ecs::component::ArchetypeId;
-    use crate::ecs::component::Component;
-    use crate::ecs::component::EntityKey;
-    use crate::ecs::component::EntityStorage;
-    use crate::utils::gen_vec;
-
-    use super::TableSoA;
+    use crate::ecs::{component::Component, system::Res, world::World};
+    use crate::ecs::component::{EntityStorage, StorageTypes};
+    use crate::ecs::query::Query;
 
     struct Pos(i32);
-    impl Component for Pos {}
+    impl Component for Pos {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
+    }
 
     struct Pos2(i32, i64);
-    impl Component for Pos2 {}
+    impl Component for Pos2 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
+    }
 
     struct Pos3(i32, i32, i32);
-    impl Component for Pos3 {}
+    impl Component for Pos3 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
+    }
 
     struct Pos4(i32, Box<Pos3>);
-    impl Component for Pos4 {}
+    impl Component for Pos4 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
+    }
 
-    #[test]
-    fn test_table_soa() {
-        let mut es = EntityStorage::new();
-        //es.add_entity((Pos(12), Pos3(12, 34, 56)));
-        //es.add_entity((Pos3(12, 12, 34), Pos(56)));
+    struct Comp1(usize, usize);
+    impl Component for Comp1 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
+    }
 
-        //es.add_entity((Pos(12), Pos3(12, 34, 56), Pos2(213, 23)));
-        es.add_entity((Pos2(213, 23), Pos(12)));
-        //es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+    struct Comp2(usize, usize);
+    impl Component for Comp2 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
+    }
 
-        let mut table = TableSoA::new(ArchetypeId(0), &es);
-        table.insert(EntityKey(gen_vec::Key::new(0, 0)), (Pos(12), Pos2(12, 34)));
-        table.insert(
-            EntityKey(gen_vec::Key::new(0, 0)),
-            (Pos(-212), Pos2(12122, 11134)),
-        );
-        table.insert(
-            EntityKey(gen_vec::Key::new(0, 0)),
-            (Pos(2312), Pos2(-3412, 934)),
-        );
+    fn test_system1(
+        prm: Res<i32>,
+        prm2: Res<usize>,
+        mut query: Query<(&Comp1, &mut Comp2)>,
+        mut query2: Query<(&Pos, &mut Pos4, &Pos3)>,
+    ) {
+        println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
-        let iter = table.tuple_iter::<(&mut Pos, &mut Pos2)>();
-
-        for (pos, pos2) in iter {
-            pos.0 = 999;
-            pos2.1 -= 343;
+        for (comp1, comp2) in query.iter() {
+            println!("comp1: {}", comp1.0);
+            println!("comp2: {}", comp2.0);
+            comp2.0 = 2;
+            println!("comp2: {}", comp2.0);
         }
 
-        /*
-        table_soa.insert(
-            (
-                Pos2(12, 34), Pos3(12, 34, 56),
-                (Pos2(12, 34), Pos3(12, 34, 56))
-            )
-        );
-        table_soa.insert((Pos(12), Pos2(12, 34), Pos3(12, 34, 56)));
-        */
+        for (_pos, pos4, _pos3) in query2.iter(){
+            println!("pos4 : {}", pos4.0);
+            pos4.0 = 23234;
+            pos4.0 -= 2344;
+            println!("pos4 : {}", pos4.0);
+
+            println!("pos4.1 box pointer: {}", pos4.1.0);
+            pos4.1.0 = 23234;
+            pos4.1.0 -= 2344;
+            println!("pos4.1 box pointer: {}", pos4.1.0);
+        }
     }
+
+    fn init_es_insert(es: &mut EntityStorage){
+        es.add_entity((Comp1(12, 34), Comp2(12, 34)));
+        es.add_entity((Comp1(12, 34), Comp2(12, 34)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
+
+        es.add_entity((Pos(12), Pos3(12, 34, 56)));
+        es.add_entity((Pos3(12, 12, 34), Pos(56)));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos2(213, 23)));
+        es.add_entity((Pos2(213, 23), Pos(12)));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+    }
+
+    #[test]
+    fn test_table_soa_insert() {
+        let mut es = EntityStorage::new();
+        init_es_insert(&mut es);
+    }
+
+    #[test]
+    fn test_table_soa_query_iter() {
+        let mut world = World::new();
+        let num1: i32 = 2324;
+        let num2: usize = 2324;
+        world.systems.add_system(test_system1);
+        unsafe { (&mut *world.data.get()).add_resource(num1) };
+        unsafe { (&mut *world.data.get()).add_resource(num2) };
+
+        let es = &mut world
+            .data
+            .get_mut()
+            .entity_storage;
+
+        init_es_insert(es);
+
+        es.add_entity((Pos2(213, 23), Pos(12)));
+        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
+        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
+        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
+        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
+        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        world.run();
+    }
+
 }

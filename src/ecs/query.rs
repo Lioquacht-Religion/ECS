@@ -1,13 +1,13 @@
 // query.rs
 
-use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
+use std::{any::{type_name, TypeId}, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
 
 use crate::{
     all_tuples,
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{
-            TableSoaTupleIter, TableStorageTupleIter, TupleIterConstructor, TupleIterator,
+            TableStorageTupleIter, TupleIterConstructor, TupleIterator,
         },
     },
 };
@@ -114,10 +114,11 @@ impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
 impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
     type Item<'new> = Query<'new, 's, P>;
     unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
-        let world_data_ref = world_data.get().as_ref().unwrap();
         let mut comp_ids = Vec::new();
-        P::comp_ids_rec(world_data_ref, &mut comp_ids);
+        P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
+
+        let world_data_ref = world_data.get().as_ref().unwrap();
         if let Some(query_data) = world_data_ref.query_data.get(&comp_ids) {
             return Self::Item::<'r>::new(world_data, query_data);
         }
@@ -150,7 +151,7 @@ pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     type QueryItem<'new>: QueryParam;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>);
-    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>);
+    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>);
     fn ref_kinds(vec: &mut Vec<RefKind>);
 }
 
@@ -160,13 +161,13 @@ impl<T: Component> QueryParam for &T {
     fn type_ids_rec(vec: &mut Vec<TypeId>) {
         vec.push(TypeId::of::<T>());
     }
-    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>) {
-        let comp_id = world_data
+    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
+        let comp_id = unsafe { 
+            (&mut *world_data.get())
             .entity_storage
-            .typeid_compid_map
-            .get(&TypeId::of::<T>())
-            .expect("No component id found for type id.");
-        vec.push(*comp_id);
+            .create_or_get_component::<T>()
+        };
+        vec.push(comp_id);
     }
     fn ref_kinds(vec: &mut Vec<RefKind>) {
         vec.push(RefKind::Shared);
@@ -178,18 +179,21 @@ impl<T: Component> QueryParam for &mut T {
     fn type_ids_rec(vec: &mut Vec<TypeId>) {
         vec.push(TypeId::of::<T>());
     }
-    fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>) {
-        let comp_id = world_data
+    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
+        let comp_id = unsafe { 
+            (&mut *world_data.get())
             .entity_storage
-            .typeid_compid_map
-            .get(&TypeId::of::<T>())
-            .expect("No component id found for type id.");
-        vec.push(*comp_id);
+            .create_or_get_component::<T>()
+        };
+
+        vec.push(comp_id);
     }
     fn ref_kinds(vec: &mut Vec<RefKind>) {
         vec.push(RefKind::Exclusive);
     }
 }
+
+//TODO:
 //impl<'p, P: QueryParam> QueryParam for Option<P> {}
 
 macro_rules! impl_query_param_tuples {
@@ -201,7 +205,7 @@ macro_rules! impl_query_param_tuples {
                fn type_ids_rec(vec: &mut Vec<TypeId>){
                    $($t::type_ids_rec(vec);)*
                }
-               fn comp_ids_rec(world_data: &WorldData, vec: &mut Vec<ComponentId>) {
+               fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
                    $($t::comp_ids_rec(world_data, vec);)*
                }
                fn ref_kinds(vec: &mut Vec<RefKind>){

@@ -2,7 +2,7 @@
 
 use std::{
     alloc::{dealloc, Layout},
-    any::{Any, TypeId},
+    any::{type_name, Any, TypeId},
     collections::HashMap,
     ptr::NonNull,
 };
@@ -188,14 +188,21 @@ impl TableAoS {
     pub unsafe fn get_single_comp_iter<'c, T: Component>(
         &'c self,
     ) -> ThinBlobInnerTypeIterUnsafe<'c, T> {
-        let index = self.type_meta_data_map.get(&TypeId::of::<T>()).unwrap();
+        let index = self.type_meta_data_map.get(&TypeId::of::<T>())
+            .expect(
+                &format!("No component id found for type id of type: {}.", type_name::<T>())
+            );
+
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         self.vec.tuple_inner_type_iter(*offset)
     }
     pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
         &'c mut self,
     ) -> ThinBlobInnerTypeIterMutUnsafe<'c, T> {
-        let index = self.type_meta_data_map.get(&TypeId::of::<T>()).unwrap();
+        let index = self.type_meta_data_map.get(&TypeId::of::<T>())
+            .expect(
+                &format!("No component id found for type id of type: {}.", type_name::<T>())
+            );
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         self.vec.tuple_inner_type_iter_mut(*offset)
     }
@@ -222,32 +229,38 @@ impl Drop for TableAoS {
             }
         }
         // deallocate allocation of ThinBlobVec owned memory range
-        unsafe{ self.vec.dealloc(self.cap, self.len); }
+        unsafe {
+            self.vec.dealloc(self.cap, self.len);
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
 
-    use crate::ecs::component::ArchetypeId;
     use crate::ecs::component::Component;
-    use crate::ecs::component::EntityKey;
     use crate::ecs::component::EntityStorage;
-    use crate::utils::gen_vec;
-
-    use super::TableAoS;
+    use crate::ecs::component::StorageTypes;
 
     struct Pos(i32);
-    impl Component for Pos {}
+    impl Component for Pos {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableAoS;
+    }
 
     struct Pos2(i32, i64);
-    impl Component for Pos2 {}
+    impl Component for Pos2 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableAoS;
+    }
 
     struct Pos3(i32, i32, i32);
-    impl Component for Pos3 {}
+    impl Component for Pos3 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableAoS;
+    }
 
     struct Pos4(i32, Box<Pos3>);
-    impl Component for Pos4 {}
+    impl Component for Pos4 {
+        const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableAoS;
+    }
 
     #[test]
     fn test_table_aos() {
@@ -258,41 +271,5 @@ mod test {
         //es.add_entity((Pos(12), Pos3(12, 34, 56), Pos2(213, 23)));
         es.add_entity((Pos2(213, 23), Pos(12)));
         //es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-
-        unsafe {
-            let mut table = TableAoS::new(ArchetypeId(0), &es);
-            table.insert(
-                EntityKey(gen_vec::Key::new(0, 0)),
-                &mut es,
-                (Pos(12), Pos2(12, 34)),
-            );
-            table.insert(
-                EntityKey(gen_vec::Key::new(0, 0)),
-                &mut es,
-                (Pos(-212), Pos2(12122, 11134)),
-            );
-            table.insert(
-                EntityKey(gen_vec::Key::new(0, 0)),
-                &mut es,
-                (Pos(2312), Pos2(-3412, 934)),
-            );
-
-            let iter = table.tuple_iter::<(&mut Pos, &mut Pos2)>();
-
-            for (pos, pos2) in iter {
-                pos.0 = 999;
-                pos2.1 -= 343;
-            }
-
-            /*
-            table_soa.insert(
-                (
-                    Pos2(12, 34), Pos3(12, 34, 56),
-                    (Pos2(12, 34), Pos3(12, 34, 56))
-                )
-            );
-            table_soa.insert((Pos(12), Pos2(12, 34), Pos3(12, 34, 56)));
-            */
-        }
     }
 }
