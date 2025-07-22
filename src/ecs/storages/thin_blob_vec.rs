@@ -266,7 +266,7 @@ impl<'vec, T: 'static> ThinBlobIterUnsafe<'vec, T> {
 
 impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterUnsafe<'vec, T> {
     type Item = &'vec T;
-    fn next(&mut self, index: usize) -> Self::Item {
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
         unsafe { self.vec.get_typed_lifetime(index) }
     }
 }
@@ -287,7 +287,7 @@ impl<'vec, T: 'static> ThinBlobIterMutUnsafe<'vec, T> {
 
 impl<'vec, T: Component + 'static> TupleIterator for ThinBlobIterMutUnsafe<'vec, T> {
     type Item = &'vec mut T;
-    fn next(&mut self, index: usize) -> Self::Item {
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
         unsafe { self.vec.get_mut_typed_lifetime(index) }
     }
 }
@@ -310,7 +310,7 @@ impl<'vec, T: 'static> ThinBlobInnerTypeIterUnsafe<'vec, T> {
 
 impl<'vec, T: Component + 'static> TupleIterator for ThinBlobInnerTypeIterUnsafe<'vec, T> {
     type Item = &'vec T;
-    fn next(&mut self, index: usize) -> Self::Item {
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
         unsafe { self.vec.get_inner_typed_lifetime(index, self.offset) }
     }
 }
@@ -333,7 +333,7 @@ impl<'vec, T: 'static> ThinBlobInnerTypeIterMutUnsafe<'vec, T> {
 
 impl<'vec, T: Component + 'static> TupleIterator for ThinBlobInnerTypeIterMutUnsafe<'vec, T> {
     type Item = &'vec mut T;
-    fn next(&mut self, index: usize) -> Self::Item {
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
         unsafe { self.vec.get_mut_inner_typed_lifetime(index, self.offset) }
     }
 }

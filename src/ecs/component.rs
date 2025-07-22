@@ -8,18 +8,21 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
     mem::needs_drop,
-    ptr::{drop_in_place, NonNull},
+    ptr::drop_in_place,
     u32,
 };
 
 use crate::utils::{
-    gen_vec::{GenVec, Key}, sorted_vec::SortedVec, tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor}, tuple_types::TupleTypesExt
+    gen_vec::{GenVec, Key},
+    sorted_vec::SortedVec,
+    tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor},
+    tuple_types::TupleTypesExt,
 };
 
-use super::storages::{table_addable::TableAddable, table_aos::TableAoS, table_soa::TableSoA};
+use super::storages::{table_aos::TableAoS, table_soa::TableSoA};
 
 pub trait Component: 'static {
-    const STORAGE: StorageTypes = StorageTypes::TableSoA;
+    const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
 pub struct ComponentInfo {
@@ -174,13 +177,11 @@ impl TableStorage {
         row_id
     }
 
-    pub fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
+    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
         &'a mut self,
     ) -> TableStorageTupleIter<TC::Construct<'a>> {
         tuple_iters::new_table_storage_iter::<TC>(self)
     }
-
-
 }
 
 pub struct EntityStorage {
@@ -221,8 +222,8 @@ impl EntityStorage {
     }
 
     pub fn find_fitting_archetypes2(&self, comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
-        let archid_set: HashSet<ArchetypeId> = HashSet::new();
-        comp_ids.iter().for_each(|cids| {});
+        let _archid_set: HashSet<ArchetypeId> = HashSet::new();
+        comp_ids.iter().for_each(|_cids| {});
         unimplemented!()
     }
 

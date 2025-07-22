@@ -73,7 +73,7 @@ pub enum TableStorageIterUnsafe<'c, T: Component> {
 
 impl<'c, T: Component> TupleIterator for TableStorageIterUnsafe<'c, T> {
     type Item = &'c T;
-    fn next(&mut self, index: usize) -> Self::Item {
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
             TableStorageIterUnsafe::TableSoaIter(iter) => iter.next(index),
             TableStorageIterUnsafe::TableAosIter(iter) => iter.next(index),
@@ -88,7 +88,7 @@ pub enum TableStorageIterMutUnsafe<'c, T: Component> {
 
 impl<'c, T: Component> TupleIterator for TableStorageIterMutUnsafe<'c, T> {
     type Item = &'c T;
-    fn next(&mut self, index: usize) -> Self::Item {
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
             TableStorageIterMutUnsafe::TableSoaIterMut(iter) => iter.next(index),
             TableStorageIterMutUnsafe::TableAosIterMut(iter) => iter.next(index),
@@ -101,22 +101,25 @@ impl TupleConstructorSource for TableStorage {
     type IterMutType<'c, T: Component> = TableStorageIterMutUnsafe<'c, T>;
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
         match T::STORAGE {
-            StorageTypes::TableSoA => 
-                TableStorageIterUnsafe::TableSoaIter(self.table_soa.get_single_comp_iter()),
-            StorageTypes::TableAoS => 
-                TableStorageIterUnsafe::TableAosIter(self.table_aos.get_single_comp_iter()),
+            StorageTypes::TableSoA => {
+                TableStorageIterUnsafe::TableSoaIter(self.table_soa.get_single_comp_iter())
+            }
+            StorageTypes::TableAoS => {
+                TableStorageIterUnsafe::TableAosIter(self.table_aos.get_single_comp_iter())
+            }
             StorageTypes::SparseSet => unimplemented!(),
         }
     }
     unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
         match T::STORAGE {
-            StorageTypes::TableSoA => 
-                TableStorageIterMutUnsafe::TableSoaIterMut(self.table_soa.get_single_comp_iter_mut()),
-            StorageTypes::TableAoS => 
-                TableStorageIterMutUnsafe::TableAosIterMut(self.table_aos.get_single_comp_iter_mut()),
+            StorageTypes::TableSoA => TableStorageIterMutUnsafe::TableSoaIterMut(
+                self.table_soa.get_single_comp_iter_mut(),
+            ),
+            StorageTypes::TableAoS => TableStorageIterMutUnsafe::TableAosIterMut(
+                self.table_aos.get_single_comp_iter_mut(),
+            ),
             StorageTypes::SparseSet => unimplemented!(),
         }
-
     }
 }
 
@@ -159,7 +162,9 @@ all_tuples!(
 
 pub trait TupleIterator {
     type Item;
-    fn next(&mut self, index: usize) -> Self::Item;
+    //SAFETY: This function does not check if iterator is still in the valid range.
+    // Bounds check needs to be tracked from outside the function.
+    unsafe fn next(&mut self, index: usize) -> Self::Item;
 }
 
 pub struct TableSoaTupleIter<T: TupleIterator> {
@@ -168,7 +173,7 @@ pub struct TableSoaTupleIter<T: TupleIterator> {
     index: usize,
 }
 
-pub fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
+pub unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
     table: &'table mut TableSoA,
 ) -> TableSoaTupleIter<TC::Construct<'table>> {
     unsafe {
@@ -185,7 +190,7 @@ impl<T: TupleIterator> Iterator for TableSoaTupleIter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
             self.index += 1;
-            Some(self.tuple_iters.next(self.index))
+            unsafe { Some(self.tuple_iters.next(self.index)) }
         } else {
             None
         }
@@ -198,7 +203,7 @@ pub struct TableAosTupleIter<T: TupleIterator> {
     index: usize,
 }
 
-pub fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
+pub unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
     table: &'table mut TableAoS,
 ) -> TableAosTupleIter<TC::Construct<'table>> {
     unsafe {
@@ -215,7 +220,7 @@ impl<T: TupleIterator> Iterator for TableAosTupleIter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
             self.index += 1;
-            Some(self.tuple_iters.next(self.index))
+            unsafe { Some(self.tuple_iters.next(self.index)) }
         } else {
             None
         }
@@ -228,7 +233,7 @@ pub struct TableStorageTupleIter<T: TupleIterator> {
     index: usize,
 }
 
-pub fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStorage>>(
+pub unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStorage>>(
     table: &'table mut TableStorage,
 ) -> TableStorageTupleIter<TC::Construct<'table>> {
     unsafe {
@@ -245,7 +250,7 @@ impl<T: TupleIterator> Iterator for TableStorageTupleIter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
             self.index += 1;
-            Some(self.tuple_iters.next(self.index))
+            unsafe { Some(self.tuple_iters.next(self.index)) }
         } else {
             None
         }
@@ -258,7 +263,8 @@ macro_rules! impl_tuple_iterator{
 
             #[allow(unused_parens, non_snake_case)]
             type Item = ($($t::Item),* );
-            fn next(&mut self, index: usize) -> Self::Item {
+            #[allow(unconditional_recursion)]
+            unsafe fn next(&mut self, index: usize) -> Self::Item {
                 #[allow(unused_parens, non_snake_case)]
                 let ($($t),*) = self;
                 ($($t.next(index)),*)

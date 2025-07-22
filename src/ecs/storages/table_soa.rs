@@ -3,12 +3,13 @@
 use std::{any::TypeId, collections::HashMap, ptr::NonNull};
 
 use crate::{
-    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage},
-    utils::
-        tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
+    ecs::component::{
+        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage,
+    },
+    utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
-use super::{table_addable::TableAddable, thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec}};
+use super::thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec};
 
 //TODO: entities need to be stored too for querying
 pub struct TableSoA {
@@ -36,19 +37,6 @@ impl TableSoA {
             len: 0,
             cap: 0,
         }
-    }
-
-    //TODO: probably remove
-    /// Returns the row_id of the inserted input.
-    pub fn insert2<T: TableAddable<Input = T>>(&mut self, entity_key: EntityKey, input: T) -> u32 {
-        let row_id = self.len;
-        T::insert_soa(self, input);
-        self.update_capacity();
-        self.len += 1;
-        self.entities.push(entity_key);
-        row_id
-            .try_into()
-            .expect("ERROR max u32 row id space reached!")
     }
 
     ///SAFETY: Caller of this function
@@ -88,19 +76,20 @@ impl TableSoA {
 
     pub fn remove() {}
 
-    pub fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
+    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
         tuple_iters::new_table_soa_iter::<TC>(self)
     }
 
-    pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T>{
-        self.columns.get(&TypeId::of::<T>())
-            .unwrap()
-            .tuple_iter()
+    pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
+        self.columns.get(&TypeId::of::<T>()).unwrap().tuple_iter()
     }
-    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(&'c mut self) -> ThinBlobIterMutUnsafe<'c, T>{
-        self.columns.get_mut(&TypeId::of::<T>())
+    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
+        &'c mut self,
+    ) -> ThinBlobIterMutUnsafe<'c, T> {
+        self.columns
+            .get_mut(&TypeId::of::<T>())
             .unwrap()
             .tuple_iter_mut()
     }

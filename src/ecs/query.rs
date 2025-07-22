@@ -6,7 +6,9 @@ use crate::{
     all_tuples,
     utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{TableSoaTupleIter, TableStorageTupleIter, TupleIterConstructor, TupleIterator},
+        tuple_iters::{
+            TableSoaTupleIter, TableStorageTupleIter, TupleIterConstructor, TupleIterator,
+        },
     },
 };
 

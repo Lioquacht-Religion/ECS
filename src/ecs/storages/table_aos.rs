@@ -1,30 +1,32 @@
 //table_aos.rs
 
-use core::panic;
 use std::{
+    alloc::{dealloc, Layout},
     any::{Any, TypeId},
     collections::HashMap,
     ptr::NonNull,
 };
 
 use crate::{
-    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage},
+    ecs::component::{
+        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage,
+    },
     utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{self, TableAosTupleIter, TupleIterConstructor, TupleIterator},
+        tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},
         tuple_types::TupleTypesExt,
     },
 };
 
-use super::{
-    table_addable::TableAddable,
-    thin_blob_vec::{CompElemPtr, ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobVec},
+use super::thin_blob_vec::{
+    CompElemPtr, ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobVec,
 };
 
 #[derive(Debug, Hash, Eq)]
 pub(crate) struct TypeMetaData {
     pub(crate) comp_id: ComponentId,
     pub(crate) ptr_offset: usize,
+    pub(crate) drop_fn: Option<unsafe fn(*mut u8)>,
 }
 
 impl PartialEq for TypeMetaData {
@@ -72,6 +74,7 @@ impl TableAoS {
             meta_data.push(TypeMetaData {
                 comp_id: *comp_id,
                 ptr_offset: 0,
+                drop_fn: comp_info.drop,
             });
 
             // comp_ids vec from entity storage should be ordered
@@ -89,6 +92,7 @@ impl TableAoS {
                 meta_data.push(TypeMetaData {
                     comp_id: *comp_id,
                     ptr_offset: offset,
+                    drop_fn: comp_info.drop,
                 });
                 type_meta_data_map.insert(comp_info.type_id(), index);
             }
@@ -102,7 +106,17 @@ impl TableAoS {
                 type_meta_data: meta_data.into(),
             };
         }
-        panic!("Completely empty Archetype not allowed!")
+        //TODO: rethink how to handle this situation, probably put table into option outside
+        //panic!("Completely empty Archetype not allowed!")
+        Self {
+            archetype_id,
+            entities: Vec::new(),
+            vec: ThinBlobVec::new(Layout::new::<()>(), None),
+            cap: 0,
+            len: 0,
+            type_meta_data_map: HashMap::new(),
+            type_meta_data: SortedVec::new(),
+        }
     }
 
     fn update_capacity(&mut self) {
@@ -157,30 +171,30 @@ impl TableAoS {
 
     pub fn get() {}
 
-    pub(crate) unsafe fn get_by_index<T: TableAddable>(&mut self, index: usize) -> Option<&mut T> {
-        let row_ptr = self.vec.get_ptr_untyped(index, self.vec.layout);
+    pub(crate) unsafe fn get_by_index<T: TupleTypesExt>(&mut self, index: usize) -> Option<&mut T> {
+        let _row_ptr = self.vec.get_ptr_untyped(index, self.vec.layout);
 
         unimplemented!()
     }
 
     pub fn remove() {}
 
-    pub fn iter() {}
-
-    pub fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
+    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
         &'a mut self,
     ) -> TableAosTupleIter<TC::Construct<'a>> {
         tuple_iters::new_table_aos_iter::<TC>(self)
     }
 
-    pub fn tuple_iter_mut() {}
-
-    pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobInnerTypeIterUnsafe<'c, T>{
+    pub unsafe fn get_single_comp_iter<'c, T: Component>(
+        &'c self,
+    ) -> ThinBlobInnerTypeIterUnsafe<'c, T> {
         let index = self.type_meta_data_map.get(&TypeId::of::<T>()).unwrap();
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         self.vec.tuple_inner_type_iter(*offset)
     }
-    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(&'c mut self) -> ThinBlobInnerTypeIterMutUnsafe<'c, T>{
+    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
+        &'c mut self,
+    ) -> ThinBlobInnerTypeIterMutUnsafe<'c, T> {
         let index = self.type_meta_data_map.get(&TypeId::of::<T>()).unwrap();
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         self.vec.tuple_inner_type_iter_mut(*offset)
@@ -193,6 +207,22 @@ impl Drop for TableAoS {
         //TODO: remove free indexes concept everywhere
         // just move last entry to empty spot and updat entity vec with new position
         // generation entity index stored by other systems is not effected
+
+        for meta_data in self.type_meta_data.iter() {
+            if let Some(drop_fn) = meta_data.drop_fn {
+                let base_ptr = self.vec.data;
+                let row_size = self.vec.layout.size();
+                for i in 0..self.len {
+                    unsafe {
+                        let row_ptr = base_ptr.add(row_size * i);
+                        let elem_ptr = row_ptr.add(meta_data.ptr_offset);
+                        drop_fn(elem_ptr.as_ptr());
+                    }
+                }
+            }
+        }
+        // deallocate allocation of ThinBlobVec owned memory range
+        unsafe{ self.vec.dealloc(self.cap, self.len); }
     }
 }
 
