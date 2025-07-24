@@ -8,7 +8,7 @@ pub struct SortedVec<T: Ord + Eq + Hash> {
     vec: Vec<T>,
 }
 
-impl<T: Ord + Eq + Hash> PartialEq for SortedVec<T>{
+impl<T: Ord + Eq + Hash> PartialEq for SortedVec<T> {
     fn eq(&self, other: &Self) -> bool {
         let v1 = self.get_vec();
         let v2 = other.get_vec();
@@ -16,12 +16,12 @@ impl<T: Ord + Eq + Hash> PartialEq for SortedVec<T>{
             return false;
         }
 
-        for i in 0..v1.len(){
+        for i in 0..v1.len() {
             if v1[i] != v2[i] {
                 return false;
             }
         }
-        
+
         return true;
     }
 }
@@ -56,22 +56,21 @@ impl<T: Ord + Eq + Hash> SortedVec<T> {
         None
     }
 
-    pub fn is_subset_of(&self, other: &SortedVec<T>) -> bool{
+    pub fn is_subset_of(&self, other: &SortedVec<T>) -> bool {
         let mut wholeset_iter = other.iter();
         let mut wholeset_elem_opt = wholeset_iter.next();
         let mut contains_count = 0;
-        for subset_elem in self.iter(){
+        for subset_elem in self.iter() {
             if let Some(wholeset_elem) = wholeset_elem_opt {
-               if subset_elem == wholeset_elem {
-                   contains_count += 1;
-                   wholeset_elem_opt = wholeset_iter.next();
-               }
-            }
-            else{
+                if subset_elem == wholeset_elem {
+                    contains_count += 1;
+                    wholeset_elem_opt = wholeset_iter.next();
+                }
+            } else {
                 return false;
             }
-        } 
-        contains_count == self.get_vec().len() 
+        }
+        contains_count == self.get_vec().len()
     }
 }
 

@@ -3,7 +3,7 @@
 //TODO: dealloc and realloc allocation at old pointer
 //TODO: do not drop other inner boxed values of moved boxed value
 //TODO: store drop methods of stored values too for correct deallocation
-//TODO: macro for more efficient tuple inserting through use of destructering
+//TODO: macro for more efficient tuple inserting through use of destructuring
 
 use std::{alloc::Layout, marker::PhantomData, ptr::NonNull};
 
@@ -211,16 +211,16 @@ impl ThinBlobVec {
         &mut *self
             .get_ptr_untyped(index, self.layout)
             .cast::<T>()
+            .byte_offset(offset as isize)
             .as_ptr()
-            .add(offset)
     }
 
     pub unsafe fn get_inner_typed_lifetime<'vec, T>(&self, index: usize, offset: usize) -> &'vec T {
         &*self
             .get_ptr_untyped(index, self.layout)
             .cast::<T>()
+            .byte_offset(offset as isize)
             .as_ptr()
-            .add(offset)
     }
 
     pub unsafe fn iter<T: 'static>(&mut self, len: usize) -> ThinBlobIter<'_, T> {

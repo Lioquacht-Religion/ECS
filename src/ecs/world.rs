@@ -17,7 +17,7 @@ pub struct World {
 
 pub struct WorldData {
     pub(crate) resources: AnyMap,
-    pub(crate) entity_storage: EntityStorage,
+    pub entity_storage: EntityStorage,
     pub(crate) query_data: HashMap<SortedVec<ComponentId>, QueryState>,
 }
 

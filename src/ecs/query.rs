@@ -1,14 +1,17 @@
 // query.rs
 
-use std::{any::{type_name, TypeId}, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
+use std::{
+    any::{type_name, TypeId},
+    cell::UnsafeCell,
+    collections::HashSet,
+    marker::PhantomData,
+};
 
 use crate::{
     all_tuples,
     utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{
-            TableStorageTupleIter, TupleIterConstructor, TupleIterator,
-        },
+        tuple_iters::{TableStorageTupleIter, TupleIterConstructor, TupleIterator},
     },
 };
 
@@ -54,10 +57,14 @@ impl<'w, 's, P: QueryParam> Query<'w, 's, P> {
         QueryIter::new(self)
     }
 
+    pub fn iter2(&mut self) -> QueryIter<'_, '_, P> {
+        QueryIter::new(self)
+    }
+
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
-    ) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
+) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
         self.world
             .get()
             .as_mut()
@@ -72,15 +79,17 @@ impl<'w, 's, P: QueryParam> Query<'w, 's, P> {
 
 pub struct QueryIter<'w, 's, T: QueryParam> {
     query: &'w Query<'w, 's, T>,
-    cur_arch_query: TableStorageTupleIter<T::Construct<'w>>,
+    cur_arch_query: Option<TableStorageTupleIter<T::Construct<'w>>>,
     cur_arch_index: usize,
 }
 
 impl<'w, 's, T: QueryParam> QueryIter<'w, 's, T> {
     pub fn new(query: &'w Query<'w, 's, T>) -> Self {
-        let arch_id = query.state.arch_ids[0];
-
-        let arch_query = unsafe { query.get_arch_query_iter(arch_id) };
+        let mut arch_query = None;
+        if query.state.arch_ids.len() > 0 {
+            let arch_id = query.state.arch_ids[0];
+            arch_query = Some(unsafe { query.get_arch_query_iter(arch_id) });
+        }
 
         Self {
             query,
@@ -93,20 +102,27 @@ impl<'w, 's, T: QueryParam> QueryIter<'w, 's, T> {
 impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
     type Item = <<T as TupleIterConstructor<QueryDataType>>::Construct<'w> as TupleIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(item) = self.cur_arch_query.next() {
-            return Some(item);
-        }
-        self.cur_arch_index += 1;
-        if self.cur_arch_index < self.query.state.arch_ids.len() {
-            let arch_id = self.query.state.arch_ids[self.cur_arch_index];
-            self.cur_arch_query = unsafe { self.query.get_arch_query_iter(arch_id) };
-            if let Some(item) = self.cur_arch_query.next() {
-                return Some(item);
+        println!("query next");
+        loop {
+            println!("query inner loop: {:?}", &self.query.state.arch_ids);
+            if let Some(ref mut cur_query) = &mut self.cur_arch_query {
+                match cur_query.next() {
+                    None => {
+                        self.cur_arch_index += 1;
+                        if self.cur_arch_index >= self.query.state.arch_ids.len() {
+                            return None;
+                        }
+
+                        let next_arch_id = self.query.state.arch_ids[self.cur_arch_index];
+                        self.cur_arch_query =
+                            Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
+                    }
+                    Some(elem) => return Some(elem),
+                }
             }
-            // recurse until next Some item is returned
-            self.next()
-        } else {
-            None
+            else{
+                return None;
+            }
         }
     }
 }
@@ -162,10 +178,10 @@ impl<T: Component> QueryParam for &T {
         vec.push(TypeId::of::<T>());
     }
     fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
-        let comp_id = unsafe { 
+        let comp_id = unsafe {
             (&mut *world_data.get())
-            .entity_storage
-            .create_or_get_component::<T>()
+                .entity_storage
+                .create_or_get_component::<T>()
         };
         vec.push(comp_id);
     }
@@ -180,10 +196,10 @@ impl<T: Component> QueryParam for &mut T {
         vec.push(TypeId::of::<T>());
     }
     fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
-        let comp_id = unsafe { 
+        let comp_id = unsafe {
             (&mut *world_data.get())
-            .entity_storage
-            .create_or_get_component::<T>()
+                .entity_storage
+                .create_or_get_component::<T>()
         };
 
         vec.push(comp_id);
@@ -258,11 +274,11 @@ mod test {
         world.systems.add_system(test_system1);
         unsafe { (&mut *world.data.get()).add_resource(num1) };
         unsafe { (&mut *world.data.get()).add_resource(num2) };
-        world
-            .data
-            .get_mut()
-            .entity_storage
-            .add_entity((Comp1(12, 34), Comp2(56, 78)));
+        let es = &mut world.data.get_mut().entity_storage;
+        es.add_entity((Comp2(12, 34), Comp1(56, 78)));
+        es.add_entity(Comp1(12, 34));
+        es.add_entity((Comp1(12, 34), Comp2(56, 78)));
+        es.add_entity((Comp1(12, 34), Comp2(56, 78)));
         world.run();
     }
 }

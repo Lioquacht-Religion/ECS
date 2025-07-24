@@ -25,6 +25,7 @@ pub trait Component: 'static {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
+#[derive(Debug)]
 pub struct ComponentInfo {
     pub(crate) name: Cow<'static, str>,
     pub(crate) comp_id: ComponentId,
@@ -174,6 +175,8 @@ impl TableStorage {
         self.table_aos
             .insert(entity, component_infos, &aos_comp_ids, &aos_ptrs);
         std::mem::forget(value);
+
+        self.len += 1;
         row_id
     }
 
@@ -209,11 +212,14 @@ impl EntityStorage {
     }
 
     //TODO: does still not work
-    pub fn find_fitting_archetypes(&self, query_comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
+    pub fn find_fitting_archetypes(
+        &self,
+        query_comp_ids: &SortedVec<ComponentId>,
+    ) -> Vec<ArchetypeId> {
         self.compids_archid_map
             .iter()
             .filter_map(|(arch_cids, arch_id)| {
-                if query_comp_ids.is_subset_of(arch_cids){
+                if query_comp_ids.is_subset_of(arch_cids) {
                     Some(*arch_id)
                 } else {
                     None

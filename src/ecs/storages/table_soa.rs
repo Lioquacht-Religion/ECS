@@ -1,6 +1,10 @@
 // table_soa.rs
 
-use std::{any::{type_name, TypeId}, collections::HashMap, ptr::NonNull};
+use std::{
+    any::{type_name, TypeId},
+    collections::HashMap,
+    ptr::NonNull,
+};
 
 use crate::{
     ecs::component::{
@@ -83,11 +87,12 @@ impl TableSoA {
     }
 
     pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
-        let len = self.columns.len();
-        let arch = self.archetype_id.0;
-        self.columns.get(&TypeId::of::<T>())
-            .expect(&format!("No column (with arch: {}; len:'{}') with type id for type: {}.", 
-                    arch, len, type_name::<T>()))
+        self.columns
+            .get(&TypeId::of::<T>())
+            .expect(&format!(
+                "No column with type id for type: {}.",
+                type_name::<T>()
+            ))
             .tuple_iter()
     }
     pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
@@ -95,7 +100,10 @@ impl TableSoA {
     ) -> ThinBlobIterMutUnsafe<'c, T> {
         self.columns
             .get_mut(&TypeId::of::<T>())
-            .expect(&format!("No column with type id for type: {}.", type_name::<T>()))
+            .expect(&format!(
+                "No column with type id for type: {}.",
+                type_name::<T>()
+            ))
             .tuple_iter_mut()
     }
 }
@@ -112,9 +120,9 @@ impl Drop for TableSoA {
 
 #[cfg(test)]
 mod tests {
-    use crate::ecs::{component::Component, system::Res, world::World};
     use crate::ecs::component::{EntityStorage, StorageTypes};
     use crate::ecs::query::Query;
+    use crate::ecs::{component::Component, system::Res, world::World};
 
     struct Pos(i32);
     impl Component for Pos {
@@ -154,27 +162,34 @@ mod tests {
     ) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
+        let mut count = 0;
         for (comp1, comp2) in query.iter() {
             println!("comp1: {}", comp1.0);
             println!("comp2: {}", comp2.0);
             comp2.0 = 2;
             println!("comp2: {}", comp2.0);
+            count += 1;
         }
 
-        for (_pos, pos4, _pos3) in query2.iter(){
+        assert_eq!(count, 3);
+        assert_eq!(query.iter().count(), 3);
+
+        for (_pos, pos4, _pos3) in query2.iter() {
             println!("pos4 : {}", pos4.0);
             pos4.0 = 23234;
             pos4.0 -= 2344;
             println!("pos4 : {}", pos4.0);
 
-            println!("pos4.1 box pointer: {}", pos4.1.0);
-            pos4.1.0 = 23234;
-            pos4.1.0 -= 2344;
-            println!("pos4.1 box pointer: {}", pos4.1.0);
+            println!("pos4.1 box pointer: {}", pos4.1 .0);
+            pos4.1 .0 = 23234;
+            pos4.1 .0 -= 2344;
+            println!("pos4.1 box pointer: {}", pos4.1 .0);
         }
+
+        assert_eq!(query2.iter().count(), 4);
     }
 
-    fn init_es_insert(es: &mut EntityStorage){
+    fn init_es_insert(es: &mut EntityStorage) {
         es.add_entity((Comp1(12, 34), Comp2(12, 34)));
         es.add_entity((Comp1(12, 34), Comp2(12, 34)));
         es.add_entity((Comp2(12, 34), Comp1(12, 34)));
@@ -204,23 +219,10 @@ mod tests {
         unsafe { (&mut *world.data.get()).add_resource(num1) };
         unsafe { (&mut *world.data.get()).add_resource(num2) };
 
-        let es = &mut world
-            .data
-            .get_mut()
-            .entity_storage;
+        let es = &mut world.data.get_mut().entity_storage;
 
         init_es_insert(es);
 
-        es.add_entity((Pos2(213, 23), Pos(12)));
-        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
-        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
-        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
-        let _ = es.add_entity((Comp1(12, 34), Comp2(56, 78)));
-        es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
         world.run();
     }
-
 }

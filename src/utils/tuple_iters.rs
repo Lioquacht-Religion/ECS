@@ -189,8 +189,9 @@ impl<T: TupleIterator> Iterator for TableSoaTupleIter<T> {
     type Item = T::Item;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
+            let next = unsafe { Some(self.tuple_iters.next(self.index)) };
             self.index += 1;
-            unsafe { Some(self.tuple_iters.next(self.index)) }
+            next
         } else {
             None
         }
@@ -219,8 +220,9 @@ impl<T: TupleIterator> Iterator for TableAosTupleIter<T> {
     type Item = T::Item;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
+            let next = unsafe { Some(self.tuple_iters.next(self.index)) };
             self.index += 1;
-            unsafe { Some(self.tuple_iters.next(self.index)) }
+            next
         } else {
             None
         }
@@ -248,9 +250,11 @@ pub unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStora
 impl<T: TupleIterator> Iterator for TableStorageTupleIter<T> {
     type Item = T::Item;
     fn next(&mut self) -> Option<Self::Item> {
+        println!("tuple iter next: {}", self.len);
         if self.index < self.len {
+            let next = unsafe { Some(self.tuple_iters.next(self.index)) };
             self.index += 1;
-            unsafe { Some(self.tuple_iters.next(self.index)) }
+            next
         } else {
             None
         }
