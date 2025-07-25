@@ -102,9 +102,8 @@ impl<'w, 's, T: QueryParam> QueryIter<'w, 's, T> {
 impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
     type Item = <<T as TupleIterConstructor<QueryDataType>>::Construct<'w> as TupleIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
-        println!("query next");
         loop {
-            println!("query inner loop: {:?}", &self.query.state.arch_ids);
+            //TODO: find maybe some way to remove this check?
             if let Some(ref mut cur_query) = &mut self.cur_arch_query {
                 match cur_query.next() {
                     None => {

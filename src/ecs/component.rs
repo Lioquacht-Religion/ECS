@@ -12,6 +12,8 @@ use std::{
     u32,
 };
 
+use ahash::AHashMap;
+
 use crate::utils::{
     gen_vec::{GenVec, Key},
     sorted_vec::SortedVec,
@@ -20,6 +22,8 @@ use crate::utils::{
 };
 
 use super::storages::{table_aos::TableAoS, table_soa::TableSoA};
+
+pub type Map<K, V> = AHashMap<K, V>;
 
 pub trait Component: 'static {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
@@ -191,11 +195,11 @@ pub struct EntityStorage {
     pub(crate) entities: GenVec<Entity>,
     pub(crate) components: Vec<ComponentInfo>,
     pub(crate) archetypes: Vec<Archetype>,
-    pub(crate) tables: HashMap<ArchetypeId, TableStorage>,
+    pub(crate) tables: Map<ArchetypeId, TableStorage>,
     //mapping data
-    pub(crate) typeid_compid_map: HashMap<TypeId, ComponentId>,
-    pub(crate) compid_archids_map: HashMap<ComponentId, HashSet<ArchetypeId>>,
-    pub(crate) compids_archid_map: HashMap<SortedVec<ComponentId>, ArchetypeId>,
+    pub(crate) typeid_compid_map: Map<TypeId, ComponentId>,
+    pub(crate) compid_archids_map: Map<ComponentId, HashSet<ArchetypeId>>,
+    pub(crate) compids_archid_map: Map<SortedVec<ComponentId>, ArchetypeId>,
 }
 
 impl EntityStorage {
@@ -204,10 +208,10 @@ impl EntityStorage {
             entities: GenVec::new(),
             components: Vec::new(),
             archetypes: Vec::new(),
-            tables: HashMap::new(),
-            typeid_compid_map: HashMap::new(),
-            compid_archids_map: HashMap::new(),
-            compids_archid_map: HashMap::new(),
+            tables: Map::new(),
+            typeid_compid_map: Map::new(),
+            compid_archids_map: Map::new(),
+            compids_archid_map: Map::new(),
         }
     }
 

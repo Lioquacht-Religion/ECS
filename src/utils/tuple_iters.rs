@@ -250,7 +250,6 @@ pub unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStora
 impl<T: TupleIterator> Iterator for TableStorageTupleIter<T> {
     type Item = T::Item;
     fn next(&mut self) -> Option<Self::Item> {
-        println!("tuple iter next: {}", self.len);
         if self.index < self.len {
             let next = unsafe { Some(self.tuple_iters.next(self.index)) };
             self.index += 1;

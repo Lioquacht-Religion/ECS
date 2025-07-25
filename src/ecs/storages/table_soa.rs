@@ -1,14 +1,12 @@
 // table_soa.rs
 
 use std::{
-    any::{type_name, TypeId},
-    collections::HashMap,
-    ptr::NonNull,
+    any::{type_name, TypeId}, ptr::NonNull
 };
 
 use crate::{
     ecs::component::{
-        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage,
+        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage, Map,
     },
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
@@ -19,7 +17,7 @@ use super::thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVe
 pub struct TableSoA {
     pub(crate) archetype_id: ArchetypeId,
     entities: Vec<EntityKey>,
-    pub(crate) columns: HashMap<TypeId, ThinBlobVec>,
+    pub(crate) columns: Map<TypeId, ThinBlobVec>,
     pub(crate) len: usize,
     pub(crate) cap: usize,
 }
@@ -27,7 +25,7 @@ pub struct TableSoA {
 //TODO: make probably every function here unsafe
 impl TableSoA {
     pub fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
-        let mut columns = HashMap::new();
+        let mut columns = Map::new();
         let archetype = &entity_storage.archetypes[usize::from(archetype_id)];
         archetype.soa_comp_ids.get_vec().iter().for_each(|cid| {
             let cinfo = &entity_storage.components[usize::from(*cid)];

@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     ecs::component::{
-        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage,
+        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage, Map,
     },
     utils::{
         sorted_vec::SortedVec,
@@ -54,7 +54,7 @@ pub struct TableAoS {
     pub(crate) vec: ThinBlobVec,
     pub(crate) cap: usize,
     pub(crate) len: usize,
-    pub(crate) type_meta_data_map: HashMap<TypeId, usize>,
+    pub(crate) type_meta_data_map: Map<TypeId, usize>,
     pub(crate) type_meta_data: SortedVec<TypeMetaData>,
 }
 
@@ -66,7 +66,7 @@ impl TableAoS {
         let mut meta_data: Vec<TypeMetaData> = Vec::with_capacity(comp_ids.len());
 
         let mut comp_id_iter = comp_ids.iter();
-        let mut type_meta_data_map: HashMap<TypeId, usize> = HashMap::with_capacity(comp_ids.len());
+        let mut type_meta_data_map: Map<TypeId, usize> = Map::with_capacity(comp_ids.len());
 
         if let Some(comp_id) = comp_id_iter.next() {
             let comp_info = &entity_storage.components[comp_id.0 as usize];
@@ -115,7 +115,7 @@ impl TableAoS {
             vec: ThinBlobVec::new(Layout::new::<()>(), None),
             cap: 0,
             len: 0,
-            type_meta_data_map: HashMap::new(),
+            type_meta_data_map: Map::new(),
             type_meta_data: SortedVec::new(),
         }
     }
