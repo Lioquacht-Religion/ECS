@@ -11,7 +11,10 @@ use crate::{
 };
 
 use super::{
-    component::{ArchetypeId, Component, ComponentId}, storages::table_storage::TableStorage, system::SystemParam, world::WorldData
+    component::{ArchetypeId, Component, ComponentId},
+    storages::table_storage::TableStorage,
+    system::SystemParam,
+    world::WorldData,
 };
 
 type QueryDataType = TableStorage;
@@ -116,15 +119,21 @@ impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
 impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
     type Item<'new> = Query<'new, 's, P>;
     unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
-        let world_data_mut : &mut WorldData = world_data.get().as_mut().unwrap();
-        let mut comp_ids = world_data_mut.entity_storage
-            .cache.compid_vec_cache.take_cached();
+        let world_data_mut: &mut WorldData = world_data.get().as_mut().unwrap();
+        let mut comp_ids = world_data_mut
+            .entity_storage
+            .cache
+            .compid_vec_cache
+            .take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
         if let Some(query_data) = world_data_mut.query_data.get(&comp_ids) {
-            world_data_mut.entity_storage
-            .cache.compid_vec_cache.insert(comp_ids.into());
+            world_data_mut
+                .entity_storage
+                .cache
+                .compid_vec_cache
+                .insert(comp_ids.into());
             return Self::Item::<'r>::new(world_data, query_data);
         }
 

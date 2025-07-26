@@ -1,7 +1,11 @@
 // main.rs file for testing ECS package directly
 
 use ecs::ecs::{
-    component::{Component, StorageTypes}, query::Query, storages::entity_storage::EntityStorage, system::Res, world::World
+    component::{Component, StorageTypes},
+    query::Query,
+    storages::entity_storage::EntityStorage,
+    system::Res,
+    world::World,
 };
 
 struct Pos(i32);
@@ -106,10 +110,15 @@ fn test_system2(
 
     let start2 = std::time::Instant::now();
     for (comp1, comp2) in query_aos.iter() {
-        comp1.0 /= 21;
+        /*comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
-        comp2.1 /= 437;
+        comp2.1 /= 437;*/
+
+        comp1.0 /= 392049;
+        comp1.1 /= 392049;
+        comp2.0 /= 392049;
+        comp2.1 /= 392049;
     }
 
     println!("soa time: {} nanos", start1.elapsed().as_nanos());
@@ -127,6 +136,10 @@ fn init_es_insert(es: &mut EntityStorage) {
             Comp2(i, 34),
             Pos2(232, 2423),
         ));
+    }
+    println!("insert time soa: {} nanos", start1.elapsed().as_nanos());
+    let start2 = std::time::Instant::now();
+    for i in 0..100000 {
         es.add_entity((Comp1AoS(i, 34), Comp2AoS(i, 34)));
         es.add_entity((
             PosAoS(34434),
@@ -136,20 +149,59 @@ fn init_es_insert(es: &mut EntityStorage) {
             Pos2(2434, 23),
         ));
     }
-    println!("insert time: {} nanos", start1.elapsed().as_nanos());
+    println!("insert time aos: {} nanos", start2.elapsed().as_nanos());
+    println!("single inserts time: {} nanos", start1.elapsed().as_nanos());
 
-    /*
-        es.add_entity((Comp1(12, 34), Comp2(12, 34)));
-        es.add_entity((Comp1(12, 34), Comp2(12, 34)));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
+    let start1 = std::time::Instant::now();
+    let mut ents_soa = Vec::with_capacity(100000);
+    let mut ents_soa2 = Vec::with_capacity(100000);
+    for i in 0..100000 {
+        ents_soa2.push((Comp1(i, 34), Comp2(i, 34)));
+        ents_soa.push((
+            Pos(33434),
+            Comp1(i, 34),
+            Pos4(12, Box::new(Pos3(1, 1, 1))),
+            Comp2(i, 34),
+            Pos2(232, 2423),
+        ));
+    }
+    es.add_entities_batch(ents_soa);
+    es.add_entities_batch(ents_soa2);
+    println!("batch insert time soa: {} nanos", start1.elapsed().as_nanos());
 
-        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
-        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
-    */
+    let start2 = std::time::Instant::now();
+    let mut ents_aos = Vec::with_capacity(100000);
+    let mut ents_aos2 = Vec::with_capacity(100000);
+    for i in 0..100000 {
+        ents_aos.push((Comp1AoS(i, 34), Comp2AoS(i, 34)));
+        ents_aos2.push((
+            PosAoS(34434),
+            Comp1AoS(i, 34),
+            Pos4AoS(12, Box::new(Pos3(1, 1, 1))),
+            Comp2AoS(i, 34),
+            Pos2(2434, 23),
+        ));
+    }
+
+    let start3 = std::time::Instant::now();
+    for c in ents_aos.iter_mut(){
+        c.0.0 /= 392049;
+        c.0.1 /= 392049;
+        c.1.0 /= 392049;
+        c.1.1 /= 392049;
+    }
+    for c in ents_aos2.iter_mut(){
+        c.1.0 /= 392049;
+        c.1.1 /= 392049;
+        c.4.0 /= 392049;
+        c.4.1 /= 392049;
+    }
+    println!("normal loop time aos: {} nanos", start3.elapsed().as_nanos());
+
+    es.add_entities_batch(ents_aos);
+    es.add_entities_batch(ents_aos2);
+    println!("batch insert time aos: {} nanos", start2.elapsed().as_nanos());
+    println!("batch insert time: {} nanos; {} micros", start1.elapsed().as_nanos(), start1.elapsed().as_micros());
 
     es.add_entity((Pos(12), Pos3(12, 34, 56)));
     es.add_entity((Pos3(12, 12, 34), Pos(56)));

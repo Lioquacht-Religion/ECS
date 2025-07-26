@@ -4,7 +4,7 @@ use std::any::TypeId;
 
 use crate::{
     ecs::component::{
-        Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Entity, EntityKey, Map
+        Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Entity, EntityKey, Map,
     },
     utils::{gen_vec::GenVec, sorted_vec::SortedVec, tuple_types::TupleTypesExt},
 };
@@ -87,6 +87,45 @@ impl EntityStorage {
             e.row_id = row_id;
         }
         EntityKey(key)
+    }
+
+    pub fn add_entities_batch<T: TupleTypesExt>(&mut self, input: Vec<T>) -> Vec<EntityKey> {
+        let archetype_id = self.create_or_get_archetype::<T>();
+
+        let mut soa_comp_ids = self.cache.compid_vec_cache.take_cached();
+        let mut aos_comp_ids = self.cache.compid_vec_cache.take_cached();
+        T::get_comp_ids_by_storage(self, &mut soa_comp_ids, &mut aos_comp_ids);
+
+        let table = self
+            .tables
+            .get_mut(&archetype_id)
+            .expect("ERROR: table does not contain archetype id!");
+
+        let row_id_start = table.len as usize;
+        let row_id_end = row_id_start + input.len();
+        let entity_keys = Vec::with_capacity(input.len());
+        for i in row_id_start..row_id_end {
+            self.entities.insert(Entity {
+                archetype_id,
+                row_id: i as u32,
+            });
+        }
+
+        unsafe {
+            table.insert_batch(
+                &entity_keys,
+                &self.components,
+                &soa_comp_ids,
+                &aos_comp_ids,
+                &mut self.cache,
+                input,
+            );
+        }
+
+        self.cache.compid_vec_cache.insert(soa_comp_ids);
+        self.cache.compid_vec_cache.insert(aos_comp_ids);
+
+        entity_keys
     }
 
     pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {

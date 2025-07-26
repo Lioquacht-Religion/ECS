@@ -7,9 +7,7 @@ use std::{
 };
 
 use crate::{
-    ecs::component::{
-        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map,
-    },
+    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map},
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},
@@ -17,9 +15,13 @@ use crate::{
     },
 };
 
-use super::{entity_storage::EntityStorage, thin_blob_vec::{
-    CompElemPtr, ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobVec,
-}};
+use super::{
+    cache::EntityStorageCache,
+    entity_storage::EntityStorage,
+    thin_blob_vec::{
+        CompElemPtr, ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobVec,
+    },
+};
 
 #[derive(Debug, Hash, Eq)]
 pub(crate) struct TypeMetaData {
@@ -49,7 +51,6 @@ impl Ord for TypeMetaData {
 pub struct TableAoS {
     //TODO: add compids because of possible storage split
     pub(crate) archetype_id: ArchetypeId,
-    pub(crate) entities: Vec<EntityKey>,
     pub(crate) vec: ThinBlobVec,
     pub(crate) cap: usize,
     pub(crate) len: usize,
@@ -98,7 +99,6 @@ impl TableAoS {
             row_layout = row_layout.pad_to_align();
             return Self {
                 archetype_id,
-                entities: Vec::new(),
                 vec: ThinBlobVec::new(row_layout, None),
                 cap: 0,
                 len: 0,
@@ -110,7 +110,6 @@ impl TableAoS {
         //panic!("Completely empty Archetype not allowed!")
         Self {
             archetype_id,
-            entities: Vec::new(),
             vec: ThinBlobVec::new(Layout::new::<()>(), None),
             cap: 0,
             len: 0,
@@ -119,7 +118,7 @@ impl TableAoS {
         }
     }
 
-    fn print_internals(&self, component_infos: &[ComponentInfo]) {
+    pub(crate) fn print_internals(&self, component_infos: &[ComponentInfo]) {
         println!("TableAoS: ");
         println!("layout: {:?}", self.vec.layout);
         for (i, tm) in self.type_meta_data.iter().enumerate() {
@@ -142,19 +141,18 @@ impl TableAoS {
     ///SAFETY: Caller of this function
     ///        should forget/leak value of type T,
     ///        so it does not get dropped.
-    pub unsafe fn insert(
+    pub(crate) unsafe fn insert(
         &mut self,
-        entity: EntityKey,
         component_infos: &[ComponentInfo],
         aos_comp_ids: &[ComponentId],
         aos_ptrs: &[NonNull<u8>],
+        cache: &mut EntityStorageCache,
     ) {
         if aos_comp_ids.len() == 0 {
             return;
         }
 
-        self.entities.push(entity);
-        let mut comp_elem_ptrs: Vec<CompElemPtr> = Vec::with_capacity(aos_comp_ids.len());
+        let mut comp_elem_ptrs: Vec<CompElemPtr> = cache.compelemptr_vec_cache.take_cached();
 
         for i in 0..aos_comp_ids.len() {
             comp_elem_ptrs.push(CompElemPtr {
@@ -164,19 +162,52 @@ impl TableAoS {
         }
 
         let comp_elem_ptrs: SortedVec<CompElemPtr> = comp_elem_ptrs.into();
-        let offsets: Vec<usize> = self.type_meta_data.iter().map(|t| t.ptr_offset).collect();
 
         self.vec.push_ptr_vec_untyped(
             &mut self.cap,
             &mut self.len,
             component_infos,
-            &offsets,
+            &self.type_meta_data.get_vec(),
             &comp_elem_ptrs.get_vec(),
         );
+
+        cache.compelemptr_vec_cache.insert(comp_elem_ptrs.into());
     }
 
-    pub unsafe fn batch_insert() {
-        unimplemented!()
+    pub unsafe fn insert_batch(
+        &mut self,
+        component_infos: &[ComponentInfo],
+        aos_comp_ids: &[ComponentId],
+        aos_base_ptrs: &[NonNull<u8>],
+        value_layout: Layout,
+        batch_len: usize,
+        cache: &mut EntityStorageCache,
+    ) {
+        if aos_comp_ids.len() == 0 {
+            return;
+        }
+
+        let mut comp_elem_ptrs: Vec<CompElemPtr> = cache.compelemptr_vec_cache.take_cached();
+        for i in 0..aos_comp_ids.len() {
+            comp_elem_ptrs.push(CompElemPtr {
+                comp_id: *&aos_comp_ids[i],
+                ptr: *&aos_base_ptrs[i],
+            });
+        }
+        let comp_elem_ptrs: SortedVec<CompElemPtr> = comp_elem_ptrs.into();
+
+        for i in 0..batch_len {
+            let offset = value_layout.size() * i;
+            self.vec.push_ptr_vec_untyped_with_offset(
+                &mut self.cap,
+                &mut self.len,
+                component_infos,
+                &self.type_meta_data.get_vec(),
+                &comp_elem_ptrs.get_vec(),
+                offset,
+            );
+        }
+        cache.compelemptr_vec_cache.insert(comp_elem_ptrs.into());
     }
 
     pub(crate) unsafe fn get_mut_by_index<T: TupleTypesExt>(

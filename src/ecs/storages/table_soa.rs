@@ -1,18 +1,20 @@
 // table_soa.rs
 
 use std::{
+    alloc::Layout,
     any::{type_name, TypeId},
     ptr::NonNull,
 };
 
 use crate::{
-    ecs::component::{
-        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map,
-    },
+    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map},
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
-use super::{entity_storage::EntityStorage, thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec}};
+use super::{
+    entity_storage::EntityStorage,
+    thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec},
+};
 
 //TODO: entities need to be stored too for querying
 pub struct TableSoA {
@@ -47,7 +49,6 @@ impl TableSoA {
     ///        so it does not get dropped.
     pub unsafe fn insert(
         &mut self,
-        entity: EntityKey,
         component_infos: &[ComponentInfo],
         soa_comp_ids: &[ComponentId],
         soa_ptrs: &[NonNull<u8>],
@@ -66,7 +67,41 @@ impl TableSoA {
 
         self.update_capacity();
         self.len += 1;
-        self.entities.push(entity);
+    }
+
+    pub unsafe fn insert_batch(
+        &mut self,
+        component_infos: &[ComponentInfo],
+        soa_comp_ids: &[ComponentId],
+        soa_base_ptrs: &[NonNull<u8>],
+        value_layout: Layout,
+        batch_len: usize,
+    ) {
+        if soa_comp_ids.len() <= 0 {
+            return;
+        }
+
+        let mut thin_columns: Vec<NonNull<ThinBlobVec>> = Vec::with_capacity(soa_comp_ids.len());
+        for cid in soa_comp_ids.iter() {
+            let cinfo = &component_infos[cid.0 as usize];
+            thin_columns.push(
+                self.columns
+                    .get_mut(&cinfo.type_id)
+                    .expect("Type T is not stored inside this table!")
+                    .into(),
+            );
+        }
+
+        for i in 0..batch_len {
+            for j in 0..soa_comp_ids.len() {
+                let column = thin_columns[j].as_mut();
+                let value_offset = value_layout.size() * i;
+                let entry_ptr = soa_base_ptrs[j].add(value_offset);
+                column.push_untyped(self.cap, self.len, entry_ptr);
+            }
+            self.update_capacity();
+            self.len += 1;
+        }
     }
 
     fn update_capacity(&mut self) {

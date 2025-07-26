@@ -5,7 +5,8 @@ use std::{cell::UnsafeCell, collections::HashMap};
 use crate::utils::{any_map::AnyMap, sorted_vec::SortedVec};
 
 use super::{
-    component::ComponentId, query::QueryState, storages::entity_storage::EntityStorage, system::Systems
+    component::ComponentId, query::QueryState, storages::entity_storage::EntityStorage,
+    system::Systems,
 };
 
 pub struct World {

@@ -7,10 +7,13 @@ use crate::{
     ecs::{
         component::{Component, StorageTypes},
         storages::{
-            table_aos::TableAoS, table_soa::TableSoA, table_storage::TableStorage, thin_blob_vec::{
+            table_aos::TableAoS,
+            table_soa::TableSoA,
+            table_storage::TableStorage,
+            thin_blob_vec::{
                 ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
                 ThinBlobIterUnsafe,
-            }
+            },
         },
     },
 };

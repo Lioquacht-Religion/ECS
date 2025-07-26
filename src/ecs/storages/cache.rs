@@ -4,6 +4,8 @@ use std::{any::TypeId, ptr::NonNull};
 
 use crate::ecs::component::ComponentId;
 
+use super::thin_blob_vec::CompElemPtr;
+
 pub(crate) struct CollectionCache<T: Cachable> {
     vec: Vec<T>,
 }
@@ -15,9 +17,7 @@ impl<T: Cachable> CollectionCache<T> {
 
     pub(crate) fn take_cached(&mut self) -> T {
         match self.vec.pop() {
-            Some(elem) => {
-                elem
-            }
+            Some(elem) => elem,
             None => T::default(),
         }
     }
@@ -42,6 +42,7 @@ pub(crate) struct EntityStorageCache {
     pub(crate) ptr_vec_cache: CollectionCache<Vec<NonNull<u8>>>,
     pub(crate) compid_vec_cache: CollectionCache<Vec<ComponentId>>,
     pub(crate) typeid_vec_cache: CollectionCache<Vec<TypeId>>,
+    pub(crate) compelemptr_vec_cache: CollectionCache<Vec<CompElemPtr>>,
 }
 
 impl EntityStorageCache {
@@ -50,6 +51,7 @@ impl EntityStorageCache {
             ptr_vec_cache: CollectionCache::new(),
             compid_vec_cache: CollectionCache::new(),
             typeid_vec_cache: CollectionCache::new(),
+            compelemptr_vec_cache: CollectionCache::new(),
         }
     }
 }

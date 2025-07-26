@@ -12,6 +12,8 @@ use crate::{
     utils::tuple_iters::TupleIterator,
 };
 
+use super::table_aos::TypeMetaData;
+
 #[derive(Debug, Hash, Eq)]
 pub(crate) struct CompElemPtr {
     pub(crate) comp_id: ComponentId,
@@ -143,8 +145,24 @@ impl ThinBlobVec {
         cap: &mut usize,
         len: &mut usize,
         comp_infos: &[ComponentInfo],
-        comp_offsets: &[usize],
+        comp_offsets: &[TypeMetaData],
         value_ptrs: &[CompElemPtr],
+    ) {
+        self.push_ptr_vec_untyped_with_offset(cap, len, comp_infos, comp_offsets, value_ptrs, 0);
+    }
+
+    /**
+     * Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
+     *
+     */
+    pub(crate) unsafe fn push_ptr_vec_untyped_with_offset(
+        &mut self,
+        cap: &mut usize,
+        len: &mut usize,
+        comp_infos: &[ComponentInfo],
+        comp_offsets: &[TypeMetaData],
+        value_ptrs: &[CompElemPtr],
+        value_ptrs_offset: usize,
     ) {
         *cap = if len == cap { self.grow(*cap) } else { *cap };
 
@@ -153,9 +171,10 @@ impl ThinBlobVec {
 
         for (i, value_ptr) in value_ptrs.iter().enumerate() {
             let comp_info = &comp_infos[value_ptr.comp_id.0 as usize];
-            let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i]);
+            let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i].ptr_offset);
             let layout_size = comp_info.layout.size();
-            std::ptr::copy(value_ptr.ptr.as_ptr(), dst_comp_ptr, layout_size);
+            let value_ptr_src = value_ptr.ptr.add(value_ptrs_offset);
+            std::ptr::copy(value_ptr_src.as_ptr(), dst_comp_ptr, layout_size);
         }
 
         *len += 1;
