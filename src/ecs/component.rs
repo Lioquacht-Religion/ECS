@@ -1,32 +1,23 @@
 // component.rs
 
-use core::panic;
 use std::{
-    alloc::Layout,
-    any::TypeId,
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-    hash::Hash,
-    mem::needs_drop,
-    ptr::drop_in_place,
-    u32,
+    alloc::Layout, any::TypeId, borrow::Cow, collections::HashMap, hash::Hash, mem::needs_drop,
+    ptr::drop_in_place, sync::atomic::AtomicUsize, u32, usize,
 };
 
-use ahash::AHashMap;
+use crate::utils::{gen_vec::Key, sorted_vec::SortedVec};
 
-use crate::utils::{
-    gen_vec::{GenVec, Key},
-    sorted_vec::SortedVec,
-    tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor},
-    tuple_types::TupleTypesExt,
-};
-
-use super::storages::{table_aos::TableAoS, table_soa::TableSoA};
-
-pub type Map<K, V> = AHashMap<K, V>;
+pub type Map<K, V> = HashMap<K, V>;
 
 pub trait Component: 'static {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
+
+    //TODO: is this useful?
+    fn get_comp_id() -> usize {
+        static COMP_ID: AtomicUsize = AtomicUsize::new(0);
+        let next_id = COMP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        next_id
+    }
 }
 
 #[derive(Debug)]
@@ -117,8 +108,8 @@ pub struct EntityKey(pub(crate) Key);
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct Entity {
-    archetype_id: ArchetypeId,
-    row_id: u32,
+    pub(crate) archetype_id: ArchetypeId,
+    pub(crate) row_id: u32,
 }
 
 impl ComponentInfo {
@@ -142,185 +133,6 @@ pub enum StorageTypes {
     TableAoS,
     TableSoA,
     SparseSet,
-}
-
-pub struct TableStorage {
-    pub(crate) table_soa: TableSoA,
-    pub(crate) table_aos: TableAoS,
-    pub(crate) len: u32,
-}
-
-impl TableStorage {
-    pub(crate) fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
-        Self {
-            table_soa: TableSoA::new(archetype_id, entity_storage),
-            table_aos: TableAoS::new(archetype_id, entity_storage),
-            len: 0,
-        }
-    }
-
-    pub(crate) unsafe fn insert<T: TupleTypesExt>(
-        &mut self,
-        entity: EntityKey,
-        component_infos: &[ComponentInfo],
-        soa_comp_ids: &[ComponentId],
-        aos_comp_ids: &[ComponentId],
-        mut value: T,
-    ) -> u32 {
-        let row_id = self.len;
-
-        let mut soa_ptrs = Vec::new();
-        let mut aos_ptrs = Vec::new();
-
-        value.self_get_value_ptrs_by_storage(&mut soa_ptrs, &mut aos_ptrs);
-
-        self.table_soa
-            .insert(entity, component_infos, &soa_comp_ids, &soa_ptrs);
-        self.table_aos
-            .insert(entity, component_infos, &aos_comp_ids, &aos_ptrs);
-        std::mem::forget(value);
-
-        self.len += 1;
-        row_id
-    }
-
-    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
-        &'a mut self,
-    ) -> TableStorageTupleIter<TC::Construct<'a>> {
-        tuple_iters::new_table_storage_iter::<TC>(self)
-    }
-}
-
-pub struct EntityStorage {
-    pub(crate) entities: GenVec<Entity>,
-    pub(crate) components: Vec<ComponentInfo>,
-    pub(crate) archetypes: Vec<Archetype>,
-    pub(crate) tables: Map<ArchetypeId, TableStorage>,
-    //mapping data
-    pub(crate) typeid_compid_map: Map<TypeId, ComponentId>,
-    pub(crate) compid_archids_map: Map<ComponentId, HashSet<ArchetypeId>>,
-    pub(crate) compids_archid_map: Map<SortedVec<ComponentId>, ArchetypeId>,
-}
-
-impl EntityStorage {
-    pub fn new() -> Self {
-        Self {
-            entities: GenVec::new(),
-            components: Vec::new(),
-            archetypes: Vec::new(),
-            tables: Map::new(),
-            typeid_compid_map: Map::new(),
-            compid_archids_map: Map::new(),
-            compids_archid_map: Map::new(),
-        }
-    }
-
-    //TODO: does still not work
-    pub fn find_fitting_archetypes(
-        &self,
-        query_comp_ids: &SortedVec<ComponentId>,
-    ) -> Vec<ArchetypeId> {
-        self.compids_archid_map
-            .iter()
-            .filter_map(|(arch_cids, arch_id)| {
-                if query_comp_ids.is_subset_of(arch_cids) {
-                    Some(*arch_id)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    pub fn find_fitting_archetypes2(&self, comp_ids: &SortedVec<ComponentId>) -> Vec<ArchetypeId> {
-        let _archid_set: HashSet<ArchetypeId> = HashSet::new();
-        comp_ids.iter().for_each(|_cids| {});
-        unimplemented!()
-    }
-
-    pub fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
-        let archetype_id = self.create_or_get_archetype::<T>();
-        let key = self.entities.insert(Entity {
-            archetype_id,
-            row_id: 0,
-        });
-
-        let mut soa_comp_ids = Vec::new();
-        let mut aos_comp_ids = Vec::new();
-        T::get_comp_ids_by_storage(self, &mut soa_comp_ids, &mut aos_comp_ids);
-
-        let row_id = unsafe {
-            self.tables
-                .get_mut(&archetype_id)
-                .expect("ERROR: table does not contain archetype id!")
-                .insert(
-                    EntityKey(key),
-                    &self.components,
-                    &soa_comp_ids,
-                    &aos_comp_ids,
-                    input,
-                )
-        };
-
-        if let Some(e) = self.entities.get_mut(&key) {
-            e.row_id = row_id;
-        }
-        EntityKey(key)
-    }
-
-    pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
-        //TODO; provide SortedVec from outside for reuse, to avoid allocations
-        let mut type_ids = Vec::new();
-        T::type_ids_rec(&mut type_ids);
-        let mut comp_ids: Vec<ComponentId> = Vec::with_capacity(T::get_tuple_length());
-        T::create_or_get_component(self, &mut comp_ids);
-        let comp_ids: SortedVec<ComponentId> = comp_ids.into();
-
-        if let Some(archetype_id) = self.compids_archid_map.get(&comp_ids) {
-            return *archetype_id;
-        }
-
-        if let Some(_dup_compid) = comp_ids.check_duplicates() {
-            //TODO: use dup_compid to get more error info
-            panic!("INVALID: Same component contained multiple times inside of entity.");
-        }
-
-        let mut soa_comp_ids: Vec<ComponentId> = Vec::with_capacity(comp_ids.get_vec().len());
-        let mut aos_comp_ids: Vec<ComponentId> = Vec::with_capacity(comp_ids.get_vec().len());
-        T::get_comp_ids_by_storage(self, &mut soa_comp_ids, &mut aos_comp_ids);
-
-        let archetype_id = self.archetypes.len().into();
-        let archetype = Archetype::new(archetype_id, soa_comp_ids.into(), aos_comp_ids.into());
-        self.archetypes.push(archetype);
-        self.tables
-            .insert(archetype_id, TableStorage::new(archetype_id, self));
-        self.compids_archid_map.insert(comp_ids, archetype_id);
-
-        archetype_id
-    }
-
-    pub fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
-        self.create_or_get_component_by_typeid::<T>(TypeId::of::<T>())
-    }
-
-    pub fn create_or_get_component_by_typeid<T: Component>(
-        &mut self,
-        type_id: TypeId,
-    ) -> ComponentId {
-        if let Some(comp_id) = self.typeid_compid_map.get(&type_id) {
-            return *comp_id;
-        }
-
-        let comp_id: u32 = self
-            .components
-            .len()
-            .try_into()
-            .expect("Component Ids have increased over their max possible u32 value!");
-        let comp_info = ComponentInfo::new::<T>(comp_id);
-        self.components.push(comp_info);
-        self.typeid_compid_map.insert(type_id, ComponentId(comp_id));
-        ComponentId(comp_id)
-    }
 }
 
 #[cfg(test)]

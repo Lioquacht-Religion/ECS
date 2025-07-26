@@ -1,17 +1,18 @@
 // table_soa.rs
 
 use std::{
-    any::{type_name, TypeId}, ptr::NonNull
+    any::{type_name, TypeId},
+    ptr::NonNull,
 };
 
 use crate::{
     ecs::component::{
-        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage, Map,
+        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map,
     },
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
-use super::thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec};
+use super::{entity_storage::EntityStorage, thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec}};
 
 //TODO: entities need to be stored too for querying
 pub struct TableSoA {

@@ -3,13 +3,12 @@
 use std::{
     alloc::Layout,
     any::{type_name, TypeId},
-    collections::HashMap,
     ptr::NonNull,
 };
 
 use crate::{
     ecs::component::{
-        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, EntityStorage, Map,
+        ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map,
     },
     utils::{
         sorted_vec::SortedVec,
@@ -18,9 +17,9 @@ use crate::{
     },
 };
 
-use super::thin_blob_vec::{
+use super::{entity_storage::EntityStorage, thin_blob_vec::{
     CompElemPtr, ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobVec,
-};
+}};
 
 #[derive(Debug, Hash, Eq)]
 pub(crate) struct TypeMetaData {
@@ -120,12 +119,14 @@ impl TableAoS {
         }
     }
 
-    fn print_internals(&self, component_infos: &[ComponentInfo]){
+    fn print_internals(&self, component_infos: &[ComponentInfo]) {
         println!("TableAoS: ");
         println!("layout: {:?}", self.vec.layout);
-        for (i, tm) in self.type_meta_data.iter().enumerate(){
-            println!("i: {}; tm: {:?}, cinfo: {:?}", 
-                i, tm, component_infos[tm.comp_id.0 as usize]);
+        for (i, tm) in self.type_meta_data.iter().enumerate() {
+            println!(
+                "i: {}; tm: {:?}, cinfo: {:?}",
+                i, tm, component_infos[tm.comp_id.0 as usize]
+            );
         }
     }
 
@@ -178,7 +179,10 @@ impl TableAoS {
         unimplemented!()
     }
 
-    pub(crate) unsafe fn get_mut_by_index<T: TupleTypesExt>(&mut self, index: usize) -> Option<&mut T> {
+    pub(crate) unsafe fn get_mut_by_index<T: TupleTypesExt>(
+        &mut self,
+        index: usize,
+    ) -> Option<&mut T> {
         let _row_ptr = self.vec.get_ptr_untyped(index, self.vec.layout);
 
         unimplemented!()
@@ -201,9 +205,10 @@ impl TableAoS {
             .type_meta_data_map
             .get(&TypeId::of::<T>())
             .expect(&format!(
-            "No component id found for type id of type: {}.", type_name::<T>()
+                "No component id found for type id of type: {}.",
+                type_name::<T>()
             ));
-            
+
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         self.vec.tuple_inner_type_iter(*offset)
     }
@@ -324,7 +329,7 @@ mod test {
 
             //println!("pos4.1: {:?}", pos4);
             //println!("pos4.1 box pointer: {}", pos4.1.0);
-            pos4.1.0 = 23234;
+            pos4.1 .0 = 23234;
             assert_eq!(pos4.1 .0, 23234);
             pos4.1 .0 -= 2344;
             assert_eq!(pos4.1 .0, 23234 - 2344);
@@ -346,7 +351,7 @@ mod test {
 
         es.add_entity((Pos2(213, 23), Pos(12)));
 
-        es.add_entity(( Pos4(12, Box::new(Pos3(1, 1, 1))), Pos(12), Pos3(12, 34, 56) ));
+        es.add_entity((Pos4(12, Box::new(Pos3(1, 1, 1))), Pos(12), Pos3(12, 34, 56)));
         es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
         es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
         es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
@@ -370,15 +375,23 @@ mod test {
         let es = &mut world.data.get_mut().entity_storage;
         init_es_insert(es);
 
-        es.tables.get_mut(&ArchetypeId(0))
-        .unwrap().table_aos.print_internals(&es.components);
+        es.tables
+            .get_mut(&ArchetypeId(0))
+            .unwrap()
+            .table_aos
+            .print_internals(&es.components);
 
-        unsafe{
-            let iter = world.data.get_mut().entity_storage
-                .tables.get_mut(&ArchetypeId(0))
-                .unwrap().tuple_iter::<(&Comp1, &Comp2)>();
+        unsafe {
+            let iter = world
+                .data
+                .get_mut()
+                .entity_storage
+                .tables
+                .get_mut(&ArchetypeId(0))
+                .unwrap()
+                .tuple_iter::<(&Comp1, &Comp2)>();
 
-            for (p, p2) in iter{
+            for (p, p2) in iter {
                 println!("p1: {:?}, p2: {:?}", p, p2);
             }
         }

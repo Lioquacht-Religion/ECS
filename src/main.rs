@@ -1,12 +1,7 @@
 // main.rs file for testing ECS package directly
 
-use std::time::Duration;
-
 use ecs::ecs::{
-    component::{Component, EntityStorage, StorageTypes},
-    query::Query,
-    system::Res,
-    world::World,
+    component::{Component, StorageTypes}, query::Query, storages::entity_storage::EntityStorage, system::Res, world::World
 };
 
 struct Pos(i32);
@@ -16,16 +11,36 @@ impl Component for Pos {
 
 struct Pos2(i32, i64);
 impl Component for Pos2 {
-    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
 struct Pos3(i32, i32, i32);
 impl Component for Pos3 {
-    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
 struct Pos4(i32, Box<Pos3>);
 impl Component for Pos4 {
+    const STORAGE: StorageTypes = StorageTypes::TableSoA;
+}
+
+struct PosAoS(i32);
+impl Component for PosAoS {
+    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+}
+
+struct Pos2AoS(i32, i64);
+impl Component for Pos2AoS {
+    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+}
+
+struct Pos3AoS(i32, i32, i32);
+impl Component for Pos3AoS {
+    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+}
+
+struct Pos4AoS(i32, Box<Pos3>);
+impl Component for Pos4AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
@@ -40,12 +55,12 @@ impl Component for Comp2 {
 }
 
 struct Comp1AoS(usize, usize);
-impl Component for Comp1AoS{
+impl Component for Comp1AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
 struct Comp2AoS(usize, usize);
-impl Component for Comp2AoS{
+impl Component for Comp2AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
@@ -53,18 +68,15 @@ fn test_system1(
     prm: Res<i32>,
     prm2: Res<usize>,
     mut query: Query<(&Comp1, &mut Comp2)>,
-    mut query_aos: Query<(&Comp1AoS, &mut Comp2AoS)>,
     mut query2: Query<(&Pos, &mut Pos4, &Pos3)>,
 ) {
     println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
-    let mut count = 0;
     for (comp1, comp2) in query.iter() {
         println!("comp1: {}", comp1.0);
         println!("comp2: {}", comp2.0);
         comp2.0 = 2;
         println!("comp2: {}", comp2.0);
-        count += 1;
     }
 
     for (_pos, pos4, _pos3) in query2.iter() {
@@ -102,31 +114,42 @@ fn test_system2(
 
     println!("soa time: {} nanos", start1.elapsed().as_nanos());
     println!("aos time: {} nanos", start2.elapsed().as_nanos());
-
-
 }
 
-
-
 fn init_es_insert(es: &mut EntityStorage) {
-
-    for i in 0..100000{
+    let start1 = std::time::Instant::now();
+    for i in 0..100000 {
         es.add_entity((Comp1(i, 34), Comp2(i, 34)));
+        es.add_entity((
+            Pos(33434),
+            Comp1(i, 34),
+            Pos4(12, Box::new(Pos3(1, 1, 1))),
+            Comp2(i, 34),
+            Pos2(232, 2423),
+        ));
         es.add_entity((Comp1AoS(i, 34), Comp2AoS(i, 34)));
+        es.add_entity((
+            PosAoS(34434),
+            Comp1AoS(i, 34),
+            Pos4AoS(12, Box::new(Pos3(1, 1, 1))),
+            Comp2AoS(i, 34),
+            Pos2(2434, 23),
+        ));
     }
+    println!("insert time: {} nanos", start1.elapsed().as_nanos());
 
-/*
-    es.add_entity((Comp1(12, 34), Comp2(12, 34)));
-    es.add_entity((Comp1(12, 34), Comp2(12, 34)));
-    es.add_entity((Comp2(12, 34), Comp1(12, 34)));
+    /*
+        es.add_entity((Comp1(12, 34), Comp2(12, 34)));
+        es.add_entity((Comp1(12, 34), Comp2(12, 34)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34)));
 
-    es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-    es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
-    es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-    es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
-    es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
-    es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
-*/
+        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos4(12, Box::new(Pos3(1, 1, 1)))));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
+        es.add_entity((Comp2(12, 34), Comp1(12, 34), Pos(76)));
+    */
 
     es.add_entity((Pos(12), Pos3(12, 34, 56)));
     es.add_entity((Pos3(12, 12, 34), Pos(56)));

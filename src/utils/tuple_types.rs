@@ -8,7 +8,7 @@ use std::{alloc::Layout, any::TypeId, ptr::NonNull};
 
 use crate::{
     all_tuples,
-    ecs::component::{Component, ComponentId, EntityStorage, StorageTypes},
+    ecs::{component::{Component, ComponentId, StorageTypes}, storages::entity_storage::EntityStorage},
 };
 
 pub trait TupleTypesExt: 'static {

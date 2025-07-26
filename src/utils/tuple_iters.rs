@@ -5,14 +5,12 @@ use std::any::TypeId;
 use crate::{
     all_tuples,
     ecs::{
-        component::{Component, StorageTypes, TableStorage},
+        component::{Component, StorageTypes},
         storages::{
-            table_aos::TableAoS,
-            table_soa::TableSoA,
-            thin_blob_vec::{
+            table_aos::TableAoS, table_soa::TableSoA, table_storage::TableStorage, thin_blob_vec::{
                 ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
                 ThinBlobIterUnsafe,
-            },
+            }
         },
     },
 };

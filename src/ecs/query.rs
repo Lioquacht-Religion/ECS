@@ -1,11 +1,6 @@
 // query.rs
 
-use std::{
-    any::{type_name, TypeId},
-    cell::UnsafeCell,
-    collections::HashSet,
-    marker::PhantomData,
-};
+use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
 
 use crate::{
     all_tuples,
@@ -16,9 +11,7 @@ use crate::{
 };
 
 use super::{
-    component::{ArchetypeId, Component, ComponentId, TableStorage},
-    system::SystemParam,
-    world::WorldData,
+    component::{ArchetypeId, Component, ComponentId}, storages::table_storage::TableStorage, system::SystemParam, world::WorldData
 };
 
 type QueryDataType = TableStorage;
@@ -57,14 +50,10 @@ impl<'w, 's, P: QueryParam> Query<'w, 's, P> {
         QueryIter::new(self)
     }
 
-    pub fn iter2(&mut self) -> QueryIter<'_, '_, P> {
-        QueryIter::new(self)
-    }
-
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
-) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
+    ) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
         self.world
             .get()
             .as_mut()
@@ -103,7 +92,6 @@ impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
     type Item = <<T as TupleIterConstructor<QueryDataType>>::Construct<'w> as TupleIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            //TODO: find maybe some way to remove this check?
             if let Some(ref mut cur_query) = &mut self.cur_arch_query {
                 match cur_query.next() {
                     None => {
@@ -118,8 +106,7 @@ impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
                     }
                     Some(elem) => return Some(elem),
                 }
-            }
-            else{
+            } else {
                 return None;
             }
         }
@@ -129,16 +116,17 @@ impl<'w, 's, T: QueryParam> Iterator for QueryIter<'w, 's, T> {
 impl<'w, 's, P: QueryParam> SystemParam for Query<'w, 's, P> {
     type Item<'new> = Query<'new, 's, P>;
     unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
-        let mut comp_ids = Vec::new();
+        let world_data_mut : &mut WorldData = world_data.get().as_mut().unwrap();
+        let mut comp_ids = world_data_mut.entity_storage
+            .cache.compid_vec_cache.take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
-        let world_data_ref = world_data.get().as_ref().unwrap();
-        if let Some(query_data) = world_data_ref.query_data.get(&comp_ids) {
+        if let Some(query_data) = world_data_mut.query_data.get(&comp_ids) {
+            world_data_mut.entity_storage
+            .cache.compid_vec_cache.insert(comp_ids.into());
             return Self::Item::<'r>::new(world_data, query_data);
         }
-
-        let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
         let world_data_ref = world_data.get().as_mut().unwrap();
         let arch_ids = world_data_ref
