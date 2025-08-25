@@ -121,8 +121,18 @@ fn test_system2(
         comp2.1 /= 392049;
     }
 
-    println!("soa time: {} nanos", start1.elapsed().as_nanos());
-    println!("aos time: {} nanos", start2.elapsed().as_nanos());
+    let el1 = start1.elapsed();
+    let el2 = start2.elapsed();
+    println!(
+        "soa time: {} nanos; {} micros",
+        el1.as_nanos(),
+        el1.as_micros()
+    );
+    println!(
+        "aos time: {} nanos; {}, micros",
+        el2.as_nanos(),
+        el2.as_micros()
+    );
 }
 
 fn init_es_insert(es: &mut EntityStorage) {
@@ -167,7 +177,10 @@ fn init_es_insert(es: &mut EntityStorage) {
     }
     es.add_entities_batch(ents_soa);
     es.add_entities_batch(ents_soa2);
-    println!("batch insert time soa: {} nanos", start1.elapsed().as_nanos());
+    println!(
+        "batch insert time soa: {} nanos",
+        start1.elapsed().as_nanos()
+    );
 
     let start2 = std::time::Instant::now();
     let mut ents_aos = Vec::with_capacity(100000);
@@ -184,24 +197,34 @@ fn init_es_insert(es: &mut EntityStorage) {
     }
 
     let start3 = std::time::Instant::now();
-    for c in ents_aos.iter_mut(){
-        c.0.0 /= 392049;
-        c.0.1 /= 392049;
-        c.1.0 /= 392049;
-        c.1.1 /= 392049;
+    for c in ents_aos.iter_mut() {
+        c.0 .0 /= 392049;
+        c.0 .1 /= 392049;
+        c.1 .0 /= 392049;
+        c.1 .1 /= 392049;
     }
-    for c in ents_aos2.iter_mut(){
-        c.1.0 /= 392049;
-        c.1.1 /= 392049;
-        c.4.0 /= 392049;
-        c.4.1 /= 392049;
+    for c in ents_aos2.iter_mut() {
+        c.1 .0 /= 392049;
+        c.1 .1 /= 392049;
+        c.4 .0 /= 392049;
+        c.4 .1 /= 392049;
     }
-    println!("normal loop time aos: {} nanos", start3.elapsed().as_nanos());
+    println!(
+        "normal loop time aos: {} nanos",
+        start3.elapsed().as_nanos()
+    );
 
     es.add_entities_batch(ents_aos);
     es.add_entities_batch(ents_aos2);
-    println!("batch insert time aos: {} nanos", start2.elapsed().as_nanos());
-    println!("batch insert time: {} nanos; {} micros", start1.elapsed().as_nanos(), start1.elapsed().as_micros());
+    println!(
+        "batch insert time aos: {} nanos",
+        start2.elapsed().as_nanos()
+    );
+    println!(
+        "batch insert time: {} nanos; {} micros",
+        start1.elapsed().as_nanos(),
+        start1.elapsed().as_micros()
+    );
 
     es.add_entity((Pos(12), Pos3(12, 34, 56)));
     es.add_entity((Pos3(12, 12, 34), Pos(56)));

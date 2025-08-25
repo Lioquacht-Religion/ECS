@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 #[derive(Debug)]
 pub struct GenVec<T> {
     vec: Vec<Entry<T>>,
@@ -23,6 +25,15 @@ pub struct Key {
     generation: u32,
 }
 
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+pub struct TypedKey<T> {
+    key: Key,
+    _marker: PhantomData<T>,
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+pub struct ReservedKey(Key);
+
 impl Key {
     pub fn new(id: u32, generation: u32) -> Self {
         Key { id, generation }
@@ -36,6 +47,18 @@ impl Key {
     }
 }
 
+impl<T> TypedKey<T>{
+    pub fn get_key(&self) -> Key {
+        self.key
+    }
+}
+
+impl ReservedKey{
+    fn to_key(self) -> Key{
+        self.0
+    }
+}
+
 impl<T> GenVec<T> {
     pub fn new() -> Self {
         Self {
@@ -43,6 +66,10 @@ impl<T> GenVec<T> {
             next_free_id: None,
             len: 0,
         }
+    }
+
+    pub fn insert_typed(&mut self, value: T) -> TypedKey<T> {
+        TypedKey { key: self.insert(value), _marker: PhantomData::default()}
     }
 
     pub fn insert(&mut self, value: T) -> Key {
@@ -145,6 +172,46 @@ impl<T> GenVec<T> {
                 }
             }
         }
+    }
+
+    pub fn reserve_key(&mut self) -> ReservedKey{
+        self.len += 1;
+        if let Some(cur_next_free_id) = self.next_free_id {
+            if let Entry::Free {
+                next_free_id,
+                generation,
+            } = self.vec[cur_next_free_id as usize]
+            {
+                let next_gen = generation + 1;
+                self.vec[cur_next_free_id as usize] = Entry::Free{
+                    next_free_id: None,
+                    generation: next_gen,
+                };
+                match next_free_id {
+                    Some(next_free_id) => self.next_free_id = Some(next_free_id),
+                    None => self.next_free_id = None,
+                }
+                return ReservedKey(Key {
+                    id: cur_next_free_id,
+                    generation: next_gen,
+                });
+            }
+            unreachable!()
+        } else {
+            let id = self.vec.len() as u32;
+            self.vec.push(Entry::Free {
+                next_free_id: None,
+                generation: 0,
+            });
+            ReservedKey(Key { id, generation: 0 })
+        }
+    }
+
+    pub fn insert_with_reserved_key(&mut self, key: ReservedKey, value: T) -> Key{
+        let key = key.to_key(); 
+        self.vec[key.get_id() as usize] = 
+            Entry::Occupied { value, generation: key.generation};
+        key
     }
 
     pub fn len(&self) -> usize {

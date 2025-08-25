@@ -1,6 +1,6 @@
 // entity.rs
 
-use std::sync::atomic::{self, AtomicU32};
+use std::sync::atomic::AtomicU32;
 
 use super::component::ArchetypeId;
 
@@ -41,27 +41,6 @@ impl Entities{
                 entity: Some(entity), generation: 0
             });
             EntityKey::new(next_id, 0)
-        }
-    }
-
-    pub(crate) fn remove(&mut self){
-        todo!()
-    }
-
-    pub(crate) fn reserve(&self) -> EntityKey{
-        //TODO: use require release here? to not increase the empty_barrier constantly
-        let empty_barrier : usize = self.empty_indices_barrier.fetch_add(1, atomic::Ordering::Relaxed) as usize;
-        if self.empty_indices.len() > empty_barrier { 
-            let empty_barrier = self.empty_indices.len() - empty_barrier;
-            let id = self.empty_indices[empty_barrier];
-            let gen = *&self.vec[id as usize].generation;
-            EntityKey::new(id, gen)
-        }
-        else{
-            let free_barrier : usize = self.free_indices_barrier.fetch_add(1, atomic::Ordering::Relaxed) as usize;
-            let id = free_barrier 
-                    .try_into().expect("Above u32 max!");
-            EntityKey::new(id, 0)
         }
     }
 }

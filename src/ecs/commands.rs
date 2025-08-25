@@ -1,0 +1,101 @@
+// commands.rs
+
+use std::cell::UnsafeCell;
+
+use crate::utils::tuple_types::TupleTypesExt;
+
+use super::{entity::EntityKey, system::SystemParam, world::WorldData};
+
+type CommandQueue = Vec<Box<dyn Command>>;
+type CommandQueueCell = Box<UnsafeCell<CommandQueue>>;
+type CommandQueueVec = Vec<CommandQueueCell>;
+
+pub(crate) struct CommandQueuesStorage {
+    pub(crate) command_queues_unused: CommandQueueVec,
+    pub(crate) command_queues_inuse: CommandQueueVec,
+}
+
+impl CommandQueuesStorage {
+    pub(crate) fn new() -> Self {
+        Self {
+            command_queues_unused: Vec::new(),
+            command_queues_inuse: Vec::new(),
+        }
+    }
+
+    pub(crate) fn get_unused(&mut self) -> CommandQueueCell {
+        if let Some(mut queue) = self.command_queues_unused.pop() {
+            queue.get_mut().clear();
+            queue
+        } else {
+            Box::new(UnsafeCell::new(Vec::new()))
+        }
+    }
+
+    pub(crate) fn put_inuse(&mut self) -> *mut CommandQueue {
+        let unused_queue = self.get_unused();
+        let command_queue_ptr = unused_queue.get();
+        self.command_queues_inuse.push(unused_queue);
+        command_queue_ptr
+    }
+}
+
+pub trait Command<Out = ()> {
+    fn exec(self, world_data: &mut WorldData) -> Out;
+}
+
+pub struct Commands<'s> {
+    //TODO: entities reference with world lifetime maybe?
+    command_queue: &'s mut Vec<Box<dyn Command>>,
+}
+
+impl<'s> SystemParam for Commands<'s> {
+    type Item<'new> = Self;
+    unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
+        let world_data = &mut *world_data.get();
+        let command_queue_ptr = world_data.commands_queues.put_inuse();
+
+        //SAFETY: Because vec is stored behind box pointer on the heap,
+        // it's address schould be stable when moved.
+        Commands::new(&mut *command_queue_ptr)
+    }
+}
+
+pub(crate) struct SpawnCommand<T: TupleTypesExt> {
+    //reserved_entity_code: EntityKey,
+    entity_value: T,
+}
+
+impl<T: TupleTypesExt> Command for SpawnCommand<T> {
+    fn exec(self, world_data: &mut WorldData) -> () {
+        //TODO: how to impl reserving entity key,
+        // so its accessible to system code right away
+        let _entity_key = world_data.entity_storage.add_entity(self.entity_value);
+    }
+}
+
+pub(crate) struct DespawnCommand {
+    entity_key: EntityKey,
+}
+
+impl Command for DespawnCommand {
+    fn exec(self, world_data: &mut WorldData) -> () {
+        world_data.entity_storage.remove_entity(self.entity_key);
+    }
+}
+
+impl<'s> Commands<'s> {
+    pub(crate) fn new(command_queue: &'s mut Vec<Box<dyn Command>>) -> Self {
+        Self { command_queue }
+    }
+
+    pub fn spawn<T: TupleTypesExt>(&mut self, entity_value: T) {
+        self.command_queue
+            .push(Box::new(SpawnCommand { entity_value }));
+    }
+
+    pub fn despawn(&mut self, entity_key: EntityKey) {
+        self.command_queue
+            .push(Box::new(DespawnCommand { entity_key }));
+    }
+}

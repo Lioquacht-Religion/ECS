@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map},
+    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},
@@ -288,8 +288,9 @@ impl Drop for TableAoS {
 #[cfg(test)]
 mod test {
 
-    use crate::ecs::component::{ArchetypeId, EntityStorage, StorageTypes};
+    use crate::ecs::component::{ArchetypeId, StorageTypes};
     use crate::ecs::query::Query;
+    use crate::ecs::storages::entity_storage::EntityStorage;
     use crate::ecs::{component::Component, system::Res, world::World};
 
     #[derive(Debug)]

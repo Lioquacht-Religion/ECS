@@ -3,9 +3,9 @@
 use std::any::TypeId;
 
 use crate::{
-    ecs::component::{
-        Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Entity, EntityKey, Map,
-    },
+    ecs::{component::{
+        Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map,
+    }, entity::{Entity, EntityKey}},
     utils::{gen_vec::GenVec, sorted_vec::SortedVec, tuple_types::TupleTypesExt},
 };
 
@@ -37,7 +37,6 @@ impl EntityStorage {
         }
     }
 
-    //TODO: does still not work
     pub fn find_fitting_archetypes(
         &self,
         query_comp_ids: &SortedVec<ComponentId>,
@@ -126,6 +125,10 @@ impl EntityStorage {
         self.cache.compid_vec_cache.insert(aos_comp_ids);
 
         entity_keys
+    }
+
+    pub fn remove_entity(&mut self, _entity_key: EntityKey) {
+        todo!()
     }
 
     pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {

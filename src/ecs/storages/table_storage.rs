@@ -3,7 +3,7 @@
 use std::alloc::Layout;
 
 use crate::{
-    ecs::component::{ArchetypeId, ComponentId, ComponentInfo, EntityKey},
+    ecs::{component::{ArchetypeId, ComponentId, ComponentInfo}, entity::EntityKey},
     utils::{
         tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor},
         tuple_types::TupleTypesExt,

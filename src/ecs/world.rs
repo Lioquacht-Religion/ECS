@@ -5,8 +5,8 @@ use std::{cell::UnsafeCell, collections::HashMap};
 use crate::utils::{any_map::AnyMap, sorted_vec::SortedVec};
 
 use super::{
-    component::ComponentId, query::QueryState, storages::entity_storage::EntityStorage,
-    system::Systems,
+    commands::CommandQueuesStorage, component::ComponentId, query::QueryState,
+    storages::entity_storage::EntityStorage, system::Systems,
 };
 
 pub struct World {
@@ -18,6 +18,7 @@ pub struct WorldData {
     pub(crate) resources: AnyMap,
     pub entity_storage: EntityStorage,
     pub(crate) query_data: HashMap<SortedVec<ComponentId>, QueryState>,
+    pub(crate) commands_queues: CommandQueuesStorage,
 }
 
 impl World {
@@ -39,6 +40,7 @@ impl WorldData {
             resources: AnyMap::new(),
             entity_storage: EntityStorage::new(),
             query_data: HashMap::new(),
+            commands_queues: CommandQueuesStorage::new(),
         }
     }
 

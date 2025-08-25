@@ -5,19 +5,12 @@ use std::{
     ptr::drop_in_place, sync::atomic::AtomicUsize, u32, usize,
 };
 
-use crate::utils::{gen_vec::Key, sorted_vec::SortedVec};
+use crate::utils::sorted_vec::SortedVec;
 
 pub type Map<K, V> = HashMap<K, V>;
 
 pub trait Component: 'static {
-    const STORAGE: StorageTypes = StorageTypes::TableAoS;
-
-    //TODO: is this useful?
-    fn get_comp_id() -> usize {
-        static COMP_ID: AtomicUsize = AtomicUsize::new(0);
-        let next_id = COMP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        next_id
-    }
+    const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
 #[derive(Debug)]
@@ -97,19 +90,6 @@ impl From<ArchetypeId> for usize {
             .try_into()
             .expect("Archetype Ids have increased over their max possible u32 value!")
     }
-}
-
-//TODO: what about generational index?
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct EntityId(u32);
-
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct EntityKey(pub(crate) Key);
-
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct Entity {
-    pub(crate) archetype_id: ArchetypeId,
-    pub(crate) row_id: u32,
 }
 
 impl ComponentInfo {

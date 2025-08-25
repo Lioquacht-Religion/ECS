@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, EntityKey, Map},
+    ecs::{component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}, entity::EntityKey},
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
