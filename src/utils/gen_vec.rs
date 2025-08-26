@@ -47,14 +47,14 @@ impl Key {
     }
 }
 
-impl<T> TypedKey<T>{
+impl<T> TypedKey<T> {
     pub fn get_key(&self) -> Key {
         self.key
     }
 }
 
-impl ReservedKey{
-    fn to_key(self) -> Key{
+impl ReservedKey {
+    fn to_key(self) -> Key {
         self.0
     }
 }
@@ -69,7 +69,10 @@ impl<T> GenVec<T> {
     }
 
     pub fn insert_typed(&mut self, value: T) -> TypedKey<T> {
-        TypedKey { key: self.insert(value), _marker: PhantomData::default()}
+        TypedKey {
+            key: self.insert(value),
+            _marker: PhantomData::default(),
+        }
     }
 
     pub fn insert(&mut self, value: T) -> Key {
@@ -174,7 +177,7 @@ impl<T> GenVec<T> {
         }
     }
 
-    pub fn reserve_key(&mut self) -> ReservedKey{
+    pub fn reserve_key(&mut self) -> ReservedKey {
         self.len += 1;
         if let Some(cur_next_free_id) = self.next_free_id {
             if let Entry::Free {
@@ -183,7 +186,7 @@ impl<T> GenVec<T> {
             } = self.vec[cur_next_free_id as usize]
             {
                 let next_gen = generation + 1;
-                self.vec[cur_next_free_id as usize] = Entry::Free{
+                self.vec[cur_next_free_id as usize] = Entry::Free {
                     next_free_id: None,
                     generation: next_gen,
                 };
@@ -207,10 +210,12 @@ impl<T> GenVec<T> {
         }
     }
 
-    pub fn insert_with_reserved_key(&mut self, key: ReservedKey, value: T) -> Key{
-        let key = key.to_key(); 
-        self.vec[key.get_id() as usize] = 
-            Entry::Occupied { value, generation: key.generation};
+    pub fn insert_with_reserved_key(&mut self, key: ReservedKey, value: T) -> Key {
+        let key = key.to_key();
+        self.vec[key.get_id() as usize] = Entry::Occupied {
+            value,
+            generation: key.generation,
+        };
         key
     }
 

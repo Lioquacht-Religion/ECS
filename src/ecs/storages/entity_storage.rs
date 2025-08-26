@@ -3,16 +3,19 @@
 use std::any::TypeId;
 
 use crate::{
-    ecs::{component::{
-        Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map,
-    }, entity::{Entity, EntityKey}},
-    utils::{gen_vec::GenVec, sorted_vec::SortedVec, tuple_types::TupleTypesExt},
+    ecs::{
+        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
+        entity::{Entities, Entity, EntityKey},
+    },
+    utils::{sorted_vec::SortedVec, tuple_types::TupleTypesExt},
 };
 
 use super::{cache::EntityStorageCache, table_storage::TableStorage};
 
 pub struct EntityStorage {
-    pub(crate) entities: GenVec<Entity>,
+    //TODO: probably replace with specific Datastructure
+    //pub(crate) entities: GenVec<Entity>,
+    pub(crate) entities: Entities,
     pub(crate) components: Vec<ComponentInfo>,
     pub(crate) archetypes: Vec<Archetype>,
     pub(crate) tables: Map<ArchetypeId, TableStorage>,
@@ -26,7 +29,7 @@ pub struct EntityStorage {
 impl EntityStorage {
     pub fn new() -> Self {
         Self {
-            entities: GenVec::new(),
+            entities: Entities::new(),
             components: Vec::new(),
             archetypes: Vec::new(),
             tables: Map::new(),
@@ -60,6 +63,20 @@ impl EntityStorage {
             row_id: 0,
         });
 
+        self.add_entity_inner(key, input, archetype_id)
+    }
+
+    pub fn add_entity_with_reserved_key<T: TupleTypesExt>(&mut self, key: EntityKey, input: T) -> EntityKey {
+        let archetype_id = self.create_or_get_archetype::<T>();
+        self.entities.insert_with_reserved_key(key, Entity {
+            archetype_id,
+            row_id: 0,
+        });
+
+        self.add_entity_inner(key, input, archetype_id)
+    }
+
+    pub fn add_entity_inner<T: TupleTypesExt>(&mut self, key: EntityKey, input: T, archetype_id: ArchetypeId) -> EntityKey {
         let mut soa_comp_ids = self.cache.compid_vec_cache.take_cached();
         let mut aos_comp_ids = self.cache.compid_vec_cache.take_cached();
 
@@ -70,7 +87,7 @@ impl EntityStorage {
                 .get_mut(&archetype_id)
                 .expect("ERROR: table does not contain archetype id!")
                 .insert(
-                    EntityKey(key),
+                    EntityKey::new(key.get_id(), key.get_generation()),
                     &self.components,
                     &soa_comp_ids,
                     &aos_comp_ids,
@@ -82,11 +99,13 @@ impl EntityStorage {
         self.cache.compid_vec_cache.insert(soa_comp_ids);
         self.cache.compid_vec_cache.insert(aos_comp_ids);
 
-        if let Some(e) = self.entities.get_mut(&key) {
+        if let Some(e) = self.entities.get_mut(key) {
             e.row_id = row_id;
         }
-        EntityKey(key)
+        EntityKey::new(key.get_id(), key.get_generation())
     }
+
+
 
     pub fn add_entities_batch<T: TupleTypesExt>(&mut self, input: Vec<T>) -> Vec<EntityKey> {
         let archetype_id = self.create_or_get_archetype::<T>();

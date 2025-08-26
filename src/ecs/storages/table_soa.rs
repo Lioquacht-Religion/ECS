@@ -7,7 +7,9 @@ use std::{
 };
 
 use crate::{
-    ecs::{component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}, entity::EntityKey},
+    ecs::{
+        component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}
+    },
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
 
@@ -19,7 +21,6 @@ use super::{
 //TODO: entities need to be stored too for querying
 pub struct TableSoA {
     pub(crate) archetype_id: ArchetypeId,
-    entities: Vec<EntityKey>,
     pub(crate) columns: Map<TypeId, ThinBlobVec>,
     pub(crate) len: usize,
     pub(crate) cap: usize,
@@ -37,7 +38,6 @@ impl TableSoA {
 
         Self {
             archetype_id,
-            entities: Vec::new(),
             columns,
             len: 0,
             cap: 0,
@@ -154,8 +154,9 @@ impl Drop for TableSoA {
 
 #[cfg(test)]
 mod tests {
-    use crate::ecs::component::{EntityStorage, StorageTypes};
+    use crate::ecs::component::{StorageTypes};
     use crate::ecs::query::Query;
+    use crate::ecs::storages::entity_storage::EntityStorage;
     use crate::ecs::{component::Component, system::Res, world::World};
 
     struct Pos(i32);

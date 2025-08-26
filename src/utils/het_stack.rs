@@ -1,5 +1,5 @@
 use std::{
-    alloc::{GlobalAlloc, Layout},
+    alloc::Layout,
     any::{Any, TypeId},
     marker::PhantomData,
     ptr::NonNull,

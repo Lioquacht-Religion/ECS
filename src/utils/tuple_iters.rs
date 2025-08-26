@@ -5,8 +5,7 @@ use std::any::TypeId;
 use crate::{
     all_tuples,
     ecs::{
-        component::{Component, StorageTypes},
-        storages::{
+        component::{Component, StorageTypes}, entity::EntityKey, storages::{
             table_aos::TableAoS,
             table_soa::TableSoA,
             table_storage::TableStorage,
@@ -14,9 +13,16 @@ use crate::{
                 ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
                 ThinBlobIterUnsafe,
             },
-        },
+        }
     },
 };
+
+pub trait TupleIterator {
+    type Item;
+    ///SAFETY: This function does not check if iterator is still in the valid range.
+    /// Bounds check needs to be tracked from outside the function.
+    unsafe fn next(&mut self, index: usize) -> Self::Item;
+}
 
 pub trait TupleConstructorSource: 'static {
     type IterType<'c, T: Component>: TupleIterator
@@ -25,13 +31,22 @@ pub trait TupleConstructorSource: 'static {
     type IterMutType<'c, T: Component>: TupleIterator
     where
         Self: 'c;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c>;
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T>;
     unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T>;
+}
+
+pub trait TupleIterConstructor<S: TupleConstructorSource> {
+    type Construct<'c>: TupleIterator;
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s>;
 }
 
 impl TupleConstructorSource for TableSoA {
     type IterType<'c, T: Component> = ThinBlobIterUnsafe<'c, T>;
     type IterMutType<'c, T: Component> = ThinBlobIterMutUnsafe<'c, T>;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        todo!()
+    }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
         self.columns
             .get(&TypeId::of::<T>())
@@ -49,6 +64,9 @@ impl TupleConstructorSource for TableSoA {
 impl TupleConstructorSource for TableAoS {
     type IterType<'c, T: Component> = ThinBlobInnerTypeIterUnsafe<'c, T>;
     type IterMutType<'c, T: Component> = ThinBlobInnerTypeIterMutUnsafe<'c, T>;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        todo!()
+    }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
         let index = self
             .type_meta_data_map
@@ -100,6 +118,9 @@ impl<'c, T: Component> TupleIterator for TableStorageIterMutUnsafe<'c, T> {
 impl TupleConstructorSource for TableStorage {
     type IterType<'c, T: Component> = TableStorageIterUnsafe<'c, T>;
     type IterMutType<'c, T: Component> = TableStorageIterMutUnsafe<'c, T>;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        EntityKeyIterUnsafe::new(&self.entities)
+    }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
         match T::STORAGE {
             StorageTypes::TableSoA => {
@@ -124,11 +145,6 @@ impl TupleConstructorSource for TableStorage {
     }
 }
 
-pub trait TupleIterConstructor<S: TupleConstructorSource> {
-    type Construct<'c>: TupleIterator;
-    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s>;
-}
-
 impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &T {
     type Construct<'c> = S::IterType<'c, T>;
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
@@ -140,6 +156,37 @@ impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &mut T
     type Construct<'c> = S::IterMutType<'c, T>;
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
         (&mut *source).get_iter_mut()
+    }
+}
+
+//TODO: move somewhere else
+impl Component for EntityKey{
+}
+
+pub struct EntityKeyIterUnsafe<'vec> {
+    vec: &'vec [EntityKey],
+}
+
+impl<'vec> EntityKeyIterUnsafe<'vec> {
+    pub fn new(entity_keys: &'vec [EntityKey]) -> Self {
+        EntityKeyIterUnsafe{
+            vec: entity_keys,
+        }
+    }
+}
+
+impl<'vec> TupleIterator for EntityKeyIterUnsafe<'vec> {
+    type Item = EntityKey;
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
+        self.vec[index]
+    }
+}
+
+impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey{
+    type Construct<'c> = EntityKeyIterUnsafe<'c>;
+
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+        (&mut *source).get_entity_key_iter()
     }
 }
 
@@ -160,13 +207,6 @@ all_tuples!(
     impl_tuple_iter_constructor,
     T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
 );
-
-pub trait TupleIterator {
-    type Item;
-    //SAFETY: This function does not check if iterator is still in the valid range.
-    // Bounds check needs to be tracked from outside the function.
-    unsafe fn next(&mut self, index: usize) -> Self::Item;
-}
 
 pub struct TableSoaTupleIter<T: TupleIterator> {
     tuple_iters: T,

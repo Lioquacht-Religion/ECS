@@ -1,11 +1,7 @@
 // main.rs file for testing ECS package directly
 
 use ecs::ecs::{
-    component::{Component, StorageTypes},
-    query::Query,
-    storages::entity_storage::EntityStorage,
-    system::Res,
-    world::World,
+    commands::Commands, component::{Component, StorageTypes}, entity::EntityKey, query::Query, storages::entity_storage::EntityStorage, system::Res, world::World
 };
 
 struct Pos(i32);
@@ -97,8 +93,9 @@ fn test_system1(
 }
 
 fn test_system2(
+    mut commands: Commands,
     mut query: Query<(&mut Comp1, &mut Comp2)>,
-    mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>,
+    mut query_aos: Query<(EntityKey, &mut Comp1AoS, &mut Comp2AoS)>,
 ) {
     let start1 = std::time::Instant::now();
     for (comp1, comp2) in query.iter() {
@@ -109,16 +106,21 @@ fn test_system2(
     }
 
     let start2 = std::time::Instant::now();
-    for (comp1, comp2) in query_aos.iter() {
+    for (entity, comp1, comp2) in query_aos.iter() {
         /*comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
         comp2.1 /= 437;*/
 
+        let _key = commands.spawn(Comp1(comp1.0, comp1.1));
+        let _key = commands.spawn(Comp2(comp2.0, comp2.1));
+
         comp1.0 /= 392049;
         comp1.1 /= 392049;
         comp2.0 /= 392049;
         comp2.1 /= 392049;
+
+        commands.despawn(entity);
     }
 
     let el1 = start1.elapsed();

@@ -3,11 +3,10 @@
 use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
 
 use crate::{
-    all_tuples,
-    utils::{
+    all_tuples, ecs::entity::EntityKey, utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{TableStorageTupleIter, TupleIterConstructor, TupleIterator},
-    },
+        tuple_iters::{TableStorageTupleIter, TupleConstructorSource, TupleIterConstructor, TupleIterator},
+    }
 };
 
 use super::{
@@ -207,6 +206,39 @@ impl<T: Component> QueryParam for &mut T {
 
 //TODO:
 //impl<'p, P: QueryParam> QueryParam for Option<P> {}
+//
+//
+
+/*
+impl TupleIterator for EntityKey{
+    type Item = EntityKey;
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
+        todo!()
+    }
+}
+
+impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey{
+    type Construct<'c> = EntityKey;
+
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+       todo!() 
+    }
+}
+*/
+
+impl QueryParam for EntityKey{
+    type QueryItem<'new> = EntityKey;
+
+    fn type_ids_rec(vec: &mut Vec<TypeId>) {
+        //TODO: do nothing here?
+    }
+    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
+        //TODO: do nothing here?
+    }
+    fn ref_kinds(vec: &mut Vec<RefKind>) {
+        //TODO: do nothing here?
+    }
+}
 
 macro_rules! impl_query_param_tuples {
     ($($t:ident), *) => {

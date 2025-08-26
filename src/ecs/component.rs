@@ -2,7 +2,7 @@
 
 use std::{
     alloc::Layout, any::TypeId, borrow::Cow, collections::HashMap, hash::Hash, mem::needs_drop,
-    ptr::drop_in_place, sync::atomic::AtomicUsize, u32, usize,
+    ptr::drop_in_place, u32, usize,
 };
 
 use crate::utils::sorted_vec::SortedVec;

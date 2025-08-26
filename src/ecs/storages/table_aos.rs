@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    ecs::component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
+    ecs::{component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}, entity::EntityKey},
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},
@@ -174,7 +174,7 @@ impl TableAoS {
         cache.compelemptr_vec_cache.insert(comp_elem_ptrs.into());
     }
 
-    pub unsafe fn insert_batch(
+    pub(crate) unsafe fn insert_batch(
         &mut self,
         component_infos: &[ComponentInfo],
         aos_comp_ids: &[ComponentId],

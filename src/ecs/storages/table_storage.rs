@@ -3,7 +3,10 @@
 use std::alloc::Layout;
 
 use crate::{
-    ecs::{component::{ArchetypeId, ComponentId, ComponentInfo}, entity::EntityKey},
+    ecs::{
+        component::{ArchetypeId, ComponentId, ComponentInfo},
+        entity::EntityKey,
+    },
     utils::{
         tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor},
         tuple_types::TupleTypesExt,
@@ -103,7 +106,11 @@ impl TableStorage {
 
         let row_id_start = self.len as u32;
         let row_id_end = row_id_start + values.len() as u32;
-        self.len += 1;
+
+        let value_len : u32 = values.len()
+            .try_into()
+            .expect("Max u32 value reached!");
+        self.len += value_len;
 
         while let Some(val) = values.pop() {
             std::mem::forget(val);
