@@ -66,17 +66,29 @@ impl EntityStorage {
         self.add_entity_inner(key, input, archetype_id)
     }
 
-    pub fn add_entity_with_reserved_key<T: TupleTypesExt>(&mut self, key: EntityKey, input: T) -> EntityKey {
+    pub fn add_entity_with_reserved_key<T: TupleTypesExt>(
+        &mut self,
+        key: EntityKey,
+        input: T,
+    ) -> EntityKey {
         let archetype_id = self.create_or_get_archetype::<T>();
-        self.entities.insert_with_reserved_key(key, Entity {
-            archetype_id,
-            row_id: 0,
-        });
+        self.entities.insert_with_reserved_key(
+            key,
+            Entity {
+                archetype_id,
+                row_id: 0,
+            },
+        );
 
         self.add_entity_inner(key, input, archetype_id)
     }
 
-    pub fn add_entity_inner<T: TupleTypesExt>(&mut self, key: EntityKey, input: T, archetype_id: ArchetypeId) -> EntityKey {
+    pub fn add_entity_inner<T: TupleTypesExt>(
+        &mut self,
+        key: EntityKey,
+        input: T,
+        archetype_id: ArchetypeId,
+    ) -> EntityKey {
         let mut soa_comp_ids = self.cache.compid_vec_cache.take_cached();
         let mut aos_comp_ids = self.cache.compid_vec_cache.take_cached();
 
@@ -104,8 +116,6 @@ impl EntityStorage {
         }
         EntityKey::new(key.get_id(), key.get_generation())
     }
-
-
 
     pub fn add_entities_batch<T: TupleTypesExt>(&mut self, input: Vec<T>) -> Vec<EntityKey> {
         let archetype_id = self.create_or_get_archetype::<T>();
@@ -147,8 +157,16 @@ impl EntityStorage {
         entity_keys
     }
 
-    pub fn remove_entity(&mut self, _entity_key: EntityKey) {
-        todo!()
+    pub fn remove_entity(&mut self, entity_key: EntityKey) {
+        if let Some(entity) = self.entities.remove(entity_key) {
+            if let Some(table) = self.tables.get_mut(&entity.archetype_id) {
+                if let Some((key, row_id)) = table.remove_entity(entity) {
+                    if let Some(entity) = self.entities.get_mut(key) {
+                        entity.row_id = row_id;
+                    }
+                }
+            }
+        }
     }
 
     pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {

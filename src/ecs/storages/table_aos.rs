@@ -7,7 +7,10 @@ use std::{
 };
 
 use crate::{
-    ecs::{component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}},
+    ecs::{
+        component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
+        entity::Entity,
+    },
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},
@@ -219,8 +222,13 @@ impl TableAoS {
         unimplemented!()
     }
 
-    pub fn remove() {
-        unimplemented!()
+    pub fn remove(&mut self, entity: &Entity) {
+        assert!(self.len > entity.row_id as usize);
+        unsafe {
+            self.vec
+                .remove_and_replace_with_last(self.len, entity.row_id as usize);
+        }
+        self.len -= 1;
     }
 
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(

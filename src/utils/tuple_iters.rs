@@ -5,7 +5,9 @@ use std::any::TypeId;
 use crate::{
     all_tuples,
     ecs::{
-        component::{Component, StorageTypes}, entity::EntityKey, storages::{
+        component::{Component, StorageTypes},
+        entity::EntityKey,
+        storages::{
             table_aos::TableAoS,
             table_soa::TableSoA,
             table_storage::TableStorage,
@@ -13,7 +15,7 @@ use crate::{
                 ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
                 ThinBlobIterUnsafe,
             },
-        }
+        },
     },
 };
 
@@ -160,8 +162,7 @@ impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &mut T
 }
 
 //TODO: move somewhere else
-impl Component for EntityKey{
-}
+impl Component for EntityKey {}
 
 pub struct EntityKeyIterUnsafe<'vec> {
     vec: &'vec [EntityKey],
@@ -169,21 +170,18 @@ pub struct EntityKeyIterUnsafe<'vec> {
 
 impl<'vec> EntityKeyIterUnsafe<'vec> {
     pub fn new(entity_keys: &'vec [EntityKey]) -> Self {
-        EntityKeyIterUnsafe{
-            vec: entity_keys,
-        }
+        EntityKeyIterUnsafe { vec: entity_keys }
     }
 }
 
 impl<'vec> TupleIterator for EntityKeyIterUnsafe<'vec> {
     type Item = EntityKey;
     unsafe fn next(&mut self, index: usize) -> Self::Item {
-        println!("entity key vec iter len: {}", self.vec.len());
         self.vec[index]
     }
 }
 
-impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey{
+impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey {
     type Construct<'c> = EntityKeyIterUnsafe<'c>;
 
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
@@ -293,8 +291,6 @@ impl<T: TupleIterator> Iterator for TableStorageTupleIter<T> {
     type Item = T::Item;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
-
-            println!("table len: {}; index: {}", self.len, self.index);
             let next = unsafe { Some(self.tuple_iters.next(self.index)) };
             self.index += 1;
             next

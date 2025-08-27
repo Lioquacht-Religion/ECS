@@ -8,7 +8,8 @@ use std::{
 
 use crate::{
     ecs::{
-        component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}
+        component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
+        entity::Entity,
     },
     utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
 };
@@ -112,7 +113,16 @@ impl TableSoA {
         }
     }
 
-    pub fn remove() {}
+    pub fn remove(&mut self, entity: &Entity) {
+        if self.len > entity.row_id as usize {
+            for (_tid, col) in self.columns.iter_mut() {
+                unsafe {
+                    col.remove_and_replace_with_last(self.len, entity.row_id as usize);
+                }
+            }
+            self.len -= 1;
+        }
+    }
 
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
@@ -154,7 +164,7 @@ impl Drop for TableSoA {
 
 #[cfg(test)]
 mod tests {
-    use crate::ecs::component::{StorageTypes};
+    use crate::ecs::component::StorageTypes;
     use crate::ecs::query::Query;
     use crate::ecs::storages::entity_storage::EntityStorage;
     use crate::ecs::{component::Component, system::Res, world::World};

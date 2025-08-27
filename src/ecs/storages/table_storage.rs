@@ -5,7 +5,7 @@ use std::alloc::Layout;
 use crate::{
     ecs::{
         component::{ArchetypeId, ComponentId, ComponentInfo},
-        entity::EntityKey,
+        entity::{Entity, EntityKey},
     },
     utils::{
         tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor},
@@ -107,18 +107,36 @@ impl TableStorage {
         let row_id_start = self.len as u32;
         let row_id_end = row_id_start + values.len() as u32;
 
-        let value_len : u32 = values.len()
-            .try_into()
-            .expect("Max u32 value reached!");
-        println!("entities len: {}, table len {}; batch values to add len: {}", self.entities.len(), self.len, value_len);
+        let value_len: u32 = values.len().try_into().expect("Max u32 value reached!");
+        println!(
+            "entities len: {}, table len {}; batch values to add len: {}",
+            self.entities.len(),
+            self.len,
+            value_len
+        );
         self.len += value_len;
-        //self.len += 1;
 
         while let Some(val) = values.pop() {
             std::mem::forget(val);
         }
 
         Some((row_id_start, row_id_end))
+    }
+
+    pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, u32)> {
+        assert!(self.len > entity.row_id);
+        let key = self.entities.remove(entity.row_id as usize);
+        self.table_soa.remove(&entity);
+        self.table_aos.remove(&entity);
+
+        self.len -= 1;
+
+        // update moved entities table position
+        if entity.row_id == self.len {
+            None
+        } else {
+            Some((key, entity.row_id))
+        }
     }
 
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(

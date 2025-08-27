@@ -26,18 +26,26 @@ impl Entities {
         }
     }
 
-    pub(crate) fn get(&self, key: EntityKey) -> Option<&Entity>{
-        if let Some(Entry{entity: Some(entity), generation}) = self.vec.get(key.get_id() as usize){
-            if *generation == key.get_generation(){
+    pub(crate) fn get(&self, key: EntityKey) -> Option<&Entity> {
+        if let Some(Entry {
+            entity: Some(entity),
+            generation,
+        }) = self.vec.get(key.get_id() as usize)
+        {
+            if *generation == key.get_generation() {
                 return Some(entity);
             }
         }
         None
     }
 
-    pub(crate) fn get_mut(&mut self, key: EntityKey) -> Option<&mut Entity>{
-        if let Some(Entry{entity: Some(entity), generation}) = self.vec.get_mut(key.get_id() as usize){
-            if *generation == key.get_generation(){
+    pub(crate) fn get_mut(&mut self, key: EntityKey) -> Option<&mut Entity> {
+        if let Some(Entry {
+            entity: Some(entity),
+            generation,
+        }) = self.vec.get_mut(key.get_id() as usize)
+        {
+            if *generation == key.get_generation() {
                 return Some(entity);
             }
         }
@@ -111,12 +119,12 @@ impl Entities {
         }
     }
 
-    pub(crate) fn reset_barriers(&self){
-        self.empty_indices_barrier.store(0, atomic::Ordering::Relaxed);
-        let len : u32 = self.vec.len()
-            .try_into()
-            .expect("Above u32 max!");
-        self.free_indices_barrier.store(len, atomic::Ordering::Relaxed);
+    pub(crate) fn reset_barriers(&self) {
+        self.empty_indices_barrier
+            .store(0, atomic::Ordering::Relaxed);
+        let len: u32 = self.vec.len().try_into().expect("Above u32 max!");
+        self.free_indices_barrier
+            .store(len, atomic::Ordering::Relaxed);
     }
 
     pub(crate) fn update_with_barriers(&mut self) {
@@ -129,14 +137,16 @@ impl Entities {
         let free_barrier = self.free_indices_barrier.load(atomic::Ordering::Relaxed) as usize;
         let add_entries_count = free_barrier - self.vec.len();
 
-        for _i in 0..add_entries_count{
-            self.vec.push(Entry { entity: None, generation: 0});
+        for _i in 0..add_entries_count {
+            self.vec.push(Entry {
+                entity: None,
+                generation: 0,
+            });
         }
         self.reset_barriers();
     }
 }
 
-//TODO: what about generational index?
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct EntityId(u32);
 

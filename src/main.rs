@@ -1,7 +1,13 @@
 // main.rs file for testing ECS package directly
 
 use ecs::ecs::{
-    commands::Commands, component::{Component, StorageTypes}, entity::EntityKey, query::Query, storages::entity_storage::EntityStorage, system::Res, world::World
+    commands::Commands,
+    component::{Component, StorageTypes},
+    entity::EntityKey,
+    query::Query,
+    storages::entity_storage::EntityStorage,
+    system::Res,
+    world::World,
 };
 
 struct Pos(i32);
@@ -94,15 +100,17 @@ fn test_system1(
 
 fn test_system2(
     mut commands: Commands,
-    mut query: Query<(&mut Comp1, &mut Comp2)>,
+    mut query: Query<(EntityKey, &mut Comp1, &mut Comp2)>,
     mut query_aos: Query<(EntityKey, &mut Comp1AoS, &mut Comp2AoS)>,
 ) {
     let start1 = std::time::Instant::now();
-    for (comp1, comp2) in query.iter() {
+    for (i, (entity, comp1, comp2)) in query.iter().enumerate() {
         comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
         comp2.1 /= 437;
+
+        //println!("soa iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
     }
 
     let start2 = std::time::Instant::now();
@@ -112,8 +120,9 @@ fn test_system2(
         comp2.0 /= 21;
         comp2.1 /= 437;*/
 
-        let _key = commands.spawn(Comp1(comp1.0, comp1.1));
-        let _key = commands.spawn(Comp2(comp2.0, comp2.1));
+        let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
+        let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
+        let _key = commands.spawn(Comp1(999999, 29029));
 
         comp1.0 /= 392049;
         comp1.1 /= 392049;
@@ -122,7 +131,7 @@ fn test_system2(
 
         commands.despawn(entity);
 
-        println!("iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
+        //println!("aos iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
     }
 
     let el1 = start1.elapsed();
@@ -249,7 +258,7 @@ fn test_table_soa_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
     let num2: usize = 2324;
-    world.systems.add_system(test_system1);
+    //world.systems.add_system(test_system1);
     world.systems.add_system(test_system2);
     unsafe { (&mut *world.data.get()).add_resource(num1) };
     unsafe { (&mut *world.data.get()).add_resource(num2) };
@@ -258,6 +267,10 @@ fn test_table_soa_query_iter() {
 
     init_es_insert(es);
 
+    world.run();
+    world.run();
+    world.run();
+    world.run();
     world.run();
 }
 

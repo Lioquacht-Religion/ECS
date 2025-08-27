@@ -30,7 +30,10 @@ impl World {
     }
 
     pub fn run(&mut self) {
+        self.data.get_mut().entity_storage.entities.reset_barriers();
         self.systems.run_systems(&mut self.data);
+        self.data.get_mut().execute_commands();
+        self.data.get_mut().entity_storage.entities.update_with_barriers();
     }
 }
 
@@ -46,5 +49,14 @@ impl WorldData {
 
     pub fn add_resource<T: 'static>(&mut self, value: T) {
         self.resources.insert(value);
+    }
+
+    pub(crate) fn execute_commands(&mut self) {
+        while let Some(mut cq) = self.commands_queues.command_queues_inuse.pop() {
+            while let Some(command) = cq.get_mut().pop() {
+                command.exec(self);
+            }
+            self.commands_queues.command_queues_unused.push(cq);
+        }
     }
 }

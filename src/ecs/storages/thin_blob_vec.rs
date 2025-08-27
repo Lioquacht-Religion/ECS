@@ -61,6 +61,27 @@ impl ThinBlobVec {
         }
     }
 
+    pub unsafe fn call_drop_on_elem(&mut self, index: usize) -> NonNull<u8> {
+        let elem_ptr = self.data.add(self.layout.size() * index);
+        if let Some(drop_fn) = self.drop_fn {
+            let elem_ptr = self.data.add(self.layout.size() * index);
+            drop_fn(elem_ptr.as_ptr());
+            elem_ptr
+        } else {
+            elem_ptr
+        }
+    }
+
+    pub unsafe fn remove_and_replace_with_last(&mut self, len: usize, to: usize) {
+        assert!(to < len);
+
+        let to_ptr = self.call_drop_on_elem(to);
+        if to == len - 1 {
+            let from = self.data.add(self.layout.size() * (len - 1));
+            std::ptr::copy(from.as_ptr(), to_ptr.as_ptr(), self.layout.size());
+        }
+    }
+
     pub unsafe fn dealloc(&mut self, cap: usize, len: usize) {
         if cap == 0 {
             return;

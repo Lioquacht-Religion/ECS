@@ -3,10 +3,14 @@
 use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
 
 use crate::{
-    all_tuples, ecs::entity::EntityKey, utils::{
+    all_tuples,
+    ecs::entity::EntityKey,
+    utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{TableStorageTupleIter, TupleConstructorSource, TupleIterConstructor, TupleIterator},
-    }
+        tuple_iters::{
+            TableStorageTupleIter, TupleConstructorSource, TupleIterConstructor, TupleIterator,
+        },
+    },
 };
 
 use super::{
@@ -221,12 +225,12 @@ impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey{
     type Construct<'c> = EntityKey;
 
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-       todo!() 
+       todo!()
     }
 }
 */
 
-impl QueryParam for EntityKey{
+impl QueryParam for EntityKey {
     type QueryItem<'new> = EntityKey;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>) {

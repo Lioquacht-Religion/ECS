@@ -41,7 +41,7 @@ impl CommandQueuesStorage {
 }
 
 pub trait Command<Out = ()> {
-    fn exec(self, world_data: &mut WorldData) -> Out;
+    fn exec(self: Box<Self>, world_data: &mut WorldData) -> Out;
 }
 
 pub struct Commands<'w, 's> {
@@ -67,8 +67,10 @@ pub(crate) struct SpawnCommand<T: TupleTypesExt> {
 }
 
 impl<T: TupleTypesExt> Command for SpawnCommand<T> {
-    fn exec(self, world_data: &mut WorldData) -> () {
-        world_data.entity_storage.add_entity_with_reserved_key(self.reserved_key, self.entity_value);
+    fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
+        world_data
+            .entity_storage
+            .add_entity_with_reserved_key(self.reserved_key, self.entity_value);
     }
 }
 
@@ -77,20 +79,28 @@ pub(crate) struct DespawnCommand {
 }
 
 impl Command for DespawnCommand {
-    fn exec(self, world_data: &mut WorldData) -> () {
+    fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
         world_data.entity_storage.remove_entity(self.entity_key);
     }
 }
 
 impl<'w, 's> Commands<'w, 's> {
-    pub(crate) fn new(entities: &'w Entities, command_queue: &'s mut Vec<Box<dyn Command>>) -> Self {
-        Self { entities, command_queue }
+    pub(crate) fn new(
+        entities: &'w Entities,
+        command_queue: &'s mut Vec<Box<dyn Command>>,
+    ) -> Self {
+        Self {
+            entities,
+            command_queue,
+        }
     }
 
-    pub fn spawn<T: TupleTypesExt>(&mut self, entity_value: T) -> EntityKey{
+    pub fn spawn<T: TupleTypesExt>(&mut self, entity_value: T) -> EntityKey {
         let reserved_key = self.entities.reserve();
-        self.command_queue
-            .push(Box::new(SpawnCommand { reserved_key, entity_value }));
+        self.command_queue.push(Box::new(SpawnCommand {
+            reserved_key,
+            entity_value,
+        }));
         reserved_key
     }
 
@@ -101,9 +111,10 @@ impl<'w, 's> Commands<'w, 's> {
 }
 
 #[cfg(test)]
-mod test{
+mod test {
 
     #[test]
-    fn spawn_command_test(){
+    fn spawn_command_test() {
+        todo!()
     }
 }
