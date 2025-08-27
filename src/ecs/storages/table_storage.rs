@@ -110,7 +110,9 @@ impl TableStorage {
         let value_len : u32 = values.len()
             .try_into()
             .expect("Max u32 value reached!");
+        println!("entities len: {}, table len {}; batch values to add len: {}", self.entities.len(), self.len, value_len);
         self.len += value_len;
+        //self.len += 1;
 
         while let Some(val) = values.pop() {
             std::mem::forget(val);

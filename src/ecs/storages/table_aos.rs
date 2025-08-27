@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    ecs::{component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}, entity::EntityKey},
+    ecs::{component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map}},
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},

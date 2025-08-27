@@ -121,12 +121,13 @@ impl EntityStorage {
 
         let row_id_start = table.len as usize;
         let row_id_end = row_id_start + input.len();
-        let entity_keys = Vec::with_capacity(input.len());
+        let mut entity_keys = Vec::with_capacity(input.len());
         for i in row_id_start..row_id_end {
-            self.entities.insert(Entity {
+            let key = self.entities.insert(Entity {
                 archetype_id,
                 row_id: i as u32,
             });
+            entity_keys.push(key);
         }
 
         unsafe {

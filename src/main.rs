@@ -106,7 +106,7 @@ fn test_system2(
     }
 
     let start2 = std::time::Instant::now();
-    for (entity, comp1, comp2) in query_aos.iter() {
+    for (i, (entity, comp1, comp2)) in query_aos.iter().enumerate() {
         /*comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
@@ -121,6 +121,8 @@ fn test_system2(
         comp2.1 /= 392049;
 
         commands.despawn(entity);
+
+        println!("iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
     }
 
     let el1 = start1.elapsed();

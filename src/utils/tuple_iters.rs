@@ -178,6 +178,7 @@ impl<'vec> EntityKeyIterUnsafe<'vec> {
 impl<'vec> TupleIterator for EntityKeyIterUnsafe<'vec> {
     type Item = EntityKey;
     unsafe fn next(&mut self, index: usize) -> Self::Item {
+        println!("entity key vec iter len: {}", self.vec.len());
         self.vec[index]
     }
 }
@@ -292,6 +293,8 @@ impl<T: TupleIterator> Iterator for TableStorageTupleIter<T> {
     type Item = T::Item;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.len {
+
+            println!("table len: {}; index: {}", self.len, self.index);
             let next = unsafe { Some(self.tuple_iters.next(self.index)) };
             self.index += 1;
             next
