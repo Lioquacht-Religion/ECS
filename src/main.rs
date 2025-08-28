@@ -4,7 +4,7 @@ use ecs::ecs::{
     commands::Commands,
     component::{Component, StorageTypes},
     entity::EntityKey,
-    query::Query,
+    query::{Or, Query, With, Without},
     storages::entity_storage::EntityStorage,
     system::Res,
     world::World,
@@ -73,8 +73,8 @@ impl Component for Comp2AoS {
 fn test_system1(
     prm: Res<i32>,
     prm2: Res<usize>,
-    mut query: Query<(&Comp1, &mut Comp2)>,
-    mut query2: Query<(&Pos, &mut Pos4, &Pos3)>,
+    mut query: Query<(&Comp1, &mut Comp2), Or<(Without<Pos4>, Without<Comp1>)>>,
+    mut query2: Query<(&Pos, &mut Pos4, &Pos3), Or<(Without<Pos4>, Without<Comp1>)>>,
 ) {
     println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
@@ -100,8 +100,9 @@ fn test_system1(
 
 fn test_system2(
     mut commands: Commands,
-    mut query: Query<(EntityKey, &mut Comp1, &mut Comp2)>,
-    mut query_aos: Query<(EntityKey, &mut Comp1AoS, &mut Comp2AoS)>,
+    mut query: Query<(EntityKey, &mut Comp1, &mut Comp2)//, With<Pos4>
+    >,
+    mut query_aos: Query<(EntityKey, &mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
 ) {
     let start1 = std::time::Instant::now();
     for (i, (entity, comp1, comp2)) in query.iter().enumerate() {
@@ -110,7 +111,7 @@ fn test_system2(
         comp2.0 /= 21;
         comp2.1 /= 437;
 
-        //println!("soa iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
+        println!("soa iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
     }
 
     let start2 = std::time::Instant::now();
@@ -120,18 +121,18 @@ fn test_system2(
         comp2.0 /= 21;
         comp2.1 /= 437;*/
 
-        let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
-        let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
-        let _key = commands.spawn(Comp1(999999, 29029));
+        //let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
+        //let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
+        //let _key = commands.spawn(Comp1(999999, 29029));
 
         comp1.0 /= 392049;
         comp1.1 /= 392049;
         comp2.0 /= 392049;
         comp2.1 /= 392049;
 
-        commands.despawn(entity);
+        //commands.despawn(entity);
 
-        //println!("aos iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
+        println!("aos iter: {i}; enitity key: {:?}; comp1: {}", entity, comp1.0);
     }
 
     let el1 = start1.elapsed();
@@ -148,9 +149,11 @@ fn test_system2(
     );
 }
 
+static CAPACITY : usize = 10;
+
 fn init_es_insert(es: &mut EntityStorage) {
     let start1 = std::time::Instant::now();
-    for i in 0..100000 {
+    for i in 0..CAPACITY{
         es.add_entity((Comp1(i, 34), Comp2(i, 34)));
         es.add_entity((
             Pos(33434),
@@ -162,7 +165,7 @@ fn init_es_insert(es: &mut EntityStorage) {
     }
     println!("insert time soa: {} nanos", start1.elapsed().as_nanos());
     let start2 = std::time::Instant::now();
-    for i in 0..100000 {
+    for i in 0..CAPACITY{
         es.add_entity((Comp1AoS(i, 34), Comp2AoS(i, 34)));
         es.add_entity((
             PosAoS(34434),
@@ -176,9 +179,9 @@ fn init_es_insert(es: &mut EntityStorage) {
     println!("single inserts time: {} nanos", start1.elapsed().as_nanos());
 
     let start1 = std::time::Instant::now();
-    let mut ents_soa = Vec::with_capacity(100000);
-    let mut ents_soa2 = Vec::with_capacity(100000);
-    for i in 0..100000 {
+    let mut ents_soa = Vec::with_capacity(CAPACITY);
+    let mut ents_soa2 = Vec::with_capacity(CAPACITY);
+    for i in 0..CAPACITY{
         ents_soa2.push((Comp1(i, 34), Comp2(i, 34)));
         ents_soa.push((
             Pos(33434),
@@ -196,9 +199,9 @@ fn init_es_insert(es: &mut EntityStorage) {
     );
 
     let start2 = std::time::Instant::now();
-    let mut ents_aos = Vec::with_capacity(100000);
-    let mut ents_aos2 = Vec::with_capacity(100000);
-    for i in 0..100000 {
+    let mut ents_aos = Vec::with_capacity(CAPACITY);
+    let mut ents_aos2 = Vec::with_capacity(CAPACITY);
+    for i in 0..CAPACITY{
         ents_aos.push((Comp1AoS(i, 34), Comp2AoS(i, 34)));
         ents_aos2.push((
             PosAoS(34434),
@@ -258,7 +261,7 @@ fn test_table_soa_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
     let num2: usize = 2324;
-    //world.systems.add_system(test_system1);
+    world.systems.add_system(test_system1);
     world.systems.add_system(test_system2);
     unsafe { (&mut *world.data.get()).add_resource(num1) };
     unsafe { (&mut *world.data.get()).add_resource(num2) };

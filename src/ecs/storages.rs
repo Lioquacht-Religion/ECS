@@ -1,6 +1,5 @@
 // storages.rs
 
-pub mod blob_vec;
 pub mod cache;
 pub mod entity_storage;
 pub mod sparse_set;
