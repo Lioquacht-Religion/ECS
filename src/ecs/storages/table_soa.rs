@@ -9,9 +9,9 @@ use std::{
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::Entity,
+        entity::{Entity, EntityKeyIterUnsafe},
     },
-    utils::tuple_iters::{self, TableSoaTupleIter, TupleIterConstructor},
+    utils::tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
 };
 
 use super::{
@@ -127,7 +127,7 @@ impl TableSoA {
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
-        tuple_iters::new_table_soa_iter::<TC>(self)
+        new_table_soa_iter::<TC>(self)
     }
 
     pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
@@ -159,6 +159,57 @@ impl Drop for TableSoA {
                 c.dealloc(self.cap, self.len);
             });
         }
+    }
+}
+
+pub struct TableSoaTupleIter<T: TupleIterator> {
+    tuple_iters: T,
+    len: usize,
+    index: usize,
+}
+
+pub unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
+    table: &'table mut TableSoA,
+) -> TableSoaTupleIter<TC::Construct<'table>> {
+    unsafe {
+        TableSoaTupleIter {
+            tuple_iters: TC::construct(table),
+            len: table.len,
+            index: 0,
+        }
+    }
+}
+
+impl<T: TupleIterator> Iterator for TableSoaTupleIter<T> {
+    type Item = T::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.len {
+            let next = unsafe { Some(self.tuple_iters.next(self.index)) };
+            self.index += 1;
+            next
+        } else {
+            None
+        }
+    }
+}
+
+impl TupleConstructorSource for TableSoA {
+    type IterType<'c, T: Component> = ThinBlobIterUnsafe<'c, T>;
+    type IterMutType<'c, T: Component> = ThinBlobIterMutUnsafe<'c, T>;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        todo!()
+    }
+    unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
+        self.columns
+            .get(&TypeId::of::<T>())
+            .expect("ERROR: TableSoA does not contain a column with this type id")
+            .tuple_iter()
+    }
+    unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
+        self.columns
+            .get_mut(&TypeId::of::<T>())
+            .expect("ERROR: TableSoA does not contain a column with this type id")
+            .tuple_iter_mut()
     }
 }
 

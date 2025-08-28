@@ -4,11 +4,11 @@ use std::alloc::Layout;
 
 use crate::{
     ecs::{
-        component::{ArchetypeId, ComponentId, ComponentInfo},
-        entity::{Entity, EntityKey},
+        component::{ArchetypeId, Component, ComponentId, ComponentInfo, StorageTypes},
+        entity::{Entity, EntityKey, EntityKeyIterUnsafe}, storages::thin_blob_vec::{ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe, ThinBlobIterUnsafe},
     },
     utils::{
-        tuple_iters::{self, TableStorageTupleIter, TupleIterConstructor},
+        tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
         tuple_types::TupleTypesExt,
     },
 };
@@ -142,6 +142,97 @@ impl TableStorage {
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
         &'a mut self,
     ) -> TableStorageTupleIter<TC::Construct<'a>> {
-        tuple_iters::new_table_storage_iter::<TC>(self)
+        new_table_storage_iter::<TC>(self)
+    }
+}
+
+pub struct TableStorageTupleIter<T: TupleIterator> {
+    tuple_iters: T,
+    len: usize,
+    index: usize,
+}
+
+pub unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStorage>>(
+    table: &'table mut TableStorage,
+) -> TableStorageTupleIter<TC::Construct<'table>> {
+    unsafe {
+        TableStorageTupleIter {
+            tuple_iters: TC::construct(table),
+            len: table.len as usize,
+            index: 0,
+        }
+    }
+}
+
+impl<T: TupleIterator> Iterator for TableStorageTupleIter<T> {
+    type Item = T::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.len {
+            let next = unsafe { Some(self.tuple_iters.next(self.index)) };
+            self.index += 1;
+            next
+        } else {
+            None
+        }
+    }
+}
+
+pub enum TableStorageIterUnsafe<'c, T: Component> {
+    TableSoaIter(ThinBlobIterUnsafe<'c, T>),
+    TableAosIter(ThinBlobInnerTypeIterUnsafe<'c, T>),
+}
+
+impl<'c, T: Component> TupleIterator for TableStorageIterUnsafe<'c, T> {
+    type Item = &'c T;
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
+        match self {
+            TableStorageIterUnsafe::TableSoaIter(iter) => iter.next(index),
+            TableStorageIterUnsafe::TableAosIter(iter) => iter.next(index),
+        }
+    }
+}
+
+pub enum TableStorageIterMutUnsafe<'c, T: Component> {
+    TableSoaIterMut(ThinBlobIterMutUnsafe<'c, T>),
+    TableAosIterMut(ThinBlobInnerTypeIterMutUnsafe<'c, T>),
+}
+
+impl<'c, T: Component> TupleIterator for TableStorageIterMutUnsafe<'c, T> {
+    type Item = &'c mut T;
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
+        match self {
+            TableStorageIterMutUnsafe::TableSoaIterMut(iter) => iter.next(index),
+            TableStorageIterMutUnsafe::TableAosIterMut(iter) => iter.next(index),
+        }
+    }
+}
+
+impl TupleConstructorSource for TableStorage {
+    type IterType<'c, T: Component> = TableStorageIterUnsafe<'c, T>;
+    type IterMutType<'c, T: Component> = TableStorageIterMutUnsafe<'c, T>;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        EntityKeyIterUnsafe::new(&self.entities)
+    }
+    unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
+        match T::STORAGE {
+            StorageTypes::TableSoA => {
+                TableStorageIterUnsafe::TableSoaIter(self.table_soa.get_single_comp_iter())
+            }
+            StorageTypes::TableAoS => {
+                TableStorageIterUnsafe::TableAosIter(self.table_aos.get_single_comp_iter())
+            }
+            StorageTypes::SparseSet => unimplemented!(),
+        }
+    }
+    unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
+        match T::STORAGE {
+            StorageTypes::TableSoA => TableStorageIterMutUnsafe::TableSoaIterMut(
+                self.table_soa.get_single_comp_iter_mut(),
+            ),
+            StorageTypes::TableAoS => TableStorageIterMutUnsafe::TableAosIterMut(
+                self.table_aos.get_single_comp_iter_mut(),
+            ),
+            StorageTypes::SparseSet => unimplemented!(),
+        }
     }
 }

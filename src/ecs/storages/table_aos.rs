@@ -9,11 +9,11 @@ use std::{
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::Entity,
+        entity::{Entity, EntityKeyIterUnsafe},
     },
     utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{self, TableAosTupleIter, TupleIterConstructor},
+        tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
         tuple_types::TupleTypesExt,
     },
 };
@@ -234,7 +234,7 @@ impl TableAoS {
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
         &'a mut self,
     ) -> TableAosTupleIter<TC::Construct<'a>> {
-        tuple_iters::new_table_aos_iter::<TC>(self)
+        new_table_aos_iter::<TC>(self)
     }
 
     pub unsafe fn get_single_comp_iter<'c, T: Component>(
@@ -290,6 +290,61 @@ impl Drop for TableAoS {
         unsafe {
             self.vec.dealloc(self.cap, self.len);
         }
+    }
+}
+
+pub struct TableAosTupleIter<T: TupleIterator> {
+    tuple_iters: T,
+    len: usize,
+    index: usize,
+}
+
+pub unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
+    table: &'table mut TableAoS,
+) -> TableAosTupleIter<TC::Construct<'table>> {
+    unsafe {
+        TableAosTupleIter {
+            tuple_iters: TC::construct(table),
+            len: table.len,
+            index: 0,
+        }
+    }
+}
+
+impl<T: TupleIterator> Iterator for TableAosTupleIter<T> {
+    type Item = T::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.len {
+            let next = unsafe { Some(self.tuple_iters.next(self.index)) };
+            self.index += 1;
+            next
+        } else {
+            None
+        }
+    }
+}
+
+impl TupleConstructorSource for TableAoS {
+    type IterType<'c, T: Component> = ThinBlobInnerTypeIterUnsafe<'c, T>;
+    type IterMutType<'c, T: Component> = ThinBlobInnerTypeIterMutUnsafe<'c, T>;
+    fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        todo!()
+    }
+    unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
+        let index = self
+            .type_meta_data_map
+            .get(&TypeId::of::<T>())
+            .expect("ERROR: TableAoS does not contain a column with this type id");
+        let offset = self.type_meta_data.get_vec()[*index].ptr_offset;
+        self.vec.tuple_inner_type_iter(offset)
+    }
+    unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
+        let index = self
+            .type_meta_data_map
+            .get(&TypeId::of::<T>())
+            .expect("ERROR: TableAoS does not contain a column with this type id");
+        let offset = self.type_meta_data.get_vec()[*index].ptr_offset;
+        self.vec.tuple_inner_type_iter_mut(offset)
     }
 }
 

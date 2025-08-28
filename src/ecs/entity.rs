@@ -2,7 +2,41 @@
 
 use std::sync::atomic::{self, AtomicU32};
 
+use crate::{ecs::component::Component, utils::tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator}};
+
 use super::component::ArchetypeId;
+
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct EntityId(u32);
+
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct EntityKey {
+    pub(crate) id: u32,
+    pub(crate) generation: u32,
+}
+
+impl EntityKey {
+    pub(crate) fn new(id: u32, generation: u32) -> Self {
+        Self { id, generation }
+    }
+
+    pub(crate) fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    pub(crate) fn get_generation(&self) -> u32 {
+        self.generation
+    }
+}
+
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct Entity {
+    pub(crate) archetype_id: ArchetypeId,
+    pub(crate) row_id: u32,
+}
+
+impl Component for EntityKey {}
+
 
 struct Entry {
     entity: Option<Entity>,
@@ -147,31 +181,27 @@ impl Entities {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct EntityId(u32);
-
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct EntityKey {
-    pub(crate) id: u32,
-    pub(crate) generation: u32,
+pub struct EntityKeyIterUnsafe<'vec> {
+    vec: &'vec [EntityKey],
 }
 
-impl EntityKey {
-    pub(crate) fn new(id: u32, generation: u32) -> Self {
-        Self { id, generation }
-    }
-
-    pub(crate) fn get_id(&self) -> u32 {
-        self.id
-    }
-
-    pub(crate) fn get_generation(&self) -> u32 {
-        self.generation
+impl<'vec> EntityKeyIterUnsafe<'vec> {
+    pub fn new(entity_keys: &'vec [EntityKey]) -> Self {
+        EntityKeyIterUnsafe { vec: entity_keys }
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct Entity {
-    pub(crate) archetype_id: ArchetypeId,
-    pub(crate) row_id: u32,
+impl<'vec> TupleIterator for EntityKeyIterUnsafe<'vec> {
+    type Item = EntityKey;
+    unsafe fn next(&mut self, index: usize) -> Self::Item {
+        self.vec[index]
+    }
+}
+
+impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey {
+    type Construct<'c> = EntityKeyIterUnsafe<'c>;
+
+    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+        (&mut *source).get_entity_key_iter()
+    }
 }

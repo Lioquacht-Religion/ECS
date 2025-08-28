@@ -4,11 +4,11 @@ use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomDa
 
 use crate::{
     all_tuples,
-    ecs::entity::EntityKey,
+    ecs::{entity::EntityKey, storages::table_storage::TableStorageTupleIter},
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{
-            TableStorageTupleIter, TupleConstructorSource, TupleIterConstructor, TupleIterator,
+            TupleIterConstructor, TupleIterator,
         },
     },
 };
