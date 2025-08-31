@@ -2,10 +2,7 @@
 
 use crate::{
     all_tuples,
-    ecs::{
-        component::Component,
-        entity::EntityKeyIterUnsafe
-    },
+    ecs::{component::Component, entity::EntityKeyIterUnsafe},
 };
 
 pub trait TupleIterator {

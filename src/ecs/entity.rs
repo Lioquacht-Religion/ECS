@@ -2,7 +2,10 @@
 
 use std::sync::atomic::{self, AtomicU32};
 
-use crate::{ecs::component::Component, utils::tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator}};
+use crate::{
+    ecs::component::Component,
+    utils::tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
+};
 
 use super::component::ArchetypeId;
 
@@ -36,7 +39,6 @@ pub struct Entity {
 }
 
 impl Component for EntityKey {}
-
 
 struct Entry {
     entity: Option<Entity>,

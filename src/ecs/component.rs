@@ -5,7 +5,7 @@ use std::{
     ptr::drop_in_place, u32, usize,
 };
 
-use crate::utils::sorted_vec::SortedVec;
+use crate::utils::{ecs_id::{impl_ecs_id, EcsId}, sorted_vec::SortedVec};
 
 pub type Map<K, V> = HashMap<K, V>;
 
@@ -25,14 +25,7 @@ pub struct ComponentInfo {
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct ComponentId(pub(crate) u32);
 
-impl From<ComponentId> for usize {
-    fn from(value: ComponentId) -> Self {
-        value
-            .0
-            .try_into()
-            .expect("Archetype Ids have increased over their max possible u32 value!")
-    }
-}
+impl_ecs_id!(ComponentId);
 
 pub struct Archetype {
     pub(crate) archetype_id: ArchetypeId,
@@ -58,6 +51,8 @@ impl Archetype {
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct ArchetypeId(pub u32);
 
+impl_ecs_id!(ArchetypeId);
+
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct ArchetypeHash(u32);
 
@@ -67,30 +62,12 @@ impl From<u32> for ArchetypeId {
     }
 }
 
-impl From<usize> for ArchetypeId {
-    fn from(value: usize) -> Self {
-        ArchetypeId(
-            value
-                .try_into()
-                .expect("Archetype Ids have increased over their max possible u32 value!"),
-        )
-    }
-}
-
 impl From<ArchetypeId> for u32 {
     fn from(value: ArchetypeId) -> Self {
         value.0
     }
 }
 
-impl From<ArchetypeId> for usize {
-    fn from(value: ArchetypeId) -> Self {
-        value
-            .0
-            .try_into()
-            .expect("Archetype Ids have increased over their max possible u32 value!")
-    }
-}
 
 impl ComponentInfo {
     unsafe fn drop_ptr<T>(ptr: *mut u8) {
@@ -121,9 +98,7 @@ mod test {
 
     use super::Component;
 
-    struct Type1 {
-        f1: usize,
-    }
+    struct Type1();
     impl Component for Type1 {}
 
     #[test]
@@ -133,7 +108,7 @@ mod test {
 
     #[test]
     fn test_tuple_ext_methods() {
-        let t = Type1 { f1: 4324 };
+        let t = Type1(); 
         let mut vec = Vec::new();
         t.self_type_ids_rec(&mut vec);
     }

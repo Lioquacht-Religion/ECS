@@ -4,12 +4,14 @@ use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomDa
 
 use crate::{
     all_tuples,
-    ecs::{entity::EntityKey, storages::{entity_storage::EntityStorage, table_storage::TableStorageTupleIter}},
+    ecs::{
+        entity::EntityKey,
+        query::query_filter::{FilterElem, QueryFilter},
+        storages::table_storage::TableStorageTupleIter,
+    },
     utils::{
         sorted_vec::SortedVec,
-        tuple_iters::{
-            TupleIterConstructor, TupleIterator,
-        },
+        tuple_iters::{TupleIterConstructor, TupleIterator},
     },
 };
 
@@ -19,6 +21,8 @@ use super::{
     system::SystemParam,
     world::WorldData,
 };
+
+pub mod query_filter;
 
 type QueryDataType = TableStorage;
 
@@ -35,6 +39,13 @@ pub struct QueryState {
     shared_ref_comps: HashSet<ComponentId>,
     exclusive_ref_comps: HashSet<ComponentId>,
     arch_ids: Vec<ArchetypeId>,
+    filter: Vec<FilterElem>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub(crate) struct QueryStateKey {
+    comp_ids: SortedVec<ComponentId>,
+    filter: Vec<FilterElem>,
 }
 
 //pub struct CompRefKind(ComponentId, RefKind);
@@ -133,48 +144,67 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
-        if let Some(query_data) = world_data_mut.query_data.get(&comp_ids) {
+        let world_data_ref = world_data.get().as_mut().unwrap();
+
+        let mut filter = Vec::new();
+        F::get_and_filters(&mut world_data_ref.entity_storage, &mut filter);
+
+        println!("filter: {:?};", &filter);
+
+        let query_state_key = QueryStateKey { comp_ids, filter };
+
+        if let Some(query_data) = world_data_mut.query_data.get(&query_state_key) {
             world_data_mut
                 .entity_storage
                 .cache
                 .compid_vec_cache
-                .insert(comp_ids.into());
+                .insert(query_state_key.comp_ids.into());
             return Self::Item::<'r>::new(world_data, query_data);
         }
 
-        let world_data_ref = world_data.get().as_mut().unwrap();
         let arch_ids = world_data_ref
             .entity_storage
-            .find_fitting_archetypes(&comp_ids);
+            .find_fitting_archetypes(&query_state_key.comp_ids);
 
         // remove archetypes that do not match the filter
-        let mut filter = Vec::new();
-        F::get_filters(&mut world_data_ref.entity_storage, &mut filter);
-
-        let arch_ids = arch_ids.iter().filter(|aid| {
-            let arch = &world_data_ref.entity_storage.archetypes[aid.0 as usize];
-            let comp_ids_set : HashSet<ComponentId> = HashSet::from_iter(
-                arch.soa_comp_ids.iter().chain(arch.aos_comp_ids.iter()).map(|cid| *cid)
-            );
-            let res = comp_ids_compatible_with_filter(&comp_ids_set, &filter);
-            println!("arch with comps: {:?}; filter: {:?}; valid status: {res}", &comp_ids_set, &filter);
-            res
-        }).cloned().collect();
+        let arch_ids = arch_ids
+            .iter()
+            .filter(|aid| {
+                let arch = &world_data_ref.entity_storage.archetypes[aid.0 as usize];
+                let comp_ids_set: HashSet<ComponentId> = HashSet::from_iter(
+                    arch.soa_comp_ids
+                        .iter()
+                        .chain(arch.aos_comp_ids.iter())
+                        .map(|cid| *cid),
+                );
+                let res = query_filter::comp_ids_compatible_with_filter(
+                    &comp_ids_set,
+                    &query_state_key.filter,
+                );
+                println!(
+                    "arch with comps: {:?}; filter: {:?}; valid status: {res}",
+                    &comp_ids_set, &query_state_key.filter
+                );
+                res
+            })
+            .cloned()
+            .collect();
 
         let query_data = QueryState {
-            //TODO: remove comp_ids? already used as key, remove cloning
-            comp_ids: comp_ids.clone(),
+            //TODO: remove comp_ids/filter ? already used as key, remove cloning
+            comp_ids: query_state_key.comp_ids.clone(),
             optional_comp_ids: SortedVec::new(),
             shared_ref_comps: HashSet::new(),
             exclusive_ref_comps: HashSet::new(),
             arch_ids,
+            filter: query_state_key.filter.clone(),
         };
 
         world_data_ref
             .query_data
-            .insert(comp_ids.clone(), query_data);
+            .insert(query_state_key.clone(), query_data);
 
-        let query_data = world_data_ref.query_data.get(&comp_ids).unwrap();
+        let query_data = world_data_ref.query_data.get(&query_state_key).unwrap();
         Query::new(world_data, query_data)
     }
 }
@@ -186,133 +216,6 @@ pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>);
     fn ref_kinds(vec: &mut Vec<RefKind>);
 }
-
-fn comp_ids_compatible_with_filter(comp_ids: &HashSet<ComponentId>, filter: &[FilterElem]) -> bool{
-    for el in filter.iter(){
-        if !handle_filter_elem(comp_ids, el){
-            return false;
-        }
-    }
-    true
-}
-
-fn handle_filter_elem(comp_ids: &HashSet<ComponentId>, filter_elem: &FilterElem) -> bool{
-        match filter_elem{
-            FilterElem::With(id) => {
-                comp_ids.contains(id)
-            }
-            FilterElem::Without(id) => {
-                !comp_ids.contains(id)
-            }
-            FilterElem::Or(or_elems) => {
-                handle_or_elems(comp_ids, or_elems)
-            }
-        }
-}
-
-fn handle_or_elems(comp_ids: &HashSet<ComponentId>, or_elems: &[OrFilterElem]) -> bool {
-            for or_el in or_elems.iter(){
-                    match or_el{
-                        OrFilterElem::Single(el) => {
-                            if handle_filter_elem(comp_ids, el){
-                                return true;
-                            }
-                        }
-                        OrFilterElem::And(and_elems) => {
-                            if comp_ids_compatible_with_filter(comp_ids, &and_elems){
-                                return true;
-                            }
-                        }
-                    }
-            }
-    false
-}
-
-pub trait QueryFilter{
-    fn get_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>);
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<OrFilterElem>);
-}
-
-pub struct With<T: Component>{
-    _marker: PhantomData<T>
-}
-pub struct Without<T: Component>{
-    _marker: PhantomData<T>
-}
-pub struct Or<F: QueryFilter>{
-    _marker: PhantomData<F>
-}
-
-#[derive(Debug)]
-pub enum FilterElem{
-    With(ComponentId),
-    Without(ComponentId),
-    Or(Vec<OrFilterElem>),
-}
-
-#[derive(Debug)]
-pub enum OrFilterElem{
-    Single(FilterElem),
-    And(Vec<FilterElem>),
-}
-
-impl QueryFilter for (){
-    fn get_filters(_es: &mut EntityStorage, _filter_elems: &mut Vec<FilterElem>) {
-    }
-    fn get_or_filters(_es: &mut EntityStorage, _filter_elems: &mut Vec<OrFilterElem>) {
-    }
-}
-impl<T: Component> QueryFilter for With<T>{
-    fn get_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
-        filter_elems.push(FilterElem::With(es.create_or_get_component::<T>()));
-    }
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<OrFilterElem>) {
-        filter_elems.push(OrFilterElem::Single(FilterElem::With(es.create_or_get_component::<T>())));
-    }
-}
-impl<T: Component> QueryFilter for Without<T>{
-    fn get_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
-        filter_elems.push(FilterElem::Without(es.create_or_get_component::<T>()));
-    }
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<OrFilterElem>) {
-        filter_elems.push(OrFilterElem::Single(FilterElem::Without(es.create_or_get_component::<T>())));
-    }
-}
-impl<F: QueryFilter> QueryFilter for Or<F>{
-    fn get_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
-        let mut or_inner_elems = Vec::new();
-        F::get_or_filters(es, &mut or_inner_elems);
-        filter_elems.push(FilterElem::Or(or_inner_elems));
-    }
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<OrFilterElem>) {
-       let mut or_inner_elems = Vec::new();
-       F::get_or_filters(es, &mut or_inner_elems); 
-       filter_elems.push(OrFilterElem::Single(FilterElem::Or(or_inner_elems)));
-    }
-}
-
-macro_rules! impl_query_filter_tuples {
-    ($($t:ident), *) => {
-        impl<$($t : QueryFilter), *> QueryFilter for ($($t),*,){
-            fn get_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
-                $($t::get_filters(es, filter_elems);) *
-            }
-            fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<OrFilterElem>) {
-                $(
-                   let mut $t = Vec::new();
-                   $t::get_filters(es, &mut $t);
-                   filter_elems.push(OrFilterElem::And($t));
-                ) *
-            }
-        }
-    };
-}
-
-#[rustfmt::skip]
-all_tuples!(
-    impl_query_filter_tuples,
-    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
-);
 
 impl<T: Component> QueryParam for &T {
     type QueryItem<'new> = &'new T;
@@ -398,7 +301,12 @@ all_tuples!(
 mod test {
     use std::usize;
 
-    use crate::ecs::{component::Component, query::{Or, With, Without}, system::Res, world::World};
+    use crate::ecs::{
+        component::Component,
+        query::query_filter::{Or, With, Without},
+        system::Res,
+        world::World,
+    };
 
     use super::Query;
 
@@ -408,33 +316,75 @@ mod test {
     struct Comp2(usize, usize);
     impl Component for Comp2 {}
 
-    fn test_system1(
-        prm: Res<i32>,
-        prm2: Res<usize>,
-        mut query: Query<(&Comp1, &mut Comp2), (With<Comp1>, With<Comp1>,With<Comp1>,With<Comp1>,Or<(With<Comp1>,Or<(With<Comp1>,With<Comp1>)>, Without<Comp2>)>)>,
-    ) {
+    struct Marker1();
+    impl Component for Marker1 {}
+    struct Marker2();
+    impl Component for Marker2 {}
+    struct Marker3();
+    impl Component for Marker3 {}
+
+    fn test_system1(prm: Res<i32>, prm2: Res<usize>, mut query: Query<(&Comp1, &mut Comp2)>) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
+        assert!(*prm.value == 2345678_i32);
+        assert!(*prm2.value == 33330000);
 
         for (comp1, comp2) in query.iter() {
-            println!("comp1: {}", comp1.0);
-            println!("comp2: {}", comp2.0);
+            println!("comp1: {}; {}", comp1.0, comp1.1);
+            println!("comp2: {}; {}", comp2.0, comp2.1);
             comp2.0 = 2;
+            assert_eq!(comp2.0, 2);
         }
+        assert_eq!(query.iter().count(), 3);
+    }
+
+    fn test_system2(mut query: Query<&Comp1>) {
+        for comp1 in query.iter() {
+            println!("comp1: {}; {}", comp1.0, comp1.1);
+            assert_eq!(comp1.0, 12);
+            assert_eq!(comp1.1, 34);
+        }
+        assert_eq!(query.iter().count(), 4);
+    }
+
+    fn test_system3(mut query: Query<(&Comp1, &Marker1), Without<Marker2>>) {
+        for (comp1, _) in query.iter() {
+            println!("comp1: {}; {}", comp1.0, comp1.1);
+            assert_eq!(comp1.0, 12);
+            assert_eq!(comp1.1, 34);
+        }
+        assert_eq!(query.iter().count(), 0);
+    }
+
+    fn test_system4(mut query: Query<&Comp1, Or<(With<Marker1>, With<Marker2>, With<Marker3>)>>) {
+        for comp1 in query.iter() {
+            println!("comp1: {}; {}", comp1.0, comp1.1);
+        }
+        assert_eq!(query.iter().count(), 3);
     }
 
     #[test]
-    fn it_works() {
+    fn queries_test1() {
         let mut world = World::new();
-        let num1: i32 = 2324;
-        let num2: usize = 2324;
-        world.systems.add_system(test_system1);
-        unsafe { (&mut *world.data.get()).add_resource(num1) };
-        unsafe { (&mut *world.data.get()).add_resource(num2) };
-        let es = &mut world.data.get_mut().entity_storage;
-        es.add_entity((Comp2(12, 34), Comp1(56, 78)));
-        es.add_entity(Comp1(12, 34));
-        es.add_entity((Comp1(12, 34), Comp2(56, 78)));
-        es.add_entity((Comp1(12, 34), Comp2(56, 78)));
+        let num1: i32 = 2345678;
+        let num2: usize = 33330000;
+        world.add_system(test_system1);
+        world.add_system(test_system2);
+        world.add_system(test_system3);
+        world.add_system(test_system4);
+        world.add_resource(num1);
+        world.add_resource(num2);
+
+        world.add_entity((
+            Comp2(56, 78),
+            Comp1(12, 34),
+            Marker1(),
+            Marker2(),
+            Marker3(),
+        ));
+        world.add_entity((Comp1(12, 34), Comp2(56, 78), Marker2()));
+        world.add_entity((Comp1(12, 34), Comp2(56, 78), Marker3()));
+
+        world.add_entity(Comp1(12, 34));
         world.run();
     }
 }

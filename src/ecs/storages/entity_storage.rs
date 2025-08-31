@@ -4,8 +4,7 @@ use std::any::TypeId;
 
 use crate::{
     ecs::{
-        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::{Entities, Entity, EntityKey},
+        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map}, ecs_dependency_graph::EcsDependencyGraph, entity::{Entities, Entity, EntityKey}
     },
     utils::{sorted_vec::SortedVec, tuple_types::TupleTypesExt},
 };
@@ -21,8 +20,8 @@ pub struct EntityStorage {
     pub(crate) tables: Map<ArchetypeId, TableStorage>,
     //mapping data
     pub(crate) typeid_compid_map: Map<TypeId, ComponentId>,
-    //pub(crate) compid_archids_map: Map<ComponentId, HashSet<ArchetypeId>>,
     pub(crate) compids_archid_map: Map<SortedVec<ComponentId>, ArchetypeId>,
+    pub(crate) depend_graph: EcsDependencyGraph,
     pub(crate) cache: EntityStorageCache,
 }
 
@@ -34,8 +33,8 @@ impl EntityStorage {
             archetypes: Vec::new(),
             tables: Map::new(),
             typeid_compid_map: Map::new(),
-            //compid_archids_map: Map::new(),
             compids_archid_map: Map::new(),
+            depend_graph: EcsDependencyGraph::new(),
             cache: EntityStorageCache::new(),
         }
     }
@@ -195,6 +194,7 @@ impl EntityStorage {
         self.tables
             .insert(archetype_id, TableStorage::new(archetype_id, self));
         self.compids_archid_map.insert(comp_ids, archetype_id);
+        self.depend_graph.insert_archetype(archetype_id);
 
         archetype_id
     }
@@ -219,6 +219,8 @@ impl EntityStorage {
         let comp_info = ComponentInfo::new::<T>(comp_id);
         self.components.push(comp_info);
         self.typeid_compid_map.insert(type_id, ComponentId(comp_id));
-        ComponentId(comp_id)
+        let comp_id = ComponentId(comp_id);
+        self.depend_graph.insert_component(comp_id);
+        comp_id
     }
 }

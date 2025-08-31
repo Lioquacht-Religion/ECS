@@ -2,7 +2,7 @@
 
 use std::{cell::UnsafeCell, marker::PhantomData};
 
-use crate::all_tuples;
+use crate::{all_tuples, utils::ecs_id::{impl_ecs_id, EcsId}};
 
 use super::world::WorldData;
 
@@ -25,12 +25,10 @@ impl Systems {
     pub fn add_system<Input, S: System + 'static>(
         &mut self,
         value: impl IntoSystem<Input, System = S>,
-    ) {
+    ) -> SystemId {
+        let next_id = self.system_vec.len();
         self.system_vec.push(Box::new(value.into_system()));
-    }
-
-    pub fn add_system2<Input, S: System + 'static>(&mut self, value: S) {
-        self.system_vec.push(Box::new(value));
+        next_id.into()
     }
 
     pub fn run_systems(&mut self, world_data: &UnsafeCell<WorldData>) {
@@ -39,6 +37,10 @@ impl Systems {
         }
     }
 }
+
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct SystemId(u32);
+impl_ecs_id!(SystemId);
 
 pub trait System {
     fn run(&mut self, world_data: &UnsafeCell<WorldData>);
@@ -195,19 +197,25 @@ all_tuples!(
 
 #[cfg(test)]
 mod test {
-    use crate::ecs::world::World;
+    use crate::ecs::{system::ResMut, world::World};
 
     use super::Res;
 
-    fn test_system1(prm: Res<i32>, prm2: Res<usize>) {
+    fn test_system1(prm: Res<i32>, prm2: ResMut<usize>) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
+        assert_eq!(2324, *prm.value);
+        assert_eq!(4350, *prm2.value);
+        *prm2.value += 999999999;
+        assert_eq!(4350 + 999999999, *prm2.value);
     }
 
     #[test]
     fn it_works() {
         let mut world = World::new();
         let num1: i32 = 2324;
-        world.systems.add_system(test_system1);
-        unsafe { (&mut *world.data.get()).add_resource(num1) };
+        let num2: usize = 4350;
+        world.add_system(test_system1);
+        world.add_resource(num1);
+        world.add_resource(num2);
     }
 }

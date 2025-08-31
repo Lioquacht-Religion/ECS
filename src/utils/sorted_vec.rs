@@ -56,7 +56,7 @@ impl<T: Ord + Eq + Hash> SortedVec<T> {
         None
     }
 
-    pub fn is_subset_of(&self, other: &SortedVec<T>) -> bool {
+    pub fn is_subset_of2(&self, other: &SortedVec<T>) -> bool {
         let mut wholeset_iter = other.iter();
         let mut wholeset_elem_opt = wholeset_iter.next();
         let mut contains_count = 0;
@@ -70,6 +70,32 @@ impl<T: Ord + Eq + Hash> SortedVec<T> {
                 return false;
             }
         }
+        contains_count == self.get_vec().len()
+    }
+    pub fn is_subset_of(&self, wholeset: &SortedVec<T>) -> bool {
+        let subset_iter = self.iter();
+        let mut contains_count = 0;
+
+        if self.vec.len() > wholeset.vec.len() {
+            return false;
+        }
+
+        for el in subset_iter {
+            for el2 in wholeset.iter() {
+                if el == el2 {
+                    contains_count += 1;
+                    continue;
+                }
+            }
+        }
+
+        println!(
+            "contains count: {}; subset len: {}; wholeset len: {}",
+            contains_count,
+            self.get_vec().len(),
+            wholeset.vec.len()
+        );
+
         contains_count == self.get_vec().len()
     }
 }

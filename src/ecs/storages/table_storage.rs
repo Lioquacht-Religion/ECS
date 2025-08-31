@@ -5,7 +5,11 @@ use std::alloc::Layout;
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, StorageTypes},
-        entity::{Entity, EntityKey, EntityKeyIterUnsafe}, storages::thin_blob_vec::{ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe, ThinBlobIterUnsafe},
+        entity::{Entity, EntityKey, EntityKeyIterUnsafe},
+        storages::thin_blob_vec::{
+            ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
+            ThinBlobIterUnsafe,
+        },
     },
     utils::{
         tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},

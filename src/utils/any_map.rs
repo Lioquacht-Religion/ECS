@@ -54,13 +54,14 @@ impl AnyMap {
             Some(boxed_val) => Some(*boxed_val.downcast::<T>().unwrap()),
         }
     }
+
+    pub fn len(&self) -> usize{
+        self.data.len()
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::utils::gen_vec::{GenVec, Key};
-
-    use super::AnyMap;
 
     #[derive(Debug, PartialEq, Eq)]
     struct Pos(i32, i32);

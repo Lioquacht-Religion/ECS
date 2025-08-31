@@ -3,5 +3,7 @@ pub mod component;
 pub mod entity;
 pub mod query;
 pub mod storages;
+pub mod resource;
+pub mod ecs_dependency_graph;
 pub mod system;
 pub mod world;

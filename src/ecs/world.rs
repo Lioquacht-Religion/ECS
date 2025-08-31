@@ -1,12 +1,17 @@
 // world.rs
 
-use std::{cell::UnsafeCell, collections::HashMap};
+use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
 
-use crate::utils::{any_map::AnyMap, sorted_vec::SortedVec};
+use crate::{
+    ecs::{
+        ecs_dependency_graph::EcsDependencyGraph, entity::EntityKey, query::QueryStateKey, resource::ResourceId, system::{IntoSystem, System}
+    },
+    utils::{any_map::AnyMap, tuple_types::TupleTypesExt},
+};
 
 use super::{
-    commands::CommandQueuesStorage, component::ComponentId, query::QueryState,
-    storages::entity_storage::EntityStorage, system::Systems,
+    commands::CommandQueuesStorage, query::QueryState, storages::entity_storage::EntityStorage,
+    system::Systems,
 };
 
 pub struct World {
@@ -17,7 +22,7 @@ pub struct World {
 pub struct WorldData {
     pub(crate) resources: AnyMap,
     pub entity_storage: EntityStorage,
-    pub(crate) query_data: HashMap<SortedVec<ComponentId>, QueryState>,
+    pub(crate) query_data: HashMap<QueryStateKey, QueryState>,
     pub(crate) commands_queues: CommandQueuesStorage,
 }
 
@@ -29,11 +34,30 @@ impl World {
         }
     }
 
+    pub fn add_resource<T: 'static>(&mut self, value: T) {
+        self.data.get_mut().add_resource(value);
+    }
+
+    pub fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
+        self.data.get_mut().entity_storage.add_entity(input)
+    }
+
+    pub fn add_system<Input, S: System + 'static>(
+        &mut self,
+        value: impl IntoSystem<Input, System = S>,
+    ) {
+        self.systems.add_system(value);
+    }
+
     pub fn run(&mut self) {
         self.data.get_mut().entity_storage.entities.reset_barriers();
         self.systems.run_systems(&mut self.data);
         self.data.get_mut().execute_commands();
-        self.data.get_mut().entity_storage.entities.update_with_barriers();
+        self.data
+            .get_mut()
+            .entity_storage
+            .entities
+            .update_with_barriers();
     }
 }
 
@@ -47,8 +71,9 @@ impl WorldData {
         }
     }
 
-    pub fn add_resource<T: 'static>(&mut self, value: T) {
+    pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId{
         self.resources.insert(value);
+        ResourceId::new(TypeId::of::<T>())
     }
 
     pub(crate) fn execute_commands(&mut self) {
