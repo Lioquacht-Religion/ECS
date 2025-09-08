@@ -4,7 +4,7 @@ use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
 
 use crate::{
     ecs::{
-        ecs_dependency_graph::EcsDependencyGraph, entity::EntityKey, query::QueryStateKey, resource::ResourceId, system::{IntoSystem, System}
+        entity::EntityKey, query::QueryStateKey, resource::ResourceId, system::{IntoSystem, System, SystemId}
     },
     utils::{any_map::AnyMap, tuple_types::TupleTypesExt},
 };
@@ -23,6 +23,7 @@ pub struct WorldData {
     pub(crate) resources: AnyMap,
     pub entity_storage: EntityStorage,
     pub(crate) query_data: HashMap<QueryStateKey, QueryState>,
+    pub(crate) query_data2: Vec<QueryState>,
     pub(crate) commands_queues: CommandQueuesStorage,
 }
 
@@ -34,8 +35,8 @@ impl World {
         }
     }
 
-    pub fn add_resource<T: 'static>(&mut self, value: T) {
-        self.data.get_mut().add_resource(value);
+    pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId{
+        self.data.get_mut().add_resource(value)
     }
 
     pub fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
@@ -45,8 +46,8 @@ impl World {
     pub fn add_system<Input, S: System + 'static>(
         &mut self,
         value: impl IntoSystem<Input, System = S>,
-    ) {
-        self.systems.add_system(value);
+    ) -> SystemId{
+        self.systems.add_system(value)
     }
 
     pub fn run(&mut self) {
@@ -67,13 +68,16 @@ impl WorldData {
             resources: AnyMap::new(),
             entity_storage: EntityStorage::new(),
             query_data: HashMap::new(),
+            query_data2: Vec::new(),
             commands_queues: CommandQueuesStorage::new(),
         }
     }
 
     pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId{
         self.resources.insert(value);
-        ResourceId::new(TypeId::of::<T>())
+        let resource_id = ResourceId::new(TypeId::of::<T>());
+        self.entity_storage.depend_graph.insert_resource(resource_id);
+        resource_id
     }
 
     pub(crate) fn execute_commands(&mut self) {

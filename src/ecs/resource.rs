@@ -8,8 +8,7 @@ pub struct ResourceId(TypeId);
 impl ResourceId {
     pub fn new(type_id: TypeId) -> Self{
         Self(type_id)
-    }
-    
+    } 
 }
 
 //trait Resource{}

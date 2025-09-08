@@ -2,7 +2,7 @@
 
 use std::cell::UnsafeCell;
 
-use crate::{ecs::entity::Entities, utils::tuple_types::TupleTypesExt};
+use crate::{ecs::{entity::Entities, system::SystemParamId}, utils::tuple_types::TupleTypesExt};
 
 use super::{entity::EntityKey, system::SystemParam, world::WorldData};
 
@@ -58,6 +58,9 @@ impl<'w, 's> SystemParam for Commands<'w, 's> {
         //SAFETY: Because vec is stored behind box pointer on the heap,
         // it's address should be stable when moved.
         Commands::new(&world_data.entity_storage.entities, &mut *command_queue_ptr)
+    }
+    fn create_system_param_data(system_param_ids: &mut Vec<super::system::SystemParamId>, _world_data: &UnsafeCell<WorldData>) {
+        system_param_ids.push(SystemParamId::NotRelevant);
     }
 }
 
