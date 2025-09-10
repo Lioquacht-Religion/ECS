@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     ecs::{component::{ArchetypeId, ComponentId}, resource::ResourceId, system::SystemId},
-    utils::{ecs_id::{impl_ecs_id, EcsId}, gen_vec::Key, graph::{Edge, Graph, Node}},
+    utils::{ecs_id::{impl_ecs_id, EcsId}, gen_vec::Key, graph::{Graph, Node}},
 };
 
 pub enum EcsNode {

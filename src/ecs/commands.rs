@@ -2,7 +2,7 @@
 
 use std::cell::UnsafeCell;
 
-use crate::{ecs::{entity::Entities, system::SystemParamId}, utils::tuple_types::TupleTypesExt};
+use crate::{ecs::{entity::Entities, system::{SystemId, SystemParamId}}, utils::tuple_types::TupleTypesExt};
 
 use super::{entity::EntityKey, system::SystemParam, world::WorldData};
 
@@ -51,7 +51,7 @@ pub struct Commands<'w, 's> {
 
 impl<'w, 's> SystemParam for Commands<'w, 's> {
     type Item<'new> = Self;
-    unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
+    unsafe fn retrieve<'r>(_system_param_index: &mut usize, _system_param_ids: &[SystemParamId], world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
         let world_data = &mut *world_data.get();
         let command_queue_ptr = world_data.commands_queues.put_inuse();
 
@@ -59,7 +59,7 @@ impl<'w, 's> SystemParam for Commands<'w, 's> {
         // it's address should be stable when moved.
         Commands::new(&world_data.entity_storage.entities, &mut *command_queue_ptr)
     }
-    fn create_system_param_data(system_param_ids: &mut Vec<super::system::SystemParamId>, _world_data: &UnsafeCell<WorldData>) {
+    fn create_system_param_data(_system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, _world_data: &UnsafeCell<WorldData>) {
         system_param_ids.push(SystemParamId::NotRelevant);
     }
 }

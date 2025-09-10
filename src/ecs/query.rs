@@ -7,7 +7,7 @@ use crate::{
     ecs::{
         entity::EntityKey,
         query::query_filter::{FilterElem, QueryFilter},
-        storages::table_storage::TableStorageTupleIter, system::SystemParamId,
+        storages::table_storage::TableStorageTupleIter, system::{SystemId, SystemParamId},
     },
     utils::{
         sorted_vec::SortedVec,
@@ -134,7 +134,7 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
 
 impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> {
     type Item<'new> = Query<'new, 's, P, F>;
-    unsafe fn retrieve<'r>(world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
+    unsafe fn retrieve<'r>(system_param_index: &mut usize, system_param_ids: &[SystemParamId], world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
         let world_data_mut = world_data.get().as_mut().unwrap();
         let mut comp_ids = world_data_mut
             .entity_storage
@@ -205,10 +205,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         Query::new(world_data, query_data)
     }
 
-    fn create_system_param_data(
-        system_param_ids: &mut Vec<SystemParamId>, 
-        world_data: &UnsafeCell<WorldData>
-    ) {
+    fn create_system_param_data(system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, world_data: &UnsafeCell<WorldData>) {
         let world_data_mut = unsafe{
             world_data.get().as_mut().unwrap()
         };
