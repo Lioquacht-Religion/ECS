@@ -7,11 +7,11 @@ use crate::{
     ecs::{
         entity::EntityKey,
         query::query_filter::{FilterElem, QueryFilter},
-        storages::table_storage::TableStorageTupleIter, system::{SystemId, SystemParamId},
+        storages::table_storage::TableStorageTupleIter,
+        system::{SystemId, SystemParamId},
     },
     utils::{
-        sorted_vec::SortedVec,
-        tuple_iters::{TupleIterConstructor, TupleIterator},
+        ecs_id::EcsId, sorted_vec::SortedVec, tuple_iters::{TupleIterConstructor, TupleIterator}
     },
 };
 
@@ -33,6 +33,7 @@ pub struct Query<'w, 's, P: QueryParam, F: QueryFilter = ()> {
     _filter_marker: PhantomData<F>,
 }
 
+#[derive(Debug)]
 pub struct QueryState {
     comp_ids: SortedVec<ComponentId>,
     optional_comp_ids: SortedVec<ComponentId>,
@@ -134,81 +135,28 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
 
 impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> {
     type Item<'new> = Query<'new, 's, P, F>;
-    unsafe fn retrieve<'r>(system_param_index: &mut usize, system_param_ids: &[SystemParamId], world_data: &'r UnsafeCell<WorldData>) -> Self::Item<'r> {
+    unsafe fn retrieve<'r>(
+        system_param_index: &mut usize,
+        system_param_ids: &[SystemParamId],
+        world_data: &'r UnsafeCell<WorldData>,
+    ) -> Self::Item<'r> {
         let world_data_mut = world_data.get().as_mut().unwrap();
-        let mut comp_ids = world_data_mut
-            .entity_storage
-            .cache
-            .compid_vec_cache
-            .take_cached();
-        P::comp_ids_rec(world_data, &mut comp_ids);
-        let comp_ids: SortedVec<ComponentId> = comp_ids.into();
-
-
-        let mut filter = Vec::new();
-        F::get_and_filters(&mut world_data_mut.entity_storage, &mut filter);
-
-        let query_state_key = QueryStateKey { comp_ids, filter };
-
-        if let Some(query_data) = (*world_data.get()).query_data.get(&query_state_key) {
-            world_data_mut
-                .entity_storage
-                .cache
-                .compid_vec_cache
-                .insert(query_state_key.comp_ids.into());
-            return Self::Item::<'r>::new(world_data, query_data);
+        let sys_prm_id = &system_param_ids[*system_param_index];
+        if let SystemParamId::Query(qid) = sys_prm_id{
+           let qs = &world_data_mut.query_data2[qid.id_usize()];
+           println!("init querystate: {:?}", qs);
+           
+           return Query::new(world_data, qs);
         }
-
-        let arch_ids = world_data_mut
-            .entity_storage
-            .find_fitting_archetypes(&query_state_key.comp_ids);
-
-        // remove archetypes that do not match the filter
-        let arch_ids = arch_ids
-            .iter()
-            .filter(|aid| {
-                let arch = &world_data_mut.entity_storage.archetypes[aid.0 as usize];
-                let comp_ids_set: HashSet<ComponentId> = HashSet::from_iter(
-                    arch.soa_comp_ids
-                        .iter()
-                        .chain(arch.aos_comp_ids.iter())
-                        .map(|cid| *cid),
-                );
-                let res = query_filter::comp_ids_compatible_with_filter(
-                    &comp_ids_set,
-                    &query_state_key.filter,
-                );
-                println!(
-                    "arch with comps: {:?}; filter: {:?}; valid status: {res}",
-                    &comp_ids_set, &query_state_key.filter
-                );
-                res
-            })
-            .cloned()
-            .collect();
-
-        let query_data = QueryState {
-            //TODO: remove comp_ids/filter ? already used as key, remove cloning
-            comp_ids: query_state_key.comp_ids.clone(),
-            optional_comp_ids: SortedVec::new(),
-            shared_ref_comps: HashSet::new(),
-            exclusive_ref_comps: HashSet::new(),
-            arch_ids,
-            filter: query_state_key.filter.clone(),
-        };
-
-        world_data_mut
-            .query_data
-            .insert(query_state_key.clone(), query_data);
-
-        let query_data = world_data_mut.query_data.get(&query_state_key).unwrap();
-        Query::new(world_data, query_data)
+        panic!("SystemParamId=<{}> is not a QueryId! param_ids: {:?}", *system_param_index, system_param_ids)
     }
 
-    fn create_system_param_data(system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, world_data: &UnsafeCell<WorldData>) {
-        let world_data_mut = unsafe{
-            world_data.get().as_mut().unwrap()
-        };
+    fn create_system_param_data(
+        system_id: SystemId,
+        system_param_ids: &mut Vec<SystemParamId>,
+        world_data: &UnsafeCell<WorldData>,
+    ) {
+        let world_data_mut = unsafe { world_data.get().as_mut().unwrap() };
         let mut comp_ids = world_data_mut
             .entity_storage
             .cache
@@ -216,7 +164,8 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
-
+        let mut ref_kinds: Vec<RefKind> = Vec::with_capacity(comp_ids.get_vec().len());
+        P::ref_kinds(&mut ref_kinds);
 
         let mut filter = Vec::new();
         F::get_and_filters(&mut world_data_mut.entity_storage, &mut filter);
@@ -227,8 +176,10 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .entity_storage
             .find_fitting_archetypes(&query_state_key.comp_ids);
 
+        println!("archs 1: {:?}", arch_ids);
+
         // remove archetypes that do not match the filter
-        let arch_ids = arch_ids
+        let arch_ids : Vec<ArchetypeId> = arch_ids
             .iter()
             .filter(|aid| {
                 let arch = &world_data_mut.entity_storage.archetypes[aid.0 as usize];
@@ -247,6 +198,26 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .cloned()
             .collect();
 
+        println!("archs 2: {:?}", arch_ids);
+
+        let next_query_id = world_data_mut.query_data2.len().into();
+        system_param_ids.push(SystemParamId::Query(next_query_id));
+
+        // adding system dependencies to graph
+        // systems <- add queries <- add components and filtered archetypes
+
+        let depend_graph = &mut world_data_mut.entity_storage.depend_graph;
+        depend_graph.insert_system_components(
+            system_id,
+            &query_state_key.comp_ids.get_vec(),
+            &ref_kinds,
+        );
+        depend_graph.insert_query_archetypes(
+            next_query_id,
+            &arch_ids
+        );
+        depend_graph.insert_system_query(system_id, next_query_id);
+
         let query_data = QueryState {
             //TODO: remove comp_ids/filter ? already used as key, remove cloning
             comp_ids: query_state_key.comp_ids.clone(),
@@ -257,12 +228,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             filter: query_state_key.filter.clone(),
         };
 
-        let next_query_id = world_data_mut.query_data2.len();
-        system_param_ids.push(SystemParamId::Query(next_query_id.into()));
-
-        world_data_mut
-            .query_data2
-            .push(query_data);
+        world_data_mut.query_data2.push(query_data);
     }
 }
 
@@ -272,8 +238,6 @@ pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     fn type_ids_rec(vec: &mut Vec<TypeId>);
     fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>);
     fn ref_kinds(vec: &mut Vec<RefKind>);
-    //TODO: fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<(ComponentId>,
-    //RefType));
 }
 
 impl<T: Component> QueryParam for &T {

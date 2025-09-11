@@ -1,9 +1,9 @@
 pub mod commands;
 pub mod component;
+pub mod ecs_dependency_graph;
 pub mod entity;
 pub mod query;
-pub mod storages;
 pub mod resource;
-pub mod ecs_dependency_graph;
+pub mod storages;
 pub mod system;
 pub mod world;

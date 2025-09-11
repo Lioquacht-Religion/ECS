@@ -6,9 +6,9 @@ use std::any::TypeId;
 pub struct ResourceId(TypeId);
 
 impl ResourceId {
-    pub fn new(type_id: TypeId) -> Self{
+    pub fn new(type_id: TypeId) -> Self {
         Self(type_id)
-    } 
+    }
 }
 
 //trait Resource{}

@@ -1,8 +1,6 @@
 // graph.rs
 
-use crate::{
-    utils::gen_vec::{GenVec, Key}
-};
+use crate::utils::gen_vec::{GenVec, Key};
 
 pub struct Graph<V, E = ()> {
     nodes: GenVec<Node<V, E>>,

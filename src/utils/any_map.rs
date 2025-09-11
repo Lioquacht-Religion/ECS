@@ -55,7 +55,7 @@ impl AnyMap {
         }
     }
 
-    pub fn len(&self) -> usize{
+    pub fn len(&self) -> usize {
         self.data.len()
     }
 }

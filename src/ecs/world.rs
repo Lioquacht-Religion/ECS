@@ -4,7 +4,10 @@ use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
 
 use crate::{
     ecs::{
-        entity::EntityKey, query::QueryStateKey, resource::ResourceId, system::{IntoSystem, System, SystemId}
+        entity::EntityKey,
+        query::QueryStateKey,
+        resource::ResourceId,
+        system::{IntoSystem, System, SystemId},
     },
     utils::{any_map::AnyMap, tuple_types::TupleTypesExt},
 };
@@ -35,7 +38,7 @@ impl World {
         }
     }
 
-    pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId{
+    pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId {
         self.data.get_mut().add_resource(value)
     }
 
@@ -46,8 +49,8 @@ impl World {
     pub fn add_system<Input, S: System + 'static>(
         &mut self,
         value: impl IntoSystem<Input, System = S>,
-    ) -> SystemId{
-        self.systems.add_system(value)
+    ) -> SystemId {
+        self.systems.add_system(value, &self.data)
     }
 
     pub fn run(&mut self) {
@@ -73,10 +76,12 @@ impl WorldData {
         }
     }
 
-    pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId{
+    pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId {
         self.resources.insert(value);
         let resource_id = ResourceId::new(TypeId::of::<T>());
-        self.entity_storage.depend_graph.insert_resource(resource_id);
+        self.entity_storage
+            .depend_graph
+            .insert_resource(resource_id);
         resource_id
     }
 

@@ -463,7 +463,7 @@ mod test {
         let mut world = World::new();
         let num1: i32 = 2324;
         let num2: usize = 2324;
-        world.systems.add_system(test_system1);
+        world.add_system(test_system1);
         unsafe { (&mut *world.data.get()).add_resource(num1) };
         unsafe { (&mut *world.data.get()).add_resource(num2) };
 

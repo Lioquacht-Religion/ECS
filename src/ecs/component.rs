@@ -5,7 +5,10 @@ use std::{
     ptr::drop_in_place, u32, usize,
 };
 
-use crate::utils::{ecs_id::{impl_ecs_id, EcsId}, sorted_vec::SortedVec};
+use crate::utils::{
+    ecs_id::{impl_ecs_id, EcsId},
+    sorted_vec::SortedVec,
+};
 
 pub type Map<K, V> = HashMap<K, V>;
 
@@ -68,7 +71,6 @@ impl From<ArchetypeId> for u32 {
     }
 }
 
-
 impl ComponentInfo {
     unsafe fn drop_ptr<T>(ptr: *mut u8) {
         let typed_ptr: *mut T = ptr.cast::<T>();
@@ -108,7 +110,7 @@ mod test {
 
     #[test]
     fn test_tuple_ext_methods() {
-        let t = Type1(); 
+        let t = Type1();
         let mut vec = Vec::new();
         t.self_type_ids_rec(&mut vec);
     }

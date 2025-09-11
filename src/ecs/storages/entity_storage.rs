@@ -4,7 +4,9 @@ use std::any::TypeId;
 
 use crate::{
     ecs::{
-        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map}, ecs_dependency_graph::EcsDependencyGraph, entity::{Entities, Entity, EntityKey}
+        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
+        ecs_dependency_graph::EcsDependencyGraph,
+        entity::{Entities, Entity, EntityKey},
     },
     utils::{sorted_vec::SortedVec, tuple_types::TupleTypesExt},
 };

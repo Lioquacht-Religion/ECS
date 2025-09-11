@@ -6,6 +6,6 @@ pub mod graph;
 pub mod het_stack;
 pub mod sorted_vec;
 
+pub mod ecs_id;
 pub mod tuple_iters;
 pub mod tuple_types;
-pub mod ecs_id;
