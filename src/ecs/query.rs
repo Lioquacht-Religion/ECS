@@ -143,7 +143,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         let world_data_mut = world_data.get().as_mut().unwrap();
         let sys_prm_id = &system_param_ids[*system_param_index];
         if let SystemParamId::Query(qid) = sys_prm_id{
-           let qs = &world_data_mut.query_data2[qid.id_usize()];
+           let qs = &world_data_mut.query_data[qid.id_usize()];
            println!("init querystate: {:?}", qs);
            
            return Query::new(world_data, qs);
@@ -176,8 +176,6 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .entity_storage
             .find_fitting_archetypes(&query_state_key.comp_ids);
 
-        println!("archs 1: {:?}", arch_ids);
-
         // remove archetypes that do not match the filter
         let arch_ids : Vec<ArchetypeId> = arch_ids
             .iter()
@@ -198,9 +196,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .cloned()
             .collect();
 
-        println!("archs 2: {:?}", arch_ids);
-
-        let next_query_id = world_data_mut.query_data2.len().into();
+        let next_query_id = world_data_mut.query_data.len().into();
         system_param_ids.push(SystemParamId::Query(next_query_id));
 
         // adding system dependencies to graph
@@ -228,7 +224,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             filter: query_state_key.filter.clone(),
         };
 
-        world_data_mut.query_data2.push(query_data);
+        world_data_mut.query_data.push(query_data);
     }
 }
 
@@ -390,12 +386,13 @@ mod test {
         let mut world = World::new();
         let num1: i32 = 2345678;
         let num2: usize = 33330000;
+
+        world.add_resource(num1);
+        world.add_resource(num2);
         world.add_system(test_system1);
         world.add_system(test_system2);
         world.add_system(test_system3);
         world.add_system(test_system4);
-        world.add_resource(num1);
-        world.add_resource(num2);
 
         world.add_entity((
             Comp2(56, 78),
@@ -406,8 +403,8 @@ mod test {
         ));
         world.add_entity((Comp1(12, 34), Comp2(56, 78), Marker2()));
         world.add_entity((Comp1(12, 34), Comp2(56, 78), Marker3()));
-
         world.add_entity(Comp1(12, 34));
-        world.run();
+
+        world.init_and_run();
     }
 }

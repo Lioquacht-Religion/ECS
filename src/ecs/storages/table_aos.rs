@@ -469,12 +469,16 @@ mod test {
 
         let es = &mut world.data.get_mut().entity_storage;
         init_es_insert(es);
+        world.init_systems();
+        println!("archid and comps: {:?}", world.data.get_mut().entity_storage.compids_archid_map);
 
+        let es = &mut world.data.get_mut().entity_storage;
         es.tables
             .get_mut(&ArchetypeId(0))
             .unwrap()
             .table_aos
             .print_internals(&es.components);
+
 
         unsafe {
             let iter = world

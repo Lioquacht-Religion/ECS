@@ -1,11 +1,10 @@
 // world.rs
 
-use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
+use std::{any::TypeId, cell::UnsafeCell};
 
 use crate::{
     ecs::{
         entity::EntityKey,
-        query::QueryStateKey,
         resource::ResourceId,
         system::{IntoSystem, System, SystemId},
     },
@@ -25,8 +24,7 @@ pub struct World {
 pub struct WorldData {
     pub(crate) resources: AnyMap,
     pub entity_storage: EntityStorage,
-    pub(crate) query_data: HashMap<QueryStateKey, QueryState>,
-    pub(crate) query_data2: Vec<QueryState>,
+    pub(crate) query_data: Vec<QueryState>,
     pub(crate) commands_queues: CommandQueuesStorage,
 }
 
@@ -50,7 +48,11 @@ impl World {
         &mut self,
         value: impl IntoSystem<Input, System = S>,
     ) -> SystemId {
-        self.systems.add_system(value, &self.data)
+        self.systems.add_system(value)
+    }
+
+    pub fn init_systems(&mut self){
+        self.systems.init_systems(&mut self.data);
     }
 
     pub fn run(&mut self) {
@@ -63,6 +65,19 @@ impl World {
             .entities
             .update_with_barriers();
     }
+
+    pub fn init_and_run(&mut self){
+        self.init_systems();
+        self.run();
+    }
+
+    pub fn run_loop(&mut self){
+        self.init_systems();
+        loop{
+            self.run();
+        }
+    }
+
 }
 
 impl WorldData {
@@ -70,8 +85,7 @@ impl WorldData {
         WorldData {
             resources: AnyMap::new(),
             entity_storage: EntityStorage::new(),
-            query_data: HashMap::new(),
-            query_data2: Vec::new(),
+            query_data: Vec::new(),
             commands_queues: CommandQueuesStorage::new(),
         }
     }

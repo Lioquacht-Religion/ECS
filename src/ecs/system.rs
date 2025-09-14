@@ -47,19 +47,27 @@ impl Systems {
 
     pub fn add_system<Input, S: System + 'static>(
         &mut self,
-        value: impl IntoSystem<Input, System = S>,
-        world_data: &UnsafeCell<WorldData>
+        value: impl IntoSystem<Input, System = S>
     ) -> SystemId {
         let next_id : SystemId = self.system_vec.len().into();
-        let mut system = value.into_system();
-        let mut system_param_ids = Vec::new();
-        system.init(next_id, &mut system_param_ids, world_data);
-        self.system_param_data.insert(next_id, system_param_ids);
+        let system = value.into_system();
         self.system_vec.push(Box::new(system));
         next_id.into()
     }
 
-    pub fn run_systems(&mut self, world_data: &UnsafeCell<WorldData>) {
+    pub fn init_systems(
+        &mut self,
+        world_data: &mut UnsafeCell<WorldData>
+    ){
+        for (system_id, system) in self.system_vec.iter_mut().enumerate(){
+            let system_id : SystemId = system_id.into();
+            let mut system_param_ids = Vec::new();
+            system.init(system_id, &mut system_param_ids, world_data);
+            self.system_param_data.insert(system_id, system_param_ids);
+        }
+    }
+
+    pub fn run_systems(&mut self, world_data: &mut UnsafeCell<WorldData>) {
         for (i, sys) in self.system_vec.iter_mut().enumerate() {
             let system_id: SystemId = i.into();
             let system_params = self

@@ -319,6 +319,6 @@ mod tests {
 
         init_es_insert(es);
 
-        world.run();
+        world.init_and_run();
     }
 }
