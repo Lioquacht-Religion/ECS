@@ -335,6 +335,12 @@ mod test {
     struct Comp2(usize, usize);
     impl Component for Comp2 {}
 
+    struct Pos1(usize, usize);
+    impl Component for Pos1{}
+
+    struct Pos2(usize, usize);
+    impl Component for Pos2{}
+
     struct Marker1();
     impl Component for Marker1 {}
     struct Marker2();
@@ -381,6 +387,17 @@ mod test {
         assert_eq!(query.iter().count(), 3);
     }
 
+    //TODO: multiple queries do not seem to work
+    fn test_system5(mut query2: Query<(&Pos1, &Pos2)>, mut query: Query<(&Comp1, &Marker1)>) {
+        for (comp1, _m ) in query.iter() {
+            println!("comp1: {}; {}", comp1.0, comp1.1);
+        }
+        //TODO: assert_eq!(query.iter().count(), 3);
+        for (p1, p2) in query2.iter(){
+            println!("p1: {}; p2:{}", p1.0, p2.1);
+        }
+    }
+
     #[test]
     fn queries_test1() {
         let mut world = World::new();
@@ -393,6 +410,7 @@ mod test {
         world.add_system(test_system2);
         world.add_system(test_system3);
         world.add_system(test_system4);
+        world.add_system(test_system5);
 
         world.add_entity((
             Comp2(56, 78),
@@ -404,6 +422,8 @@ mod test {
         world.add_entity((Comp1(12, 34), Comp2(56, 78), Marker2()));
         world.add_entity((Comp1(12, 34), Comp2(56, 78), Marker3()));
         world.add_entity(Comp1(12, 34));
+        world.add_entity((Pos1(12, 34), Pos2(12, 43)));
+        world.add_entity((Pos1(12, 34), Pos2(12, 43)));
 
         world.init_and_run();
     }
