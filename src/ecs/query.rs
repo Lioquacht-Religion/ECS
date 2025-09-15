@@ -144,8 +144,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         let sys_prm_id = &system_param_ids[*system_param_index];
         if let SystemParamId::Query(qid) = sys_prm_id{
            let qs = &world_data_mut.query_data[qid.id_usize()];
-           println!("init querystate: {:?}", qs);
-           
+           *system_param_index += 1;
            return Query::new(world_data, qs);
         }
         panic!("SystemParamId=<{}> is not a QueryId! param_ids: {:?}", *system_param_index, system_param_ids)
