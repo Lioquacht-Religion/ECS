@@ -10,7 +10,7 @@ use crate::{
         system::SystemId,
     },
     utils::{
-        ecs_id::{impl_ecs_id, EcsId},
+        ecs_id::{EcsId, impl_ecs_id},
         gen_vec::Key,
         graph::{Graph, Node},
     },
@@ -164,8 +164,8 @@ impl EcsDependencyGraph {
     }
     pub fn insert_system_query(&mut self, system_id: SystemId, query_id: QueryId) {
         let system_key = self.insert_system(system_id);
-            let query_key = self.insert_query(query_id);
-            self.graph
-                .add_edge_to_both_nodes(system_key, EcsEdge::None, query_key, EcsEdge::None);
+        let query_key = self.insert_query(query_id);
+        self.graph
+            .add_edge_to_both_nodes(system_key, EcsEdge::None, query_key, EcsEdge::None);
     }
 }

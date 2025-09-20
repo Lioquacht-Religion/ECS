@@ -129,8 +129,8 @@ impl Entities {
             if empty_barrier < self.empty_indices.len() {
                 let empty_barrier = self.empty_indices.len() - empty_barrier;
                 let id = self.empty_indices[empty_barrier];
-                let gen = *&self.vec[id as usize].generation;
-                return EntityKey::new(id, gen);
+                let generation = *&self.vec[id as usize].generation;
+                return EntityKey::new(id, generation);
             }
         }
         let free_barrier: usize = self
@@ -204,6 +204,6 @@ impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey {
     type Construct<'c> = EntityKeyIterUnsafe<'c>;
 
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-        (&mut *source).get_entity_key_iter()
+        unsafe { (&mut *source).get_entity_key_iter() }
     }
 }

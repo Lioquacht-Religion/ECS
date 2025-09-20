@@ -5,14 +5,15 @@ use ecs::ecs::{
     component::{Component, StorageTypes},
     entity::EntityKey,
     query::{
-        query_filter::{Or, With, Without},
         Query,
+        query_filter::{Or, With, Without},
     },
     storages::entity_storage::EntityStorage,
     system::Res,
     world::World,
 };
 
+#[allow(unused)]
 struct Pos(i32);
 impl Component for Pos {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
@@ -23,6 +24,7 @@ impl Component for Pos2 {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
+#[allow(unused)]
 struct Pos3(i32, i32, i32);
 impl Component for Pos3 {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
@@ -33,21 +35,25 @@ impl Component for Pos4 {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
+#[allow(unused)]
 struct PosAoS(i32);
 impl Component for PosAoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
+#[allow(unused)]
 struct Pos2AoS(i32, i64);
 impl Component for Pos2AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
+#[allow(unused)]
 struct Pos3AoS(i32, i32, i32);
 impl Component for Pos3AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
+#[allow(unused)]
 struct Pos4AoS(i32, Box<Pos3>);
 impl Component for Pos4AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
@@ -82,70 +88,72 @@ fn test_system1(
     println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
     for (comp1, comp2) in query.iter() {
-        println!("comp1: {}", comp1.0);
-        println!("comp2: {}", comp2.0);
-        comp2.0 = 2;
-        println!("comp2: {}", comp2.0);
+        //println!("comp1: {}", comp1.0);
+        //println!("comp2: {}", comp2.0);
+        comp2.0 = comp1.1 / 3245345;
+        //println!("comp2: {}", comp2.0);
     }
 
     for (_pos, pos4, _pos3) in query2.iter() {
-        println!("pos4 : {}", pos4.0);
+        //println!("pos4 : {}", pos4.0);
         pos4.0 = 23234;
         pos4.0 -= 2344;
-        println!("pos4 : {}", pos4.0);
+        //println!("pos4 : {}", pos4.0);
 
-        println!("pos4.1 box pointer: {}", pos4.1 .0);
-        pos4.1 .0 = 23234;
-        pos4.1 .0 -= 2344;
-        println!("pos4.1 box pointer: {}", pos4.1 .0);
+        //println!("pos4.1 box pointer: {}", pos4.1 .0);
+        pos4.1.0 = 23234;
+        pos4.1.0 -= 2344;
+        //println!("pos4.1 box pointer: {}", pos4.1 .0);
     }
 }
 
 fn test_system2(
-    mut commands: Commands,
+    #[allow(unused)] mut commands: Commands,
     mut query: Query<
-        (EntityKey, &mut Comp1, &mut Comp2), //, With<Pos4>
+        (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-    mut query_aos: Query<
-        (EntityKey, &mut Comp1AoS, &mut Comp2AoS),
-        Or<(With<Pos4AoS>, With<Comp1AoS>)>,
-    >,
+    mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
 ) {
     let start1 = std::time::Instant::now();
-    for (i, (entity, comp1, comp2)) in query.iter().enumerate() {
+    for (comp1, comp2) in query.iter() {
         comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
         comp2.1 /= 437;
 
+        /*
         println!(
             "soa iter: {i}; enitity key: {:?}; comp1: {}",
             entity, comp1.0
         );
+        */
     }
 
     let start2 = std::time::Instant::now();
-    for (i, (entity, comp1, comp2)) in query_aos.iter().enumerate() {
+    for (comp1, comp2) in query_aos.iter() {
         /*comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
         comp2.1 /= 437;*/
 
+        /*
         let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
         let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
         let _key = commands.spawn(Comp1(999999, 29029));
-
+        */
         comp1.0 /= 392049;
         comp1.1 /= 392049;
         comp2.0 /= 392049;
         comp2.1 /= 392049;
 
-        commands.despawn(entity);
+        //commands.despawn(entity);
 
+        /*
         println!(
             "aos iter: {i}; enitity key: {:?}; comp1: {}",
             entity, comp1.0
         );
+        */
     }
 
     let el1 = start1.elapsed();
@@ -162,7 +170,7 @@ fn test_system2(
     );
 }
 
-static CAPACITY: usize = 10;
+static CAPACITY: usize = 100_000;
 
 fn init_es_insert(es: &mut EntityStorage) {
     let start1 = std::time::Instant::now();
@@ -225,24 +233,6 @@ fn init_es_insert(es: &mut EntityStorage) {
         ));
     }
 
-    let start3 = std::time::Instant::now();
-    for c in ents_aos.iter_mut() {
-        c.0 .0 /= 392049;
-        c.0 .1 /= 392049;
-        c.1 .0 /= 392049;
-        c.1 .1 /= 392049;
-    }
-    for c in ents_aos2.iter_mut() {
-        c.1 .0 /= 392049;
-        c.1 .1 /= 392049;
-        c.4 .0 /= 392049;
-        c.4 .1 /= 392049;
-    }
-    println!(
-        "normal loop time aos: {} nanos",
-        start3.elapsed().as_nanos()
-    );
-
     es.add_entities_batch(ents_aos);
     es.add_entities_batch(ents_aos2);
     println!(
@@ -270,7 +260,7 @@ fn test_table_soa_insert() {
     init_es_insert(&mut es);
 }
 
-fn test_table_soa_query_iter() {
+fn test_table_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
     let num2: usize = 2324;
@@ -283,14 +273,51 @@ fn test_table_soa_query_iter() {
 
     init_es_insert(es);
 
+    world.init_systems();
+    world.run();
+    /*
     world.run();
     world.run();
     world.run();
     world.run();
-    world.run();
+    */
 }
 
 fn main() {
-    test_table_soa_query_iter();
+    test_table_query_iter();
     test_table_soa_insert();
+    normal_loop_test();
+}
+
+fn normal_loop_test() {
+    let mut ents = Vec::with_capacity(CAPACITY);
+    let mut ents2 = Vec::with_capacity(CAPACITY);
+    for i in 0..CAPACITY {
+        ents.push((Comp1(i, 34), Comp2(i, 34)));
+        ents2.push((
+            Pos(33434),
+            Comp1(i, 34),
+            Pos4(12, Box::new(Pos3(1, 1, 1))),
+            Comp2(i, 34),
+            Pos2(232, 2423),
+        ));
+    }
+
+    let start3 = std::time::Instant::now();
+    for c in ents.iter_mut() {
+        c.0.0 /= 392049;
+        c.0.1 /= 392049;
+        c.1.0 /= 392049;
+        c.1.1 /= 392049;
+    }
+    for c in ents2.iter_mut() {
+        c.1.0 /= 392049;
+        c.1.1 /= 392049;
+        c.4.0 /= 392049;
+        c.4.1 /= 392049;
+    }
+    println!(
+        "normal loop time aos: {} nanos",
+        start3.elapsed().as_nanos()
+    );
 }

@@ -55,10 +55,12 @@ impl TableStorage {
 
         value.self_get_value_ptrs_by_storage(&mut soa_ptr_vec, &mut aos_ptr_vec);
 
-        self.table_soa
-            .insert(component_infos, &soa_comp_ids, &soa_ptr_vec);
-        self.table_aos
-            .insert(component_infos, &aos_comp_ids, &aos_ptr_vec, cache);
+        unsafe {
+            self.table_soa
+                .insert(component_infos, &soa_comp_ids, &soa_ptr_vec);
+            self.table_aos
+                .insert(component_infos, &aos_comp_ids, &aos_ptr_vec, cache);
+        }
         std::mem::forget(value);
 
         cache.ptr_vec_cache.insert(soa_ptr_vec);
@@ -89,21 +91,23 @@ impl TableStorage {
         let value_layout = Layout::new::<T>();
 
         self.entities.extend(entities.iter());
-        self.table_soa.insert_batch(
-            component_infos,
-            &soa_comp_ids,
-            &soa_ptr_vec,
-            value_layout,
-            values.len(),
-        );
-        self.table_aos.insert_batch(
-            component_infos,
-            &aos_comp_ids,
-            &aos_ptr_vec,
-            value_layout,
-            values.len(),
-            cache,
-        );
+        unsafe {
+            self.table_soa.insert_batch(
+                component_infos,
+                &soa_comp_ids,
+                &soa_ptr_vec,
+                value_layout,
+                values.len(),
+            );
+            self.table_aos.insert_batch(
+                component_infos,
+                &aos_comp_ids,
+                &aos_ptr_vec,
+                value_layout,
+                values.len(),
+                cache,
+            );
+        }
 
         cache.ptr_vec_cache.insert(soa_ptr_vec);
         cache.ptr_vec_cache.insert(aos_ptr_vec);
@@ -146,7 +150,7 @@ impl TableStorage {
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
         &'a mut self,
     ) -> TableStorageTupleIter<TC::Construct<'a>> {
-        new_table_storage_iter::<TC>(self)
+        unsafe { new_table_storage_iter::<TC>(self) }
     }
 }
 
@@ -190,8 +194,8 @@ impl<'c, T: Component> TupleIterator for TableStorageIterUnsafe<'c, T> {
     type Item = &'c T;
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
-            TableStorageIterUnsafe::TableSoaIter(iter) => iter.next(index),
-            TableStorageIterUnsafe::TableAosIter(iter) => iter.next(index),
+            TableStorageIterUnsafe::TableSoaIter(iter) => unsafe { iter.next(index) },
+            TableStorageIterUnsafe::TableAosIter(iter) => unsafe { iter.next(index) },
         }
     }
 }
@@ -203,10 +207,11 @@ pub enum TableStorageIterMutUnsafe<'c, T: Component> {
 
 impl<'c, T: Component> TupleIterator for TableStorageIterMutUnsafe<'c, T> {
     type Item = &'c mut T;
+    #[inline]
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
-            TableStorageIterMutUnsafe::TableSoaIterMut(iter) => iter.next(index),
-            TableStorageIterMutUnsafe::TableAosIterMut(iter) => iter.next(index),
+            TableStorageIterMutUnsafe::TableSoaIterMut(iter) => unsafe { iter.next(index) },
+            TableStorageIterMutUnsafe::TableAosIterMut(iter) => unsafe { iter.next(index) },
         }
     }
 }
@@ -219,23 +224,23 @@ impl TupleConstructorSource for TableStorage {
     }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
         match T::STORAGE {
-            StorageTypes::TableSoA => {
-                TableStorageIterUnsafe::TableSoaIter(self.table_soa.get_single_comp_iter())
-            }
-            StorageTypes::TableAoS => {
-                TableStorageIterUnsafe::TableAosIter(self.table_aos.get_single_comp_iter())
-            }
+            StorageTypes::TableSoA => TableStorageIterUnsafe::TableSoaIter(unsafe {
+                self.table_soa.get_single_comp_iter()
+            }),
+            StorageTypes::TableAoS => TableStorageIterUnsafe::TableAosIter(unsafe {
+                self.table_aos.get_single_comp_iter()
+            }),
             StorageTypes::SparseSet => unimplemented!(),
         }
     }
     unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
         match T::STORAGE {
-            StorageTypes::TableSoA => TableStorageIterMutUnsafe::TableSoaIterMut(
-                self.table_soa.get_single_comp_iter_mut(),
-            ),
-            StorageTypes::TableAoS => TableStorageIterMutUnsafe::TableAosIterMut(
-                self.table_aos.get_single_comp_iter_mut(),
-            ),
+            StorageTypes::TableSoA => TableStorageIterMutUnsafe::TableSoaIterMut(unsafe {
+                self.table_soa.get_single_comp_iter_mut()
+            }),
+            StorageTypes::TableAoS => TableStorageIterMutUnsafe::TableAosIterMut(unsafe {
+                self.table_aos.get_single_comp_iter_mut()
+            }),
             StorageTypes::SparseSet => unimplemented!(),
         }
     }

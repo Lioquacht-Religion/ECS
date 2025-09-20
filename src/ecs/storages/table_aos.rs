@@ -2,7 +2,7 @@
 
 use std::{
     alloc::Layout,
-    any::{type_name, TypeId},
+    any::{TypeId, type_name},
     ptr::NonNull,
 };
 
@@ -52,7 +52,7 @@ impl Ord for TypeMetaData {
 }
 
 pub struct TableAoS {
-    //TODO: add compids because of possible storage split
+    #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
     pub(crate) vec: ThinBlobVec,
     pub(crate) cap: usize,
@@ -121,6 +121,7 @@ impl TableAoS {
         }
     }
 
+    #[allow(unused)]
     pub(crate) fn print_internals(&self, component_infos: &[ComponentInfo]) {
         println!("TableAoS: ");
         println!("layout: {:?}", self.vec.layout);
@@ -129,15 +130,6 @@ impl TableAoS {
                 "i: {}; tm: {:?}, cinfo: {:?}",
                 i, tm, component_infos[tm.comp_id.0 as usize]
             );
-        }
-    }
-
-    //TODO: maybe remove, len and cap change is handled by thin blob vec
-    fn update_capacity(&mut self) {
-        if self.cap == 0 {
-            self.cap = 4;
-        } else if self.len >= self.cap {
-            self.cap *= 2;
         }
     }
 
@@ -166,13 +158,15 @@ impl TableAoS {
 
         let comp_elem_ptrs: SortedVec<CompElemPtr> = comp_elem_ptrs.into();
 
-        self.vec.push_ptr_vec_untyped(
-            &mut self.cap,
-            &mut self.len,
-            component_infos,
-            &self.type_meta_data.get_vec(),
-            &comp_elem_ptrs.get_vec(),
-        );
+        unsafe {
+            self.vec.push_ptr_vec_untyped(
+                &mut self.cap,
+                &mut self.len,
+                component_infos,
+                &self.type_meta_data.get_vec(),
+                &comp_elem_ptrs.get_vec(),
+            );
+        }
 
         cache.compelemptr_vec_cache.insert(comp_elem_ptrs.into());
     }
@@ -201,14 +195,16 @@ impl TableAoS {
 
         for i in 0..batch_len {
             let offset = value_layout.size() * i;
-            self.vec.push_ptr_vec_untyped_with_offset(
-                &mut self.cap,
-                &mut self.len,
-                component_infos,
-                &self.type_meta_data.get_vec(),
-                &comp_elem_ptrs.get_vec(),
-                offset,
-            );
+            unsafe {
+                self.vec.push_ptr_vec_untyped_with_offset(
+                    &mut self.cap,
+                    &mut self.len,
+                    component_infos,
+                    &self.type_meta_data.get_vec(),
+                    &comp_elem_ptrs.get_vec(),
+                    offset,
+                );
+            }
         }
         cache.compelemptr_vec_cache.insert(comp_elem_ptrs.into());
     }
@@ -217,7 +213,7 @@ impl TableAoS {
         &mut self,
         index: usize,
     ) -> Option<&mut T> {
-        let _row_ptr = self.vec.get_ptr_untyped(index, self.vec.layout);
+        let _row_ptr = unsafe { self.vec.get_ptr_untyped(index, self.vec.layout) };
 
         unimplemented!()
     }
@@ -234,7 +230,7 @@ impl TableAoS {
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
         &'a mut self,
     ) -> TableAosTupleIter<TC::Construct<'a>> {
-        new_table_aos_iter::<TC>(self)
+        unsafe { new_table_aos_iter::<TC>(self) }
     }
 
     pub unsafe fn get_single_comp_iter<'c, T: Component>(
@@ -249,7 +245,7 @@ impl TableAoS {
             ));
 
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
-        self.vec.tuple_inner_type_iter(*offset)
+        unsafe { self.vec.tuple_inner_type_iter(*offset) }
     }
     pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
         &'c mut self,
@@ -262,7 +258,7 @@ impl TableAoS {
                 type_name::<T>()
             ));
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
-        self.vec.tuple_inner_type_iter_mut(*offset)
+        unsafe { self.vec.tuple_inner_type_iter_mut(*offset) }
     }
 }
 
@@ -336,7 +332,7 @@ impl TupleConstructorSource for TableAoS {
             .get(&TypeId::of::<T>())
             .expect("ERROR: TableAoS does not contain a column with this type id");
         let offset = self.type_meta_data.get_vec()[*index].ptr_offset;
-        self.vec.tuple_inner_type_iter(offset)
+        unsafe { self.vec.tuple_inner_type_iter(offset) }
     }
     unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
         let index = self
@@ -344,7 +340,7 @@ impl TupleConstructorSource for TableAoS {
             .get(&TypeId::of::<T>())
             .expect("ERROR: TableAoS does not contain a column with this type id");
         let offset = self.type_meta_data.get_vec()[*index].ptr_offset;
-        self.vec.tuple_inner_type_iter_mut(offset)
+        unsafe { self.vec.tuple_inner_type_iter_mut(offset) }
     }
 }
 
@@ -424,11 +420,11 @@ mod test {
 
             //println!("pos4.1: {:?}", pos4);
             //println!("pos4.1 box pointer: {}", pos4.1.0);
-            pos4.1 .0 = 23234;
-            assert_eq!(pos4.1 .0, 23234);
-            pos4.1 .0 -= 2344;
-            assert_eq!(pos4.1 .0, 23234 - 2344);
-            println!("pos4.1 box pointer: {}", pos4.1 .0);
+            pos4.1.0 = 23234;
+            assert_eq!(pos4.1.0, 23234);
+            pos4.1.0 -= 2344;
+            assert_eq!(pos4.1.0, 23234 - 2344);
+            println!("pos4.1 box pointer: {}", pos4.1.0);
         }
 
         assert_eq!(query2.iter().count(), 4);
@@ -470,7 +466,10 @@ mod test {
         let es = &mut world.data.get_mut().entity_storage;
         init_es_insert(es);
         world.init_systems();
-        println!("archid and comps: {:?}", world.data.get_mut().entity_storage.compids_archid_map);
+        println!(
+            "archid and comps: {:?}",
+            world.data.get_mut().entity_storage.compids_archid_map
+        );
 
         let es = &mut world.data.get_mut().entity_storage;
         es.tables
@@ -478,7 +477,6 @@ mod test {
             .unwrap()
             .table_aos
             .print_internals(&es.components);
-
 
         unsafe {
             let iter = world

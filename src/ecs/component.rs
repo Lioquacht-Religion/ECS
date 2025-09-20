@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::utils::{
-    ecs_id::{impl_ecs_id, EcsId},
+    ecs_id::{EcsId, impl_ecs_id},
     sorted_vec::SortedVec,
 };
 

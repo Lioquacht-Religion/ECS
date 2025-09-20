@@ -32,14 +32,14 @@ pub trait TupleIterConstructor<S: TupleConstructorSource> {
 impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &T {
     type Construct<'c> = S::IterType<'c, T>;
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-        (&mut *source).get_iter()
+        unsafe { (&mut *source).get_iter() }
     }
 }
 
 impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &mut T {
     type Construct<'c> = S::IterMutType<'c, T>;
     unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-        (&mut *source).get_iter_mut()
+        unsafe { (&mut *source).get_iter_mut() }
     }
 }
 
@@ -49,7 +49,7 @@ macro_rules! impl_tuple_iter_constructor{
             #[allow(unused_parens, non_snake_case)]
             type Construct<'c> = ($($t::Construct<'c>), *);
             unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-                ($($t::construct(source)), *)
+                unsafe{ ($($t::construct(source)), *) }
             }
         }
     }
@@ -71,7 +71,7 @@ macro_rules! impl_tuple_iterator{
             unsafe fn next(&mut self, index: usize) -> Self::Item {
                 #[allow(unused_parens, non_snake_case)]
                 let ($($t),*) = self;
-                ($($t.next(index)),*)
+                unsafe{ ($($t.next(index)),*) }
             }
         }
     }

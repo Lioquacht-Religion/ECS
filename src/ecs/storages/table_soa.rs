@@ -2,7 +2,7 @@
 
 use std::{
     alloc::Layout,
-    any::{type_name, TypeId},
+    any::{TypeId, type_name},
     ptr::NonNull,
 };
 
@@ -19,15 +19,14 @@ use super::{
     thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec},
 };
 
-//TODO: entities need to be stored too for querying
 pub struct TableSoA {
+    #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
     pub(crate) columns: Map<TypeId, ThinBlobVec>,
     pub(crate) len: usize,
     pub(crate) cap: usize,
 }
 
-//TODO: make probably every function here unsafe
 impl TableSoA {
     pub fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
         let mut columns = Map::new();
@@ -60,10 +59,12 @@ impl TableSoA {
 
         for (i, cid) in soa_comp_ids.iter().enumerate() {
             let cinfo = &component_infos[cid.0 as usize];
-            self.columns
-                .get_mut(&cinfo.type_id)
-                .expect("Type T is not stored inside this table!")
-                .push_untyped(self.cap, self.len, soa_ptrs[i]);
+            unsafe {
+                self.columns
+                    .get_mut(&cinfo.type_id)
+                    .expect("Type T is not stored inside this table!")
+                    .push_untyped(self.cap, self.len, soa_ptrs[i]);
+            }
         }
 
         self.update_capacity();
@@ -95,10 +96,12 @@ impl TableSoA {
 
         for i in 0..batch_len {
             for j in 0..soa_comp_ids.len() {
-                let column = thin_columns[j].as_mut();
-                let value_offset = value_layout.size() * i;
-                let entry_ptr = soa_base_ptrs[j].add(value_offset);
-                column.push_untyped(self.cap, self.len, entry_ptr);
+                unsafe {
+                    let column = thin_columns[j].as_mut();
+                    let value_offset = value_layout.size() * i;
+                    let entry_ptr = soa_base_ptrs[j].add(value_offset);
+                    column.push_untyped(self.cap, self.len, entry_ptr);
+                }
             }
             self.update_capacity();
             self.len += 1;
@@ -127,28 +130,32 @@ impl TableSoA {
     pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
-        new_table_soa_iter::<TC>(self)
+        unsafe { new_table_soa_iter::<TC>(self) }
     }
 
     pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
-        self.columns
-            .get(&TypeId::of::<T>())
-            .expect(&format!(
-                "No column with type id for type: {}.",
-                type_name::<T>()
-            ))
-            .tuple_iter()
+        unsafe {
+            self.columns
+                .get(&TypeId::of::<T>())
+                .expect(&format!(
+                    "No column with type id for type: {}.",
+                    type_name::<T>()
+                ))
+                .tuple_iter()
+        }
     }
     pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
         &'c mut self,
     ) -> ThinBlobIterMutUnsafe<'c, T> {
-        self.columns
-            .get_mut(&TypeId::of::<T>())
-            .expect(&format!(
-                "No column with type id for type: {}.",
-                type_name::<T>()
-            ))
-            .tuple_iter_mut()
+        unsafe {
+            self.columns
+                .get_mut(&TypeId::of::<T>())
+                .expect(&format!(
+                    "No column with type id for type: {}.",
+                    type_name::<T>()
+                ))
+                .tuple_iter_mut()
+        }
     }
 }
 
@@ -200,16 +207,20 @@ impl TupleConstructorSource for TableSoA {
         todo!()
     }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
-        self.columns
-            .get(&TypeId::of::<T>())
-            .expect("ERROR: TableSoA does not contain a column with this type id")
-            .tuple_iter()
+        unsafe {
+            self.columns
+                .get(&TypeId::of::<T>())
+                .expect("ERROR: TableSoA does not contain a column with this type id")
+                .tuple_iter()
+        }
     }
     unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T> {
-        self.columns
-            .get_mut(&TypeId::of::<T>())
-            .expect("ERROR: TableSoA does not contain a column with this type id")
-            .tuple_iter_mut()
+        unsafe {
+            self.columns
+                .get_mut(&TypeId::of::<T>())
+                .expect("ERROR: TableSoA does not contain a column with this type id")
+                .tuple_iter_mut()
+        }
     }
 }
 
@@ -276,10 +287,10 @@ mod tests {
             pos4.0 -= 2344;
             println!("pos4 : {}", pos4.0);
 
-            println!("pos4.1 box pointer: {}", pos4.1 .0);
-            pos4.1 .0 = 23234;
-            pos4.1 .0 -= 2344;
-            println!("pos4.1 box pointer: {}", pos4.1 .0);
+            println!("pos4.1 box pointer: {}", pos4.1.0);
+            pos4.1.0 = 23234;
+            pos4.1.0 -= 2344;
+            println!("pos4.1 box pointer: {}", pos4.1.0);
         }
 
         assert_eq!(query2.iter().count(), 4);

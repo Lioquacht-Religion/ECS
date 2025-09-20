@@ -51,7 +51,7 @@ impl World {
         self.systems.add_system(value)
     }
 
-    pub fn init_systems(&mut self){
+    pub fn init_systems(&mut self) {
         self.systems.init_systems(&mut self.data);
     }
 
@@ -66,18 +66,17 @@ impl World {
             .update_with_barriers();
     }
 
-    pub fn init_and_run(&mut self){
+    pub fn init_and_run(&mut self) {
         self.init_systems();
         self.run();
     }
 
-    pub fn run_loop(&mut self){
+    pub fn run_loop(&mut self) {
         self.init_systems();
-        loop{
+        loop {
             self.run();
         }
     }
-
 }
 
 impl WorldData {

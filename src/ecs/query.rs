@@ -11,7 +11,9 @@ use crate::{
         system::{SystemId, SystemParamId},
     },
     utils::{
-        ecs_id::EcsId, sorted_vec::SortedVec, tuple_iters::{TupleIterConstructor, TupleIterator}
+        ecs_id::EcsId,
+        sorted_vec::SortedVec,
+        tuple_iters::{TupleIterConstructor, TupleIterator},
     },
 };
 
@@ -37,9 +39,8 @@ pub struct Query<'w, 's, P: QueryParam, F: QueryFilter = ()> {
 pub struct QueryState {
     comp_ids: SortedVec<ComponentId>,
     optional_comp_ids: SortedVec<ComponentId>,
-    shared_ref_comps: HashSet<ComponentId>,
-    exclusive_ref_comps: HashSet<ComponentId>,
     arch_ids: Vec<ArchetypeId>,
+    #[allow(unused)]
     filter: Vec<FilterElem>,
 }
 
@@ -49,6 +50,7 @@ pub(crate) struct QueryStateKey {
     filter: Vec<FilterElem>,
 }
 
+//TODO: decide if to use this
 //pub struct CompRefKind(ComponentId, RefKind);
 
 pub enum RefKind {
@@ -74,15 +76,17 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
         &self,
         arch_id: ArchetypeId,
     ) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
-        self.world
-            .get()
-            .as_mut()
-            .unwrap()
-            .entity_storage
-            .tables
-            .get_mut(&arch_id)
-            .expect("Table with archetype id could not be found.")
-            .tuple_iter::<P>()
+        unsafe {
+            self.world
+                .get()
+                .as_mut()
+                .unwrap()
+                .entity_storage
+                .tables
+                .get_mut(&arch_id)
+                .expect("Table with archetype id could not be found.")
+                .tuple_iter::<P>()
+        }
     }
 }
 
@@ -112,8 +116,9 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
     type Item = <<T as TupleIterConstructor<QueryDataType>>::Construct<'w> as TupleIterator>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(ref mut cur_query) = &mut self.cur_arch_query {
+            if let Some(cur_query) = &mut self.cur_arch_query {
                 match cur_query.next() {
+                    Some(elem) => return Some(elem),
                     None => {
                         self.cur_arch_index += 1;
                         if self.cur_arch_index >= self.query.state.arch_ids.len() {
@@ -124,7 +129,6 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
                         self.cur_arch_query =
                             Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
                     }
-                    Some(elem) => return Some(elem),
                 }
             } else {
                 return None;
@@ -140,14 +144,17 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         system_param_ids: &[SystemParamId],
         world_data: &'r UnsafeCell<WorldData>,
     ) -> Self::Item<'r> {
-        let world_data_mut = world_data.get().as_mut().unwrap();
+        let world_data_mut = unsafe { world_data.get().as_mut().unwrap() };
         let sys_prm_id = &system_param_ids[*system_param_index];
-        if let SystemParamId::Query(qid) = sys_prm_id{
-           let qs = &world_data_mut.query_data[qid.id_usize()];
-           *system_param_index += 1;
-           return Query::new(world_data, qs);
+        if let SystemParamId::Query(qid) = sys_prm_id {
+            let qs = &world_data_mut.query_data[qid.id_usize()];
+            *system_param_index += 1;
+            return Query::new(world_data, qs);
         }
-        panic!("SystemParamId=<{}> is not a QueryId! param_ids: {:?}", *system_param_index, system_param_ids)
+        panic!(
+            "SystemParamId=<{}> is not a QueryId! param_ids: {:?}",
+            *system_param_index, system_param_ids
+        )
     }
 
     fn create_system_param_data(
@@ -176,7 +183,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .find_fitting_archetypes(&query_state_key.comp_ids);
 
         // remove archetypes that do not match the filter
-        let arch_ids : Vec<ArchetypeId> = arch_ids
+        let arch_ids: Vec<ArchetypeId> = arch_ids
             .iter()
             .filter(|aid| {
                 let arch = &world_data_mut.entity_storage.archetypes[aid.0 as usize];
@@ -207,18 +214,13 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             &query_state_key.comp_ids.get_vec(),
             &ref_kinds,
         );
-        depend_graph.insert_query_archetypes(
-            next_query_id,
-            &arch_ids
-        );
+        depend_graph.insert_query_archetypes(next_query_id, &arch_ids);
         depend_graph.insert_system_query(system_id, next_query_id);
 
         let query_data = QueryState {
             //TODO: remove comp_ids/filter ? already used as key, remove cloning
             comp_ids: query_state_key.comp_ids.clone(),
             optional_comp_ids: SortedVec::new(),
-            shared_ref_comps: HashSet::new(),
-            exclusive_ref_comps: HashSet::new(),
             arch_ids,
             filter: query_state_key.filter.clone(),
         };
@@ -335,10 +337,10 @@ mod test {
     impl Component for Comp2 {}
 
     struct Pos1(usize, usize);
-    impl Component for Pos1{}
+    impl Component for Pos1 {}
 
     struct Pos2(usize, usize);
-    impl Component for Pos2{}
+    impl Component for Pos2 {}
 
     struct Marker1();
     impl Component for Marker1 {}
@@ -386,13 +388,12 @@ mod test {
         assert_eq!(query.iter().count(), 3);
     }
 
-    //TODO: multiple queries do not seem to work
     fn test_system5(mut query2: Query<(&Pos1, &Pos2)>, mut query: Query<(&Comp1, &Marker1)>) {
-        for (comp1, _m ) in query.iter() {
+        for (comp1, _m) in query.iter() {
             println!("comp1: {}; {}", comp1.0, comp1.1);
         }
         //TODO: assert_eq!(query.iter().count(), 3);
-        for (p1, p2) in query2.iter(){
+        for (p1, p2) in query2.iter() {
             println!("p1: {}; p2:{}", p1.0, p2.1);
         }
     }

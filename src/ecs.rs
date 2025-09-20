@@ -4,6 +4,7 @@ pub mod ecs_dependency_graph;
 pub mod entity;
 pub mod query;
 pub mod resource;
+pub mod scheduler;
 pub mod storages;
 pub mod system;
 pub mod world;
