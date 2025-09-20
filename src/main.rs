@@ -3,7 +3,6 @@
 use ecs::ecs::{
     commands::Commands,
     component::{Component, StorageTypes},
-    entity::EntityKey,
     query::{
         Query,
         query_filter::{Or, With, Without},

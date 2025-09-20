@@ -63,12 +63,12 @@ impl<'w, 's> SystemParam for Commands<'w, 's> {
         world_data: &'r UnsafeCell<WorldData>,
     ) -> Self::Item<'r> {
         *system_param_index += 1;
-        let world_data = &mut *world_data.get();
+        let world_data = unsafe{ &mut *world_data.get() };
         let command_queue_ptr = world_data.commands_queues.put_inuse();
 
         //SAFETY: Because vec is stored behind box pointer on the heap,
         // it's address should be stable when moved.
-        Commands::new(&world_data.entity_storage.entities, &mut *command_queue_ptr)
+        Commands::new(&world_data.entity_storage.entities, unsafe{ &mut *command_queue_ptr })
     }
     fn create_system_param_data(
         _system_id: SystemId,

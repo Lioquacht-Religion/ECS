@@ -18,7 +18,9 @@ pub trait Component: 'static {
 
 #[derive(Debug)]
 pub struct ComponentInfo {
+    #[allow(unused)]
     pub(crate) name: Cow<'static, str>,
+    #[allow(unused)]
     pub(crate) comp_id: ComponentId,
     pub(crate) type_id: TypeId,
     pub(crate) layout: Layout,
@@ -31,6 +33,7 @@ pub struct ComponentId(pub(crate) u32);
 impl_ecs_id!(ComponentId);
 
 pub struct Archetype {
+    #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
     //pub(crate) comp_type_ids: Vec<TypeId>, TODO: is this needed?
     pub(crate) soa_comp_ids: SortedVec<ComponentId>,
@@ -74,7 +77,7 @@ impl From<ArchetypeId> for u32 {
 impl ComponentInfo {
     unsafe fn drop_ptr<T>(ptr: *mut u8) {
         let typed_ptr: *mut T = ptr.cast::<T>();
-        let _ = drop_in_place(typed_ptr);
+        let _ = unsafe{ drop_in_place(typed_ptr) };
     }
 
     pub fn new<T: 'static>(comp_id: u32) -> Self {
