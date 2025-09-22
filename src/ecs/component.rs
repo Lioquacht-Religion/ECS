@@ -77,7 +77,7 @@ impl From<ArchetypeId> for u32 {
 impl ComponentInfo {
     unsafe fn drop_ptr<T>(ptr: *mut u8) {
         let typed_ptr: *mut T = ptr.cast::<T>();
-        let _ = unsafe{ drop_in_place(typed_ptr) };
+        let _ = unsafe { drop_in_place(typed_ptr) };
     }
 
     pub fn new<T: 'static>(comp_id: u32) -> Self {

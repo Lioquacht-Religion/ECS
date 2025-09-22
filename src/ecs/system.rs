@@ -1,6 +1,11 @@
 // system.rs
 
-use std::{any::TypeId, cell::UnsafeCell, collections::HashMap, marker::PhantomData};
+use std::{
+    any::TypeId,
+    cell::UnsafeCell,
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+};
 
 use crate::{
     all_tuples,
@@ -18,6 +23,8 @@ type StoredSystem = Box<dyn System>;
 /// Storage for systems.
 pub struct Systems {
     system_vec: Vec<StoredSystem>,
+    func_system_map: HashMap<usize, SystemId>,
+    constraints: HashMap<SystemId, Constraint>,
     system_param_data: HashMap<SystemId, Vec<SystemParamId>>,
 }
 
@@ -35,10 +42,120 @@ pub enum SystemParamId {
     NotRelevant,
 }
 
+struct Constraint {
+    system_id: SystemId,
+    after: HashSet<SystemId>,
+    before: HashSet<SystemId>,
+}
+
+pub struct SystemBuilder<I, IS: IntoSystem<I>, AS: SystemTuple, BS: SystemTuple> {
+    into_system: IS,
+    _input_marker: PhantomData<I>,
+    after: Option<AS>,
+    before: Option<BS>,
+}
+
+pub trait SystemTuple {
+    fn get_system_ids(self, system_storage: &mut Systems, systems: &mut Vec<SystemId>);
+}
+
+impl SystemTuple for () {
+    fn get_system_ids(self, _system_storage: &mut Systems, _systems: &mut Vec<SystemId>) {}
+}
+
+impl<IS: IntoSystem<()> + 'static> SystemTuple for IS {
+    fn get_system_ids(self, system_storage: &mut Systems, systems: &mut Vec<SystemId>) {
+        systems.push(system_storage.add_system(self));
+    }
+}
+
+impl<IS1: IntoSystem<()> + 'static, IS2: IntoSystem<()> + 'static> SystemTuple for (IS1, IS2) {
+    fn get_system_ids(self, system_storage: &mut Systems, systems: &mut Vec<SystemId>) {
+        #[allow(non_snake_case)]
+        let (IS1, IS2) = self;
+        IS1::get_system_ids(IS1, system_storage, systems);
+        IS2::get_system_ids(IS2, system_storage, systems);
+    }
+}
+
+pub trait IntoSystemBuilder<I, IS>
+where
+    IS: IntoSystem<I>,
+{
+    type After: SystemTuple;
+    type Before: SystemTuple;
+
+    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before>;
+
+    fn after<ST: SystemTuple>(self, systems: ST) -> impl IntoSystemBuilder<I, IS>
+    where
+        Self: Sized,
+    {
+        let SystemBuilder {
+            into_system,
+            _input_marker,
+            after: _,
+            before,
+        } = self.builder();
+        SystemBuilder {
+            into_system,
+            _input_marker,
+            after: Some(systems),
+            before,
+        }
+    }
+
+    fn before<ST: SystemTuple>(self, systems: ST) -> impl IntoSystemBuilder<I, IS>
+    where
+        Self: Sized,
+    {
+        let SystemBuilder {
+            into_system,
+            _input_marker,
+            after,
+            before: _,
+        } = self.builder();
+        SystemBuilder {
+            into_system,
+            _input_marker,
+            after,
+            before: Some(systems),
+        }
+    }
+}
+
+impl<I, IS, ASI, BSI> IntoSystemBuilder<I, IS> for SystemBuilder<I, IS, ASI, BSI>
+where
+    IS: IntoSystem<I>,
+    ASI: SystemTuple,
+    BSI: SystemTuple,
+{
+    type After = ASI;
+    type Before = BSI;
+    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before> {
+        self 
+    }
+}
+
+impl<I, IS: IntoSystem<I>> IntoSystemBuilder<I, IS> for IS {
+    type After = ();
+    type Before = ();
+    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before> {
+        SystemBuilder {
+            into_system: self,
+            _input_marker: Default::default(),
+            after: None,
+            before: None,
+        }
+    }
+}
+
 impl Systems {
     pub fn new() -> Self {
         Systems {
             system_vec: Vec::new(),
+            func_system_map: HashMap::new(),
+            constraints: HashMap::new(),
             system_param_data: HashMap::new(),
         }
     }
@@ -47,10 +164,34 @@ impl Systems {
         &mut self,
         value: impl IntoSystem<Input, System = S>,
     ) -> SystemId {
-        let next_id: SystemId = self.system_vec.len().into();
         let system = value.into_system();
+        //TODO: handle none value
+        let fn_ptr = system.get_fn_ptr().unwrap();
+        if let Some(system_id) = self.func_system_map.get(&fn_ptr) {
+            return *system_id;
+        }
+        let next_id: SystemId = self.system_vec.len().into();
         self.system_vec.push(Box::new(system));
+        self.func_system_map.insert(fn_ptr, next_id);
         next_id.into()
+    }
+
+    pub fn add_system_builder<Input, S, IS, ISB: IntoSystemBuilder<Input, IS>>(
+        &mut self,
+        builder: ISB,
+    ) -> SystemId
+    where
+        S: System + 'static,
+        IS: IntoSystem<Input, System = S>,
+    {
+        //TODO:
+        let SystemBuilder {
+            into_system,
+            _input_marker,
+            after,
+            before,
+        } = builder.builder();
+        self.add_system(into_system)
     }
 
     pub fn get_system(&mut self, system_id: SystemId) -> &mut dyn System {
@@ -101,6 +242,7 @@ pub trait System {
         world_data: &UnsafeCell<WorldData>,
     );
     fn run(&mut self, system_param_ids: &[SystemParamId], world_data: &UnsafeCell<WorldData>);
+    fn get_fn_ptr(&self) -> Option<usize>;
 }
 
 pub trait SystemParam {
@@ -281,6 +423,9 @@ impl<F: FnMut()> System for FunctionSystem<(), F> {
     fn run(&mut self, _system_params: &[SystemParamId], _world_data: &UnsafeCell<WorldData>) {
         (self.f)();
     }
+    fn get_fn_ptr(&self) -> Option<usize> {
+        unsafe { Some(std::mem::transmute(&self.f)) }
+    }
 }
 
 macro_rules! impl_system_for_params {
@@ -306,6 +451,9 @@ macro_rules! impl_system_for_params {
                let mut system_param_index = 0;
                $(let $t = unsafe{$t::retrieve(&mut system_param_index, system_params, world_data)};)*
                call_inner(&mut self.f, $($t,)* );
+           }
+           fn get_fn_ptr(&self) -> Option<usize> {
+               unsafe { Some(std::mem::transmute(&self.f)) }
            }
        }
     };
@@ -363,7 +511,7 @@ all_tuples!(
 mod test {
     use crate::ecs::{system::ResMut, world::World};
 
-    use super::Res;
+    use super::{IntoSystemBuilder, Res};
 
     fn test_system1(prm: Res<i32>, prm2: ResMut<usize>) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
@@ -373,12 +521,19 @@ mod test {
         assert_eq!(4350 + 999999999, *prm2.value);
     }
 
+    fn test_system2() {}
+
     #[test]
     fn it_works() {
         let mut world = World::new();
         let num1: i32 = 2324;
         let num2: usize = 4350;
-        world.add_system(test_system1);
+        let b = test_system2
+            .after((test_system2, test_system2))
+            //.before((test_system2, (test_system2, test_system2)));
+            .before((test_system2, test_system2));
+        world.add_system_builder(b);
+        //world.add_system(test_system1);
         world.add_resource(num1);
         world.add_resource(num2);
     }

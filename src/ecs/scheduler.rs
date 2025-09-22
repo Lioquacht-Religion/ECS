@@ -18,7 +18,6 @@ struct Constraint {
 
 pub(crate) trait Scheduler {
     fn execute(&mut self, systems: &mut Systems, world_data: &UnsafeCell<WorldData>);
-    fn add_system(&mut self, system_id: SystemId, after: &[SystemId], before: &[SystemId]) {}
 }
 
 pub(crate) struct SingleThreadScheduler {

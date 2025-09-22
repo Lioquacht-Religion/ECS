@@ -5,6 +5,7 @@ pub mod gen_vec;
 pub mod graph;
 pub mod het_stack;
 pub mod sorted_vec;
+pub mod typeid_map;
 
 pub mod ecs_id;
 pub mod tuple_iters;
