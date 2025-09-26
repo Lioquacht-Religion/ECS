@@ -1,0 +1,230 @@
+// builder.rs
+
+use std::{any::TypeId, marker::PhantomData};
+
+use crate::all_tuples;
+
+use super::{IntoSystem, SystemId, SystemParam, Systems};
+
+pub trait IntoSystemConfigId<I>{
+    fn get_config_id(&self) -> TypeId;
+}
+
+impl<F: FnMut() + 'static> IntoSystemConfigId<()> for F{
+    fn get_config_id(&self) -> TypeId{
+        TypeId::of::<F>()
+    }
+}
+
+macro_rules! impl_intosystemconfig_for_fnmuts {
+    ( $($t:ident), * ) => {
+        impl<$($t : SystemParam,)* F: FnMut($($t,)*) + 'static> IntoSystemConfigId<($($t,)*)> for F
+        {
+            fn get_config_id(&self) -> TypeId{
+                TypeId::of::<F>()
+            }
+        }
+    }
+}
+
+#[rustfmt::skip]
+all_tuples!(
+    impl_intosystemconfig_for_fnmuts,
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
+);
+
+pub struct SystemBuilder<I, IS: IntoSystem<I>, AS: SystemConfigTuple, BS: SystemConfigTuple> {
+    pub(crate) into_system: IS,
+    pub(crate) _input_marker: PhantomData<I>,
+    pub(crate) after: Option<AS>,
+    pub(crate) before: Option<BS>,
+}
+
+pub trait SystemConfigTuple<I=()> {
+    fn get_system_config_ids(self, system_storage: &mut Systems, systems: &mut Vec<(SystemId, TypeId)>);
+}
+
+impl SystemConfigTuple for () {
+    fn get_system_config_ids(self, _system_storage: &mut Systems, _systems: &mut Vec<(SystemId, TypeId)>){}
+}
+
+impl<I, IS: IntoSystem<I> + IntoSystemConfigId<I> + 'static> SystemConfigTuple<I> for IS 
+where IS::System: 'static
+{
+    fn get_system_config_ids(
+        self, system_storage: &mut Systems, systems: &mut Vec<(SystemId, TypeId)>){
+        let config_id = self.get_config_id();
+        let system_id = system_storage
+            .add_system_inner(self, config_id);
+        systems.push((system_id, config_id));
+    }
+}
+
+/*
+macro_rules! impl_systemconfigtuple_for_fninputs {
+    ( $($t:ident), * ) => {
+        impl<$($t : SystemParam,)* S: IntoSystem<($($t,)*)> + IntoSystemConfigId<($($t,)*)> + 'static> 
+            SystemConfigTuple for S {
+            fn get_system_config_ids(
+                self, system_storage: &mut Systems, systems: &mut Vec<(SystemId, TypeId)>
+            ){
+                let config_id = self.get_config_id();
+                let system_id = system_storage.add_system(self);
+                systems.push((system_id, config_id));
+            }
+        }
+    }
+}
+
+#[rustfmt::skip]
+all_tuples!(
+    impl_systemconfigtuple_for_fninputs,
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
+);
+*/
+
+
+macro_rules! impl_systemconfigtuple_for_tuples {
+    ( $($t:ident), * ) => {
+        impl<$($t : SystemConfigTuple + 'static,)*> SystemConfigTuple for ($($t,)*) {
+            fn get_system_config_ids(
+                self, system_storage: &mut Systems, systems: &mut Vec<(SystemId, TypeId)>
+            ){
+                #[allow(non_snake_case)]
+                let ($($t,)*) = self;
+                $($t::get_system_config_ids($t, system_storage, systems);)*
+            }
+        }
+    }
+}
+
+#[rustfmt::skip]
+all_tuples!(
+    impl_systemconfigtuple_for_tuples,
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
+);
+
+pub trait IntoSystemBuilder<I, IS>
+where
+    IS: IntoSystem<I>,
+{
+    type After: SystemConfigTuple;
+    type Before: SystemConfigTuple;
+
+    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before>;
+
+    fn after<ST: SystemConfigTuple>(self, systems: ST) -> impl IntoSystemBuilder<I, IS>
+    where
+        Self: Sized,
+    {
+        let SystemBuilder {
+            into_system,
+            _input_marker,
+            after: _,
+            before,
+        } = self.builder();
+        SystemBuilder {
+            into_system,
+            _input_marker,
+            after: Some(systems),
+            before,
+        }
+    }
+
+    fn before<ST: SystemConfigTuple>(self, systems: ST) -> impl IntoSystemBuilder<I, IS>
+    where
+        Self: Sized,
+    {
+        let SystemBuilder {
+            into_system,
+            _input_marker,
+            after,
+            before: _,
+        } = self.builder();
+        SystemBuilder {
+            into_system,
+            _input_marker,
+            after,
+            before: Some(systems),
+        }
+    }
+}
+
+impl<I, IS, ASI, BSI> IntoSystemBuilder<I, IS> for SystemBuilder<I, IS, ASI, BSI>
+where
+    IS: IntoSystem<I>,
+    ASI: SystemConfigTuple,
+    BSI: SystemConfigTuple,
+{
+    type After = ASI;
+    type Before = BSI;
+    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before> {
+        self
+    }
+}
+
+impl<I, IS: IntoSystem<I>> IntoSystemBuilder<I, IS> for IS {
+    type After = ();
+    type Before = ();
+    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before> {
+        SystemBuilder {
+            into_system: self,
+            _input_marker: Default::default(),
+            after: None,
+            before: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ecs::{commands::Commands, component::Component, query::Query, system::{builder::IntoSystemBuilder, Res, ResMut}, world::World};
+
+    fn test_system1(prm: Res<i32>, prm2: ResMut<usize>) {
+        println!("testsystem1 res: {}, {}", prm.value, prm2.value);
+        assert_eq!(2324, *prm.value);
+        assert_eq!(4350, *prm2.value);
+        *prm2.value += 999999999;
+        assert_eq!(4350 + 999999999, *prm2.value);
+    }
+
+    struct Comp1();
+    impl Component for Comp1{}
+
+    fn test_system2() {}
+    fn test_system3() {}
+    fn test_system4() {}
+    fn test_system5() {}
+    fn test_system6() {}
+    fn test_system7() {}
+    fn test_system8(command: Commands, query: Query<&mut Comp1>) {}
+
+    #[test]
+    fn it_works() {
+
+        let mut world = World::new();
+        let num1: i32 = 2324;
+        let num2: usize = 4350;
+
+        let b = test_system2
+            //.after(())
+            //.after(test_system3)
+            .after((test_system3, test_system4))
+            //.before((test_system7, test_system8))
+            .before((test_system5, (test_system6, test_system7)))
+            ;
+
+        world.add_system_builder(b);
+        world.add_system_builder(test_system8);
+        world.add_system_builder(test_system5
+            .after((test_system2, test_system3, test_system4))
+            //.before((test_system6, test_system7, test_system8))
+        );
+
+        world.add_system(test_system1);
+        world.add_resource(num1);
+        world.add_resource(num2);
+
+        world.init_and_run();
+    }
+}

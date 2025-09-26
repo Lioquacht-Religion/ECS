@@ -8,7 +8,7 @@ use ecs::ecs::{
         query_filter::{Or, With, Without},
     },
     storages::entity_storage::EntityStorage,
-    system::Res,
+    system::{Res, builder::IntoSystemConfig},
     world::World,
 };
 
@@ -107,7 +107,7 @@ fn test_system1(
 }
 
 fn test_system2(
-    #[allow(unused)] mut commands: Commands,
+    //#[allow(unused)] mut commands: Commands,
     mut query: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
@@ -168,6 +168,8 @@ fn test_system2(
         el2.as_micros()
     );
 }
+
+fn test_system3() {}
 
 static CAPACITY: usize = 100_000;
 
@@ -265,6 +267,19 @@ fn test_table_query_iter() {
     let num2: usize = 2324;
     world.add_system(test_system1);
     world.add_system(test_system2);
+
+    world.add_system_builder((test_system1, test_system2));
+    world.add_system_builder(test_system1);
+    world.add_system_builder(test_system2);
+    world.add_system_builder(
+        test_system3
+            .chain()
+            .before(test_system3)
+            .after(test_system2)
+            .before(test_system3),
+    );
+    world.add_system_builder((test_system1, test_system2).after(test_system2));
+
     unsafe { (&mut *world.data.get()).add_resource(num1) };
     unsafe { (&mut *world.data.get()).add_resource(num2) };
 

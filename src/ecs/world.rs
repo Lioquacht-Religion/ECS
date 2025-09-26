@@ -15,7 +15,10 @@ use super::{
     commands::CommandQueuesStorage,
     query::QueryState,
     storages::entity_storage::EntityStorage,
-    system::{IntoSystemBuilder, Systems},
+    system::{
+        Systems,
+        builder::{IntoSystemConfig, IntoSystemTuple},
+    },
 };
 
 pub struct World {
@@ -48,19 +51,22 @@ impl World {
 
     pub fn add_system<Input, S: System + 'static>(
         &mut self,
-        value: impl IntoSystem<Input, System = S>,
+        value: impl IntoSystem<Input, System = S> + 'static
     ) -> SystemId {
         self.systems.add_system(value)
     }
 
-    pub fn add_system_builder<Input, S, IS>(
+    pub fn add_system_builder<
+        I,
+        ST: IntoSystemTuple<I>,
+        IA,
+        AS: IntoSystemTuple<IA>,
+        IB,
+        BS: IntoSystemTuple<IB>,
+    >(
         &mut self,
-        value: impl IntoSystemBuilder<Input, IS>,
-    ) -> SystemId
-    where
-        S: System + 'static,
-        IS: IntoSystem<Input, System = S>,
-    {
+        value: impl IntoSystemConfig<I, ST, IA, AS, IB, BS>,
+    ) -> Vec<SystemId> {
         self.systems.add_system_builder(value)
     }
 

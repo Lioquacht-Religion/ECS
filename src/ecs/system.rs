@@ -7,6 +7,8 @@ use std::{
     marker::PhantomData,
 };
 
+use builder::{IntoSystemConfig, IntoSystemTuple, SystemConfig};
+
 use crate::{
     all_tuples,
     ecs::{
@@ -18,12 +20,14 @@ use crate::{
 
 use super::world::WorldData;
 
+pub mod builder;
+
 type StoredSystem = Box<dyn System>;
 
 /// Storage for systems.
 pub struct Systems {
     system_vec: Vec<StoredSystem>,
-    func_system_map: HashMap<usize, SystemId>,
+    func_system_map: HashMap<TypeId, SystemId>,
     constraints: HashMap<SystemId, Constraint>,
     system_param_data: HashMap<SystemId, Vec<SystemParamId>>,
 }
@@ -42,110 +46,20 @@ pub enum SystemParamId {
     NotRelevant,
 }
 
-struct Constraint {
+#[derive(Debug)]
+pub(crate) struct Constraint {
+    #[allow(unused)]
     system_id: SystemId,
     after: HashSet<SystemId>,
     before: HashSet<SystemId>,
 }
 
-pub struct SystemBuilder<I, IS: IntoSystem<I>, AS: SystemTuple, BS: SystemTuple> {
-    into_system: IS,
-    _input_marker: PhantomData<I>,
-    after: Option<AS>,
-    before: Option<BS>,
-}
-
-pub trait SystemTuple {
-    fn get_system_ids(self, system_storage: &mut Systems, systems: &mut Vec<SystemId>);
-}
-
-impl SystemTuple for () {
-    fn get_system_ids(self, _system_storage: &mut Systems, _systems: &mut Vec<SystemId>) {}
-}
-
-impl<IS: IntoSystem<()> + 'static> SystemTuple for IS {
-    fn get_system_ids(self, system_storage: &mut Systems, systems: &mut Vec<SystemId>) {
-        systems.push(system_storage.add_system(self));
-    }
-}
-
-impl<IS1: IntoSystem<()> + 'static, IS2: IntoSystem<()> + 'static> SystemTuple for (IS1, IS2) {
-    fn get_system_ids(self, system_storage: &mut Systems, systems: &mut Vec<SystemId>) {
-        #[allow(non_snake_case)]
-        let (IS1, IS2) = self;
-        IS1::get_system_ids(IS1, system_storage, systems);
-        IS2::get_system_ids(IS2, system_storage, systems);
-    }
-}
-
-pub trait IntoSystemBuilder<I, IS>
-where
-    IS: IntoSystem<I>,
-{
-    type After: SystemTuple;
-    type Before: SystemTuple;
-
-    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before>;
-
-    fn after<ST: SystemTuple>(self, systems: ST) -> impl IntoSystemBuilder<I, IS>
-    where
-        Self: Sized,
-    {
-        let SystemBuilder {
-            into_system,
-            _input_marker,
-            after: _,
-            before,
-        } = self.builder();
-        SystemBuilder {
-            into_system,
-            _input_marker,
-            after: Some(systems),
-            before,
-        }
-    }
-
-    fn before<ST: SystemTuple>(self, systems: ST) -> impl IntoSystemBuilder<I, IS>
-    where
-        Self: Sized,
-    {
-        let SystemBuilder {
-            into_system,
-            _input_marker,
-            after,
-            before: _,
-        } = self.builder();
-        SystemBuilder {
-            into_system,
-            _input_marker,
-            after,
-            before: Some(systems),
-        }
-    }
-}
-
-impl<I, IS, ASI, BSI> IntoSystemBuilder<I, IS> for SystemBuilder<I, IS, ASI, BSI>
-where
-    IS: IntoSystem<I>,
-    ASI: SystemTuple,
-    BSI: SystemTuple,
-{
-    type After = ASI;
-    type Before = BSI;
-    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before> {
-        self 
-    }
-}
-
-impl<I, IS: IntoSystem<I>> IntoSystemBuilder<I, IS> for IS {
-    type After = ();
-    type Before = ();
-    fn builder(self) -> SystemBuilder<I, IS, Self::After, Self::Before> {
-        SystemBuilder {
-            into_system: self,
-            _input_marker: Default::default(),
-            after: None,
-            before: None,
+impl Constraint {
+    pub(crate) fn new(system_id: SystemId) -> Self {
+        Self {
+            system_id,
+            after: HashSet::new(),
+            before: HashSet::new(),
         }
     }
 }
@@ -160,38 +74,133 @@ impl Systems {
         }
     }
 
-    pub fn add_system<Input, S: System + 'static>(
+    pub fn add_system<Input, S: System + 'static, IS: IntoSystem<Input, System = S> + 'static>(
+        &mut self,
+        value: IS, 
+    ) -> SystemId {
+        let config_id = TypeId::of::<IS>();
+        self.add_system_inner(value, config_id)
+    }
+
+    pub fn add_system_inner<Input, S: System + 'static>(
         &mut self,
         value: impl IntoSystem<Input, System = S>,
+        sys_config_id: TypeId,
     ) -> SystemId {
         let system = value.into_system();
-        //TODO: handle none value
-        let fn_ptr = system.get_fn_ptr().unwrap();
-        if let Some(system_id) = self.func_system_map.get(&fn_ptr) {
+        if let Some(system_id) = self.func_system_map.get(&sys_config_id) {
             return *system_id;
         }
         let next_id: SystemId = self.system_vec.len().into();
         self.system_vec.push(Box::new(system));
-        self.func_system_map.insert(fn_ptr, next_id);
+        self.func_system_map.insert(sys_config_id, next_id);
         next_id.into()
     }
 
-    pub fn add_system_builder<Input, S, IS, ISB: IntoSystemBuilder<Input, IS>>(
+    pub fn add_system_builder<
+        I,
+        ST: IntoSystemTuple<I>,
+        IA,
+        AS: IntoSystemTuple<IA>,
+        IB,
+        BS: IntoSystemTuple<IB>,
+    >(
         &mut self,
-        builder: ISB,
-    ) -> SystemId
-    where
-        S: System + 'static,
-        IS: IntoSystem<Input, System = S>,
-    {
-        //TODO:
-        let SystemBuilder {
-            into_system,
-            _input_marker,
+        value: impl IntoSystemConfig<I, ST, IA, AS, IB, BS>,
+    ) -> Vec<SystemId> {
+        let SystemConfig {
+            system_tuple,
+            _marker,
+            chain,
             after,
             before,
-        } = builder.builder();
-        self.add_system(into_system)
+        } = value.build();
+        let mut system_ids = Vec::new();
+        system_tuple.add_systems_to_stor(self, &mut system_ids);
+
+        let after: Vec<SystemId> = if let Some(after) = after {
+            let mut system_ids = Vec::new();
+            after.add_systems_to_stor(self, &mut system_ids);
+            system_ids
+        } else {
+            Vec::new()
+        };
+
+        let before: Vec<SystemId> = if let Some(before) = before {
+            let mut system_ids = Vec::new();
+            before.add_systems_to_stor(self, &mut system_ids);
+            system_ids
+        } else {
+            Vec::new()
+        };
+
+        for system_id in system_ids.iter() {
+            self.add_system_constraints(*system_id, &after, &before);
+        }
+
+        if chain {
+            if system_ids.len() > 1 {
+                let sysid = system_ids[0];
+                let before_sysid = system_ids[1];
+                self.add_system_constraints(sysid, &[], &[before_sysid]);
+                let mut ind = 1;
+                for i in 1..(system_ids.len() - 1) {
+                    let after_sysid = system_ids[i - 1];
+                    let sysid = system_ids[i];
+                    let before_sysid = system_ids[i + 1];
+                    self.add_system_constraints(sysid, &[after_sysid], &[before_sysid]);
+                    ind = i;
+                }
+                if system_ids.len() > ind {
+                    let after_sysid = system_ids[ind - 1];
+                    let sysid = system_ids[ind];
+                    self.add_system_constraints(sysid, &[after_sysid], &[]);
+                }
+            }
+        }
+
+        system_ids
+    }
+
+    fn add_system_constraints(
+        &mut self,
+        system_id: SystemId,
+        after: &[SystemId],
+        before: &[SystemId],
+    ) -> SystemId {
+        fn insert_after(constraint: &mut Constraint, system_id: SystemId) {
+            constraint.after.insert(system_id);
+        }
+        fn insert_before(constraint: &mut Constraint, system_id: SystemId) {
+            constraint.before.insert(system_id);
+        }
+
+        self.insert_constraints(system_id, after, insert_after, insert_before);
+        self.insert_constraints(system_id, before, insert_before, insert_after);
+        system_id
+    }
+
+    fn insert_constraints(
+        &mut self,
+        system_id: SystemId,
+        con_sys_ids: &[SystemId],
+        mut insert_system_constraints: impl FnMut(&mut Constraint, SystemId),
+        mut insert_constraint_constraints: impl FnMut(&mut Constraint, SystemId),
+    ) {
+        let constraint = self
+            .constraints
+            .entry(system_id)
+            .or_insert(Constraint::new(system_id));
+        for csys in con_sys_ids.iter() {
+            insert_system_constraints(constraint, *csys);
+        }
+        for csys in con_sys_ids.iter() {
+            let constraint = self
+                .constraints
+                .entry(*csys)
+                .or_insert(Constraint::new(*csys));
+            insert_constraint_constraints(constraint, system_id);
+        }
     }
 
     pub fn get_system(&mut self, system_id: SystemId) -> &mut dyn System {
@@ -242,7 +251,6 @@ pub trait System {
         world_data: &UnsafeCell<WorldData>,
     );
     fn run(&mut self, system_param_ids: &[SystemParamId], world_data: &UnsafeCell<WorldData>);
-    fn get_fn_ptr(&self) -> Option<usize>;
 }
 
 pub trait SystemParam {
@@ -423,9 +431,6 @@ impl<F: FnMut()> System for FunctionSystem<(), F> {
     fn run(&mut self, _system_params: &[SystemParamId], _world_data: &UnsafeCell<WorldData>) {
         (self.f)();
     }
-    fn get_fn_ptr(&self) -> Option<usize> {
-        unsafe { Some(std::mem::transmute(&self.f)) }
-    }
 }
 
 macro_rules! impl_system_for_params {
@@ -451,9 +456,6 @@ macro_rules! impl_system_for_params {
                let mut system_param_index = 0;
                $(let $t = unsafe{$t::retrieve(&mut system_param_index, system_params, world_data)};)*
                call_inner(&mut self.f, $($t,)* );
-           }
-           fn get_fn_ptr(&self) -> Option<usize> {
-               unsafe { Some(std::mem::transmute(&self.f)) }
            }
        }
     };
@@ -481,6 +483,25 @@ impl<F: FnMut()> IntoSystem<()> for F {
         }
     }
 }
+
+/*
+       impl<
+       F: FnMut(T1, T2), T1 : SystemParam, T2: SystemParam>
+       IntoSystem<(T1, T2)> for F
+           where
+             for<'a, 'b> &'a mut F:
+             FnMut(T1, T2) + FnMut(<T1 as SystemParam>::Item<'b>, <T2 as SystemParam>::Item<'b>)
+        {
+           type System = FunctionSystem<(T1, T2), Self>;
+
+           fn into_system(self) -> Self::System {
+               FunctionSystem{
+                   f : self,
+                   marker : Default::default(),
+               }
+           }
+        }
+*/
 
 macro_rules! impl_into_system_for_functionsystem {
     ( $($t:ident), * ) => {
@@ -511,7 +532,7 @@ all_tuples!(
 mod test {
     use crate::ecs::{system::ResMut, world::World};
 
-    use super::{IntoSystemBuilder, Res};
+    use super::Res;
 
     fn test_system1(prm: Res<i32>, prm2: ResMut<usize>) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
@@ -522,19 +543,23 @@ mod test {
     }
 
     fn test_system2() {}
+    fn test_system3() {}
+    fn test_system4() {}
+    fn test_system5() {}
+    fn test_system6() {}
+    fn test_system7() {}
+    fn test_system8() {}
 
     #[test]
     fn it_works() {
         let mut world = World::new();
         let num1: i32 = 2324;
         let num2: usize = 4350;
-        let b = test_system2
-            .after((test_system2, test_system2))
-            //.before((test_system2, (test_system2, test_system2)));
-            .before((test_system2, test_system2));
-        world.add_system_builder(b);
-        //world.add_system(test_system1);
+
+        world.add_system_builder(test_system1);
         world.add_resource(num1);
         world.add_resource(num2);
+
+        world.init_and_run();
     }
 }

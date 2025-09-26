@@ -449,28 +449,28 @@ mod test {
     use super::ThinBlobVec;
 
     #[derive(Debug)]
-    struct comp1(usize, usize, u8, u8);
-    struct comp2(usize, u8, u8, u16);
-    struct comp3(usize, Box<comp2>);
+    struct Comp1(usize, usize, u8, u8);
+    struct Comp2(usize, u8, u8, u16);
+    struct Comp3(usize, Box<Comp2>);
 
     #[test]
     fn test_thin_vec() {
-        let mut bv = ThinBlobVec::new_typed::<comp1>();
+        let mut bv = ThinBlobVec::new_typed::<Comp1>();
         unsafe {
-            let cap = bv.push_typed(0, 0, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 1, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 2, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 3, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 4, comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 5, comp1(23, 435, 2, 5));
-            let v: &mut comp1 = bv.get_mut_typed(0);
-            let v: &mut comp1 = bv.get_mut_typed(4);
+            let cap = bv.push_typed(0, 0, Comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 1, Comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 2, Comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 3, Comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 4, Comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(cap, 5, Comp1(23, 435, 2, 5));
+            let _v: &mut Comp1 = bv.get_mut_typed(0);
+            let _v: &mut Comp1 = bv.get_mut_typed(4);
 
-            for c in bv.iter::<comp1>(6) {
+            for c in bv.iter::<Comp1>(6) {
                 println!("{:?}", c);
             }
 
-            bv.dealloc_typed::<comp1>(cap, 6);
+            bv.dealloc_typed::<Comp1>(cap, 6);
 
             drop(bv);
         }
