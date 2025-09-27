@@ -26,9 +26,9 @@ type StoredSystem = Box<dyn System>;
 
 /// Storage for systems.
 pub struct Systems {
-    system_vec: Vec<StoredSystem>,
+    pub(crate) system_vec: Vec<StoredSystem>,
     func_system_map: HashMap<TypeId, SystemId>,
-    constraints: HashMap<SystemId, Constraint>,
+    pub(crate) constraints: HashMap<SystemId, Constraint>,
     system_param_data: HashMap<SystemId, Vec<SystemParamId>>,
 }
 
@@ -49,9 +49,9 @@ pub enum SystemParamId {
 #[derive(Debug)]
 pub(crate) struct Constraint {
     #[allow(unused)]
-    system_id: SystemId,
-    after: HashSet<SystemId>,
-    before: HashSet<SystemId>,
+    pub(crate) system_id: SystemId,
+    pub(crate) after: HashSet<SystemId>,
+    pub(crate) before: HashSet<SystemId>,
 }
 
 impl Constraint {
@@ -76,7 +76,7 @@ impl Systems {
 
     pub fn add_system<Input, S: System + 'static, IS: IntoSystem<Input, System = S> + 'static>(
         &mut self,
-        value: IS, 
+        value: IS,
     ) -> SystemId {
         let config_id = TypeId::of::<IS>();
         self.add_system_inner(value, config_id)

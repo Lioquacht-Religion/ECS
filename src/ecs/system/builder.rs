@@ -8,11 +8,11 @@ pub trait IntoSystemTuple<I> {
     fn add_systems_to_stor(self, sys_stor: &mut Systems, system_ids: &mut Vec<SystemId>);
 }
 
-impl IntoSystemTuple<SystemId> for SystemId{
+impl IntoSystemTuple<SystemId> for SystemId {
     fn add_systems_to_stor(self, _sys_stor: &mut Systems, system_ids: &mut Vec<SystemId>) {
         system_ids.push(self);
     }
-} 
+}
 impl<I, S: System + 'static, IS: IntoSystem<I, System = S> + 'static> IntoSystemTuple<I> for IS {
     fn add_systems_to_stor(self, sys_stor: &mut Systems, system_ids: &mut Vec<SystemId>) {
         system_ids.push(sys_stor.add_system(self));
@@ -204,63 +204,64 @@ mod test {
     }
 
     #[test]
-    fn it_works() {
-        test_system8.type_id();
+    fn test_system_scheduler_builder() {
         let mut world = World::new();
-        let num1: i32 = 2324;
-        let num2: usize = 4350;
 
-        let b = 
-            (test_system1, test_system2, test_system3)
-            //test_system1
+        let b = (test_system1, test_system2, test_system3)
             .after((test_system4, test_system7))
             .before((test_system6, test_system8))
-            .chain()
-        ;
+            .chain();
 
         world.add_system_builder(b);
-        world.add_system_builder(test_system8.chain());
+
         world.add_system_builder(
             test_system5
                 .after((test_system2, test_system3, test_system4))
-                .before((test_system6, test_system7, test_system8)),
+                .before((
+                    test_system6,
+                    test_system8,
+                )),
         );
 
-        world.add_system_builder(
-            (test_system8, test_system2)
-                .after((test_system2, test_system3, test_system4))
-                .before((test_system6, test_system7, test_system8)),
-        );
-
-        /*
-        world.add_system_builder(
-            test_system8
-                .after((test_system2, test_system3, test_system4))
-                .before((test_system6, test_system7, test_system8)),
-        );
-
-        world.add_system_builder(
-            test_system8
-                .after((test_system3, test_system4))
-                .before((test_system7, test_system8)),
-        );
-
-        world.add_system_builder(test_system2);
-        world.add_system_builder(
-            (test_system7, test_system2)
-                .after((test_system7, test_system7))
-                .before(test_system8),
-        );
-        */
-
-        //world.add_system(test_system1);
-        //world.add_system(test_system8);
+        let num1: i32 = 2324;
+        let num2: usize = 4350;
         world.add_resource(num1);
         world.add_resource(num2);
 
+        println!("system constraints: {:?}", &world.systems.constraints);
+
         world.init_and_run();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_system_scheduler_builder_infinite_loop_check() {
+        let mut world = World::new();
+
+        let b = (test_system1, test_system2, test_system3)
+            .after((test_system4, test_system7))
+            .before((test_system6, test_system8))
+            .chain();
+
+        world.add_system_builder(b);
+
+        world.add_system_builder(
+            test_system5
+                .after((test_system2, test_system3, test_system4))
+                .before((
+                    test_system6,
+                    test_system7, //causes cyclic dependency
+                    test_system8,
+                )),
+        );
+
+        let num1: i32 = 2324;
+        let num2: usize = 4350;
+        world.add_resource(num1);
+        world.add_resource(num2);
 
         println!("system constraints: {:?}", &world.systems.constraints);
-        assert!(false);
+
+        world.init_and_run();
     }
 }

@@ -14,6 +14,7 @@ use crate::{
 use super::{
     commands::CommandQueuesStorage,
     query::QueryState,
+    scheduler::{Scheduler, SingleThreadScheduler},
     storages::entity_storage::EntityStorage,
     system::{
         Systems,
@@ -24,6 +25,7 @@ use super::{
 pub struct World {
     pub data: UnsafeCell<WorldData>,
     pub systems: Systems,
+    pub(crate) scheduler: SingleThreadScheduler,
 }
 
 pub struct WorldData {
@@ -38,6 +40,7 @@ impl World {
         World {
             data: WorldData::new().into(),
             systems: Systems::new(),
+            scheduler: SingleThreadScheduler::new(),
         }
     }
 
@@ -51,7 +54,7 @@ impl World {
 
     pub fn add_system<Input, S: System + 'static>(
         &mut self,
-        value: impl IntoSystem<Input, System = S> + 'static
+        value: impl IntoSystem<Input, System = S> + 'static,
     ) -> SystemId {
         self.systems.add_system(value)
     }
@@ -72,11 +75,12 @@ impl World {
 
     pub fn init_systems(&mut self) {
         self.systems.init_systems(&mut self.data);
+        (0..self.systems.system_vec.len()).for_each(|n| self.scheduler.schedule.push(n.into()));
     }
 
     pub fn run(&mut self) {
         self.data.get_mut().entity_storage.entities.reset_barriers();
-        self.systems.run_systems(&mut self.data);
+        self.scheduler.execute(&mut self.systems, &self.data);
         self.data.get_mut().execute_commands();
         self.data
             .get_mut()
