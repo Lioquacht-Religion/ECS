@@ -29,7 +29,7 @@ impl Scheduler for SingleThreadScheduler {
         let mut finished_systems: HashSet<SystemId> = HashSet::new();
         let mut cur_sys_ind: usize = 0;
 
-        let max_not_exec_system_count = to_run_systems.len()*2;
+        let max_not_exec_system_count = to_run_systems.len() * 2;
         let mut not_exec_system_count = 0;
 
         while to_run_systems.len() > 0 {
@@ -45,7 +45,7 @@ impl Scheduler for SingleThreadScheduler {
                 let removed_sysid = to_run_systems.remove(cur_sys_ind);
                 finished_systems.insert(removed_sysid);
                 if to_run_systems.len() >= cur_sys_ind && cur_sys_ind > 0 {
-                    cur_sys_ind -= 1;
+                    cur_sys_ind = 0;
                 }
                 not_exec_system_count = 0;
             } else {
@@ -55,7 +55,7 @@ impl Scheduler for SingleThreadScheduler {
                 }
                 not_exec_system_count += 1;
             }
-            if not_exec_system_count >= max_not_exec_system_count{
+            if not_exec_system_count >= max_not_exec_system_count {
                 panic!("System scheduling loop detected!")
             }
             println!("to_run: {}; cur_ind: {}", to_run_systems.len(), cur_sys_ind);

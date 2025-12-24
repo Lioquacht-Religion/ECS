@@ -2,6 +2,8 @@
 
 use std::marker::PhantomData;
 
+use crate::{all_tuples, all_tuples_wout_single};
+
 use super::{IntoSystem, System, SystemId, Systems};
 
 pub trait IntoSystemTuple<I> {
@@ -13,33 +15,41 @@ impl IntoSystemTuple<SystemId> for SystemId {
         system_ids.push(self);
     }
 }
+
 impl<I, S: System + 'static, IS: IntoSystem<I, System = S> + 'static> IntoSystemTuple<I> for IS {
     fn add_systems_to_stor(self, sys_stor: &mut Systems, system_ids: &mut Vec<SystemId>) {
         system_ids.push(sys_stor.add_system(self));
     }
 }
+
 impl IntoSystemTuple<()> for () {
     fn add_systems_to_stor(self, _sys_stor: &mut Systems, _system_ids: &mut Vec<SystemId>) {}
 }
-impl<I1, I2, T1: IntoSystemTuple<I1>, T2: IntoSystemTuple<I2>> IntoSystemTuple<(I1, I2)>
-    for (T1, T2)
-{
-    fn add_systems_to_stor(self, sys_stor: &mut Systems, system_ids: &mut Vec<SystemId>) {
-        let (t1, t2) = self;
-        T1::add_systems_to_stor(t1, sys_stor, system_ids);
-        T2::add_systems_to_stor(t2, sys_stor, system_ids);
+
+macro_rules! impl_into_system_tuples {
+    (($($t1:ident), *), ($($t2:ident), *)) => {
+        impl<$($t2, $t1: IntoSystemTuple<$t2>), *>
+            IntoSystemTuple<($($t2), *)> for ($($t1), *)
+        {
+            fn add_systems_to_stor(
+                self, 
+                sys_stor: &mut Systems, 
+                system_ids: &mut Vec<SystemId>
+            ) {
+                 #[allow(non_snake_case)]
+                let ($($t1), *) = self;
+                $($t1::add_systems_to_stor($t1, sys_stor, system_ids)); *
+            }
+        }
     }
 }
-impl<I1, I2, I3, T1: IntoSystemTuple<I1>, T2: IntoSystemTuple<I2>, T3: IntoSystemTuple<I3>>
-    IntoSystemTuple<(I1, I2, I3)> for (T1, T2, T3)
-{
-    fn add_systems_to_stor(self, sys_stor: &mut Systems, system_ids: &mut Vec<SystemId>) {
-        let (t1, t2, t3) = self;
-        T1::add_systems_to_stor(t1, sys_stor, system_ids);
-        T2::add_systems_to_stor(t2, sys_stor, system_ids);
-        T3::add_systems_to_stor(t3, sys_stor, system_ids);
-    }
-}
+
+#[rustfmt::skip]
+all_tuples_wout_single!(
+    impl_into_system_tuples,
+    (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16), 
+    (I1, I2, I3, I4, I5, I6, I7, I8, I9, I10, I11, I12, I13, I14, I15, I16)
+);
 
 pub struct SystemConfig<
     I,
@@ -171,8 +181,6 @@ impl<I, ST: IntoSystemTuple<I>, IA, AS: IntoSystemTuple<IA>, IB, BS: IntoSystemT
 
 #[cfg(test)]
 mod test {
-    use std::any::Any;
-
     use crate::ecs::{
         commands::Commands,
         component::Component,
@@ -183,7 +191,15 @@ mod test {
 
     use super::IntoSystemConfig;
 
-    fn test_system1(prm: Res<i32>, prm2: ResMut<usize>) {
+    struct SystemExecCount(usize);
+
+    fn test_system1(prm: Res<i32>, prm2: ResMut<usize>, exec_count: ResMut<SystemExecCount>) {
+        println!("testsystem1 exec count: {}", exec_count.value.0);
+        assert_eq!(exec_count.value.0, 0);
+        exec_count.value.0 += 1;
+        println!("testsystem1 exec count after: {}", exec_count.value.0);
+        assert_eq!(exec_count.value.0, 1);
+
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
         assert_eq!(2324, *prm.value);
         assert_eq!(4350, *prm2.value);
@@ -217,10 +233,7 @@ mod test {
         world.add_system_builder(
             test_system5
                 .after((test_system2, test_system3, test_system4))
-                .before((
-                    test_system6,
-                    test_system8,
-                )),
+                .before((test_system6, test_system8)),
         );
 
         let num1: i32 = 2324;
@@ -234,13 +247,11 @@ mod test {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "System scheduling loop detected!")]
     fn test_system_scheduler_builder_infinite_loop_check() {
         let mut world = World::new();
 
         let b = (test_system1, test_system2, test_system3)
-            .after((test_system4, test_system7))
-            .before((test_system6, test_system8))
             .chain();
 
         world.add_system_builder(b);
@@ -259,6 +270,7 @@ mod test {
         let num2: usize = 4350;
         world.add_resource(num1);
         world.add_resource(num2);
+        world.add_resource(SystemExecCount(0));
 
         println!("system constraints: {:?}", &world.systems.constraints);
 
