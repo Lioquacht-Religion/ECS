@@ -19,7 +19,7 @@ use super::{
     thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec},
 };
 
-pub struct TableSoA {
+pub(crate) struct TableSoA {
     #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
     pub(crate) columns: Map<TypeId, ThinBlobVec>,
@@ -28,7 +28,7 @@ pub struct TableSoA {
 }
 
 impl TableSoA {
-    pub fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
+    pub(crate) fn new(archetype_id: ArchetypeId, entity_storage: &EntityStorage) -> Self {
         let mut columns = Map::new();
         let archetype = &entity_storage.archetypes[usize::from(archetype_id)];
         archetype.soa_comp_ids.get_vec().iter().for_each(|cid| {
@@ -44,10 +44,23 @@ impl TableSoA {
         }
     }
 
-    ///SAFETY: Caller of this function
-    ///        should forget/leak value of type T,
-    ///        so it does not get dropped.
-    pub unsafe fn insert(
+    /// #SAFETY: 
+    ///
+    /// ##Input values:
+    /// Supplied ComponentInfo, ComponentId and component pointer slice
+    /// should be of the same length and component order.
+    /// The types and layouts of the inserted components should exactly match
+    /// the types of the already inserted components.
+    ///
+    /// The order in which the components are stored in the table 
+    /// and in which they are supplied do not need to match. 
+    ///
+    /// ##After call needed actions
+    /// The caller of this function
+    /// should forget/leak value of type T,
+    /// so that the by this value owned allocations will not be dropped
+    /// once it goes out of scope.
+    pub(crate) unsafe fn insert(
         &mut self,
         component_infos: &[ComponentInfo],
         soa_comp_ids: &[ComponentId],
@@ -71,7 +84,22 @@ impl TableSoA {
         self.len += 1;
     }
 
-    pub unsafe fn insert_batch(
+    /// #SAFETY: 
+    /// ##Input values:
+    /// Supplied ComponentInfo, ComponentId and component pointer slice
+    /// should be of the same length and component order.
+    /// The types and layouts of the inserted components should exactly match
+    /// the types of the already inserted components.
+    ///
+    /// The order in which the components are stored in the table 
+    /// and in which they are supplied do not need to match. 
+    ///
+    /// ##After call needed actions
+    /// Caller of this function
+    /// should forget/leak batch insterted values of type T,
+    /// so by these values owned allocations will not be dropped
+    /// once they go out of scope.
+    pub(crate) unsafe fn insert_batch(
         &mut self,
         component_infos: &[ComponentInfo],
         soa_comp_ids: &[ComponentId],
@@ -79,13 +107,16 @@ impl TableSoA {
         value_layout: Layout,
         batch_len: usize,
     ) {
-        if soa_comp_ids.len() <= 0 {
+        // no components marked for SOA storage,
+        // return early and do no work
+        if soa_comp_ids.len() == 0 {
             return;
         }
 
+        //TODO: why did i do this, document
         let mut thin_columns: Vec<NonNull<ThinBlobVec>> = Vec::with_capacity(soa_comp_ids.len());
         for cid in soa_comp_ids.iter() {
-            let cinfo = &component_infos[cid.0 as usize];
+            let cinfo : &ComponentInfo = &component_infos[cid.0 as usize];
             thin_columns.push(
                 self.columns
                     .get_mut(&cinfo.type_id)
@@ -97,7 +128,7 @@ impl TableSoA {
         for i in 0..batch_len {
             for j in 0..soa_comp_ids.len() {
                 unsafe {
-                    let column = thin_columns[j].as_mut();
+                    let column : &mut ThinBlobVec = thin_columns[j].as_mut();
                     let value_offset = value_layout.size() * i;
                     let entry_ptr = soa_base_ptrs[j].add(value_offset);
                     column.push_untyped(self.cap, self.len, entry_ptr);
@@ -116,7 +147,7 @@ impl TableSoA {
         }
     }
 
-    pub fn remove(&mut self, entity: &Entity) {
+    pub(crate) fn remove(&mut self, entity: &Entity) {
         if self.len > entity.row_id as usize {
             for (_tid, col) in self.columns.iter_mut() {
                 unsafe {
@@ -127,13 +158,16 @@ impl TableSoA {
         }
     }
 
-    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
+    pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
         unsafe { new_table_soa_iter::<TC>(self) }
     }
 
-    pub unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
+    /// #SAFETY:
+    /// Component type T needs to be contained by the table,
+    /// otherwise this function will panic.
+    pub(crate) unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
         unsafe {
             self.columns
                 .get(&TypeId::of::<T>())
@@ -144,7 +178,11 @@ impl TableSoA {
                 .tuple_iter()
         }
     }
-    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
+
+    /// #SAFETY:
+    /// Component type T needs to be contained by the table,
+    /// otherwise this function will panic.
+    pub(crate) unsafe fn get_single_comp_iter_mut<'c, T: Component>(
         &'c mut self,
     ) -> ThinBlobIterMutUnsafe<'c, T> {
         unsafe {
@@ -169,13 +207,14 @@ impl Drop for TableSoA {
     }
 }
 
-pub struct TableSoaTupleIter<T: TupleIterator> {
+//TODO: are these unused things later useful
+pub(crate) struct TableSoaTupleIter<T: TupleIterator> {
     tuple_iters: T,
     len: usize,
     index: usize,
 }
 
-pub unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
+pub(crate) unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
     table: &'table mut TableSoA,
 ) -> TableSoaTupleIter<TC::Construct<'table>> {
     unsafe {
@@ -186,6 +225,7 @@ pub unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
         }
     }
 }
+
 
 impl<T: TupleIterator> Iterator for TableSoaTupleIter<T> {
     type Item = T::Item;

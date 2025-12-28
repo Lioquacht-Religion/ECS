@@ -39,6 +39,12 @@ impl TableStorage {
         }
     }
 
+    // Returns the row id in the table of the inserted entity.
+    //
+    // #SAFETY:
+    // The caller of this function should forget/leak the batch inserted values,
+    // so that their owned allocations will not be freed, 
+    // after the original values have gone out of their scope and were dropped.
     pub(crate) unsafe fn insert<T: TupleTypesExt>(
         &mut self,
         entity: EntityKey,
@@ -71,6 +77,14 @@ impl TableStorage {
         row_id
     }
 
+    // Insert batch of multiple entities of the same archetype and their components
+    // into the table storage.
+    // Returns a tuple containing the start and end row id of the inserted entities.
+    //
+    // #SAFETY:
+    // The caller of this function should forget/leak the batch inserted values,
+    // so that their owned allocations will not be freed, 
+    // after the original values have gone out of their scope and were dropped.
     pub(crate) unsafe fn insert_batch<T: TupleTypesExt>(
         &mut self,
         entities: &[EntityKey],
@@ -116,12 +130,6 @@ impl TableStorage {
         let row_id_end = row_id_start + values.len() as u32;
 
         let value_len: u32 = values.len().try_into().expect("Max u32 value reached!");
-        println!(
-            "entities len: {}, table len {}; batch values to add len: {}",
-            self.entities.len(),
-            self.len,
-            value_len
-        );
         self.len += value_len;
 
         while let Some(val) = values.pop() {
@@ -131,6 +139,8 @@ impl TableStorage {
         Some((row_id_start, row_id_end))
     }
 
+    /// Removes supplied entity with all its components from table.
+    /// Returns a tuple of the new EntityKey and the entities new row id in the world.
     pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, u32)> {
         assert!(self.len > entity.row_id);
         let key = self.entities.remove(entity.row_id as usize);
@@ -143,24 +153,27 @@ impl TableStorage {
         if entity.row_id == self.len {
             None
         } else {
+            //TODO: does the row id need to be updated?
+            //TODO: what does the row id even mean anymore?
+            //TODO: the removal of entities seems to be incorrectly implemented in general
             Some((key, entity.row_id))
         }
     }
 
-    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
+    pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
         &'a mut self,
     ) -> TableStorageTupleIter<TC::Construct<'a>> {
         unsafe { new_table_storage_iter::<TC>(self) }
     }
 }
 
-pub struct TableStorageTupleIter<T: TupleIterator> {
+pub(crate) struct TableStorageTupleIter<T: TupleIterator> {
     tuple_iters: T,
     len: usize,
     index: usize,
 }
 
-pub unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStorage>>(
+pub(crate) unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<TableStorage>>(
     table: &'table mut TableStorage,
 ) -> TableStorageTupleIter<TC::Construct<'table>> {
     unsafe {

@@ -3,9 +3,9 @@
 // TODO: redo this as an easier to use proc macro
 #[macro_export]
 macro_rules! all_tuples {
-    ( 
-        $m:ident, 
-        ($head1:ident, $($tail1:ident), *), 
+    (
+        $m:ident,
+        ($head1:ident, $($tail1:ident), *),
         ($head2:ident, $($tail2:ident), *)
     ) => {
         $m!(($head1, $($tail1), *), ($head2, $($tail2), *));
@@ -25,9 +25,9 @@ macro_rules! all_tuples {
 
 #[macro_export]
 macro_rules! all_tuples_wout_single {
-    ( 
-        $m:ident, 
-        ($head1:ident, $($tail1:ident), *), 
+    (
+        $m:ident,
+        ($head1:ident, $($tail1:ident), *),
         ($head2:ident, $($tail2:ident), *)
     ) => {
         $m!(($head1, $($tail1), *), ($head2, $($tail2), *));

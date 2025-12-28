@@ -58,7 +58,6 @@ impl Scheduler for SingleThreadScheduler {
             if not_exec_system_count >= max_not_exec_system_count {
                 panic!("System scheduling loop detected!")
             }
-            println!("to_run: {}; cur_ind: {}", to_run_systems.len(), cur_sys_ind);
         }
     }
 }

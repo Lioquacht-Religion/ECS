@@ -1,16 +1,6 @@
 // main.rs file for testing ECS package directly
 
-use ecs::ecs::{
-    commands::Commands,
-    component::{Component, StorageTypes},
-    query::{
-        Query,
-        query_filter::{Or, With, Without},
-    },
-    storages::entity_storage::EntityStorage,
-    system::{Res, builder::IntoSystemConfig},
-    world::World,
-};
+use ecs::ecs::prelude::*;
 
 #[allow(unused)]
 struct Pos(i32);
@@ -261,7 +251,7 @@ fn test_table_soa_insert() {
     init_es_insert(&mut es);
 }
 
-fn test_table_query_iter() {
+fn test_table_aos_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
     let num2: usize = 2324;
@@ -298,7 +288,7 @@ fn test_table_query_iter() {
 }
 
 fn main() {
-    test_table_query_iter();
+    test_table_aos_query_iter();
     test_table_soa_insert();
     normal_loop_test();
 }

@@ -36,9 +36,13 @@ pub struct Query<'w, 's, P: QueryParam, F: QueryFilter = ()> {
 }
 
 #[derive(Debug)]
-pub struct QueryState {
+pub(crate) struct QueryState {
+    //TODO: are these unsued fields needed for new features
+    #[allow(unused)]
     comp_ids: SortedVec<ComponentId>,
+    #[allow(unused)]
     optional_comp_ids: SortedVec<ComponentId>,
+    #[allow(unused)]
     arch_ids: Vec<ArchetypeId>,
     #[allow(unused)]
     filter: Vec<FilterElem>,
@@ -59,7 +63,7 @@ pub enum RefKind {
 }
 
 impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
-    pub fn new(world: &'w UnsafeCell<WorldData>, state: &'s QueryState) -> Self {
+    pub(crate) fn new(world: &'w UnsafeCell<WorldData>, state: &'s QueryState) -> Self {
         Self {
             world,
             state,
@@ -68,6 +72,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
         }
     }
 
+    ///TODO: add documentation and examples
     pub fn iter(&mut self) -> QueryIter<'_, '_, P, F> {
         QueryIter::new(self)
     }
@@ -388,14 +393,16 @@ mod test {
         assert_eq!(query.iter().count(), 3);
     }
 
-    fn test_system5(mut query2: Query<(&Pos1, &Pos2)>, mut query: Query<(&Comp1, &Marker1)>) {
+    fn test_system5(mut query2: Query<(&Pos1, &Pos2)>, 
+        mut query: Query<(&Comp1, &Marker1)>) {
         for (comp1, _m) in query.iter() {
             println!("comp1: {}; {}", comp1.0, comp1.1);
         }
-        //TODO: assert_eq!(query.iter().count(), 3);
+        assert_eq!(query.iter().count(), 1);
         for (p1, p2) in query2.iter() {
             println!("p1: {}; p2:{}", p1.0, p2.1);
         }
+        assert_eq!(query2.iter().count(), 2);
     }
 
     #[test]

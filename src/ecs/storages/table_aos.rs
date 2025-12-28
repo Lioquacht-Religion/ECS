@@ -218,7 +218,7 @@ impl TableAoS {
         unimplemented!()
     }
 
-    pub fn remove(&mut self, entity: &Entity) {
+    pub(crate) fn remove(&mut self, entity: &Entity) {
         assert!(self.len > entity.row_id as usize);
         unsafe {
             self.vec
@@ -227,13 +227,13 @@ impl TableAoS {
         self.len -= 1;
     }
 
-    pub unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
+    pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
         &'a mut self,
     ) -> TableAosTupleIter<TC::Construct<'a>> {
         unsafe { new_table_aos_iter::<TC>(self) }
     }
 
-    pub unsafe fn get_single_comp_iter<'c, T: Component>(
+    pub(crate) unsafe fn get_single_comp_iter<'c, T: Component>(
         &'c self,
     ) -> ThinBlobInnerTypeIterUnsafe<'c, T> {
         let index = self
@@ -247,7 +247,8 @@ impl TableAoS {
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         unsafe { self.vec.tuple_inner_type_iter(*offset) }
     }
-    pub unsafe fn get_single_comp_iter_mut<'c, T: Component>(
+
+    pub(crate) unsafe fn get_single_comp_iter_mut<'c, T: Component>(
         &'c mut self,
     ) -> ThinBlobInnerTypeIterMutUnsafe<'c, T> {
         let index = self
@@ -289,7 +290,7 @@ impl Drop for TableAoS {
     }
 }
 
-pub struct TableAosTupleIter<T: TupleIterator> {
+pub(crate) struct TableAosTupleIter<T: TupleIterator> {
     tuple_iters: T,
     len: usize,
     index: usize,

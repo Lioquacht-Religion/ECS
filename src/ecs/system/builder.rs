@@ -32,8 +32,8 @@ macro_rules! impl_into_system_tuples {
             IntoSystemTuple<($($t2), *)> for ($($t1), *)
         {
             fn add_systems_to_stor(
-                self, 
-                sys_stor: &mut Systems, 
+                self,
+                sys_stor: &mut Systems,
                 system_ids: &mut Vec<SystemId>
             ) {
                  #[allow(non_snake_case)]
@@ -251,8 +251,7 @@ mod test {
     fn test_system_scheduler_builder_infinite_loop_check() {
         let mut world = World::new();
 
-        let b = (test_system1, test_system2, test_system3)
-            .chain();
+        let b = (test_system1, test_system2, test_system3).chain();
 
         world.add_system_builder(b);
 

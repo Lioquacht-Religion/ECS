@@ -1,9 +1,6 @@
 //thin_blob_vec.rs
 
-//TODO: dealloc and realloc allocation at old pointer
-//TODO: do not drop other inner boxed values of moved boxed value
-//TODO: store drop methods of stored values too for correct deallocation
-//TODO: macro for more efficient tuple inserting through use of destructuring
+//TODO: fix UB, add check for not allocation for layouts of size zero
 
 use std::{alloc::Layout, marker::PhantomData, ptr::NonNull};
 
@@ -45,7 +42,7 @@ pub struct ThinBlobVec {
 }
 
 impl ThinBlobVec {
-    pub fn new(layout: Layout, drop_fn: Option<unsafe fn(*mut u8)>) -> Self {
+    pub(crate) fn new(layout: Layout, drop_fn: Option<unsafe fn(*mut u8)>) -> Self {
         Self {
             data: NonNull::dangling(),
             layout,
@@ -53,7 +50,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub fn new_typed<T>() -> Self {
+    pub(crate) fn new_typed<T>() -> Self {
         Self {
             data: NonNull::dangling(),
             layout: Layout::new::<T>(),
@@ -61,7 +58,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn call_drop_on_elem(&mut self, index: usize) -> NonNull<u8> {
+    pub(crate) unsafe fn call_drop_on_elem(&mut self, index: usize) -> NonNull<u8> {
         unsafe {
             let elem_ptr = self.data.add(self.layout.size() * index);
             if let Some(drop_fn) = self.drop_fn {
@@ -74,7 +71,9 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn remove_and_replace_with_last(&mut self, len: usize, to: usize) {
+    pub(crate) unsafe fn remove_and_replace_with_last(&mut self, len: usize, to: usize) {
+        //TODO: i do not think this works correctly,
+        // check it again, especially if this works for both soa and aos
         assert!(to < len);
 
         unsafe {
@@ -86,8 +85,8 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn dealloc(&mut self, cap: usize, len: usize) {
-        if cap == 0 {
+    pub(crate) unsafe fn dealloc(&mut self, cap: usize, len: usize) {
+        if cap == 0 || self.layout.size() == 0{
             return;
         }
 
@@ -110,22 +109,24 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn dealloc_typed<T>(&mut self, cap: usize, len: usize) {
+    pub(crate) unsafe fn dealloc_typed<T>(&mut self, cap: usize, len: usize) {
         unsafe {
             self.dealloc(cap, len);
         }
     }
 
-    pub unsafe fn drop_ptr<T>(ptr: *mut u8) {
+    pub(crate) unsafe fn drop_ptr<T>(ptr: *mut u8) {
         let typed_ptr: *mut T = ptr.cast::<T>();
         let _ = unsafe { std::ptr::drop_in_place(typed_ptr) };
     }
 
-    /**
-     * Grows dynamic array by doubling the supplied capacity.
-     * Returns new capacity of the new allocation.
-     */
-    pub unsafe fn grow(&mut self, cap: usize) -> usize {
+    /// Grows dynamic array by doubling the supplied capacity.
+    /// Returns new capacity of the new allocation.
+    ///
+    /// #SAFETY:
+    /// Do not call grow for layouts of size zero.
+    /// Allocating memory of size zero is undefined behaviour
+    pub(crate) unsafe fn grow(&mut self, cap: usize) -> usize {
         let (new_ptr, new_cap) = if cap == 0 {
             let new_cap = 4;
             let cur_array_layout =
@@ -152,27 +153,31 @@ impl ThinBlobVec {
         new_cap
     }
 
-    /**
-     * Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
-     *
-     */
-    pub unsafe fn push_untyped(&mut self, cap: usize, len: usize, value_ptr: NonNull<u8>) -> usize {
-        unsafe {
-            let new_cap = if len == cap { self.grow(cap) } else { cap };
+    /// Pushes an untyped element onto the calling ThinBlobVec.
+    /// Returns new capacity of this ThinBlobVec after pushing the new element onto it.
+    ///
+    /// #SAFETY:
+    /// Call std::mem::forget on the pushed value
+    /// after calling this function to prevent it from being dropped.
+    pub(crate) unsafe fn push_untyped(&mut self, cap: usize, len: usize, value_ptr: NonNull<u8>) -> usize {
+        if self.layout.size() != 0 {
+            unsafe {
+                let new_cap = if len == cap { self.grow(cap) } else { cap };
 
-            let base_offset = self.layout.size() * len;
-            let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
+                let base_offset = self.layout.size() * len;
+                let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
 
-            std::ptr::copy(value_ptr.as_ptr(), entry_ptr, self.layout.size());
+                std::ptr::copy(value_ptr.as_ptr(), entry_ptr, self.layout.size());
 
-            new_cap
+                return new_cap;
+            }
         }
+        // for zero-sized-types return capacity zero
+        0
     }
 
-    /**
-     * Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
-     *
-     */
+    /// #SAFETY:
+    /// Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
     pub(crate) unsafe fn push_ptr_vec_untyped(
         &mut self,
         cap: &mut usize,
@@ -193,7 +198,8 @@ impl ThinBlobVec {
         }
     }
 
-    ///#SAFETY Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
+    ///#SAFETY
+    /// Call std::mem::forget on the pushed value after calling this function to prevent it from being dropped.
     pub(crate) unsafe fn push_ptr_vec_untyped_with_offset(
         &mut self,
         cap: &mut usize,
@@ -203,25 +209,32 @@ impl ThinBlobVec {
         value_ptrs: &[CompElemPtr],
         value_ptrs_offset: usize,
     ) {
-        unsafe {
-            *cap = if len == cap { self.grow(*cap) } else { *cap };
+        // do not allocate memory for zero-sized-types, e.g. layout size is zero
+        if self.layout.size() > 0 {
+            unsafe {
+                *cap = if len == cap { self.grow(*cap) } else { *cap };
 
-            let base_offset = self.layout.size() * *len;
-            let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
+                let base_offset = self.layout.size() * *len;
+                let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
 
-            for (i, value_ptr) in value_ptrs.iter().enumerate() {
-                let comp_info = &comp_infos[value_ptr.comp_id.0 as usize];
-                let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i].ptr_offset);
-                let layout_size = comp_info.layout.size();
-                let value_ptr_src = value_ptr.ptr.add(value_ptrs_offset);
-                std::ptr::copy(value_ptr_src.as_ptr(), dst_comp_ptr, layout_size);
+                for (i, value_ptr) in value_ptrs.iter().enumerate() {
+                    let comp_info = &comp_infos[value_ptr.comp_id.0 as usize];
+                    let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i].ptr_offset);
+                    let layout_size = comp_info.layout.size();
+                    // do not copy zero sized types to different location
+                    if true//layout_size > 0 
+                    {
+                        let value_ptr_src = value_ptr.ptr.add(value_ptrs_offset);
+                        std::ptr::copy(value_ptr_src.as_ptr(), dst_comp_ptr, layout_size);
+                    }
+                }
+
+                *len += 1;
             }
-
-            *len += 1;
         }
     }
 
-    pub unsafe fn push_typed<T>(&mut self, cap: usize, len: usize, mut value: T) -> usize {
+    pub(crate) unsafe fn push_typed<T>(&mut self, cap: usize, len: usize, mut value: T) -> usize {
         let new_cap = unsafe {
             self.push_untyped(
                 cap,
@@ -234,11 +247,17 @@ impl ThinBlobVec {
         new_cap
     }
 
-    pub unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
-        unsafe { self.data.add(index * layout.size()) }
+    pub(crate) unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
+        //TODO: add ZST safety
+        if layout.size() != 0 {
+            unsafe { self.data.add(index * layout.size()) }
+        }
+        else{
+            self.data
+        }
     }
 
-    pub unsafe fn get_typed<T>(&self, index: usize) -> &T {
+    pub(crate) unsafe fn get_typed<T>(&self, index: usize) -> &T {
         unsafe {
             &*self
                 .get_ptr_untyped(index, Layout::new::<T>())
@@ -247,7 +266,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn get_typed_lifetime<'vec, T>(&self, index: usize) -> &'vec T {
+    pub(crate) unsafe fn get_typed_lifetime<'vec, T>(&self, index: usize) -> &'vec T {
         unsafe {
             &*self
                 .get_ptr_untyped(index, Layout::new::<T>())
@@ -256,7 +275,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn get_mut_typed<T>(&mut self, index: usize) -> &mut T {
+    pub(crate) unsafe fn get_mut_typed<T>(&mut self, index: usize) -> &mut T {
         unsafe {
             &mut *self
                 .get_ptr_untyped(index, Layout::new::<T>())
@@ -265,7 +284,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn get_mut_typed_lifetime<'vec, T>(&mut self, index: usize) -> &'vec mut T {
+    pub(crate) unsafe fn get_mut_typed_lifetime<'vec, T>(&mut self, index: usize) -> &'vec mut T {
         unsafe {
             &mut *self
                 .get_ptr_untyped(index, Layout::new::<T>())
@@ -274,7 +293,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn get_mut_inner_typed_lifetime<'vec, T>(
+    pub(crate) unsafe fn get_mut_inner_typed_lifetime<'vec, T>(
         &mut self,
         index: usize,
         offset: usize,
@@ -288,7 +307,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn get_inner_typed_lifetime<'vec, T>(&self, index: usize, offset: usize) -> &'vec T {
+    pub(crate) unsafe fn get_inner_typed_lifetime<'vec, T>(&self, index: usize, offset: usize) -> &'vec T {
         unsafe {
             &*self
                 .get_ptr_untyped(index, self.layout)
@@ -298,26 +317,26 @@ impl ThinBlobVec {
         }
     }
 
-    pub unsafe fn iter<T: 'static>(&mut self, len: usize) -> ThinBlobIter<'_, T> {
+    pub(crate) unsafe fn iter<T: 'static>(&mut self, len: usize) -> ThinBlobIter<'_, T> {
         ThinBlobIter::new(self, len)
     }
 
-    pub unsafe fn tuple_iter<T: 'static>(&self) -> ThinBlobIterUnsafe<'_, T> {
+    pub(crate) unsafe fn tuple_iter<T: 'static>(&self) -> ThinBlobIterUnsafe<'_, T> {
         ThinBlobIterUnsafe::new(self)
     }
 
-    pub unsafe fn tuple_iter_mut<T: 'static>(&mut self) -> ThinBlobIterMutUnsafe<'_, T> {
+    pub(crate) unsafe fn tuple_iter_mut<T: 'static>(&mut self) -> ThinBlobIterMutUnsafe<'_, T> {
         ThinBlobIterMutUnsafe::new(self)
     }
 
-    pub unsafe fn tuple_inner_type_iter<T: 'static>(
+    pub(crate) unsafe fn tuple_inner_type_iter<T: 'static>(
         &self,
         offset: usize,
     ) -> ThinBlobInnerTypeIterUnsafe<'_, T> {
         ThinBlobInnerTypeIterUnsafe::new(self, offset)
     }
 
-    pub unsafe fn tuple_inner_type_iter_mut<T: 'static>(
+    pub(crate) unsafe fn tuple_inner_type_iter_mut<T: 'static>(
         &mut self,
         offset: usize,
     ) -> ThinBlobInnerTypeIterMutUnsafe<'_, T> {
@@ -331,7 +350,7 @@ pub struct ThinBlobIterUnsafe<'vec, T: 'static> {
 }
 
 impl<'vec, T: 'static> ThinBlobIterUnsafe<'vec, T> {
-    pub fn new(blob: &'vec ThinBlobVec) -> Self {
+    pub(crate) fn new(blob: &'vec ThinBlobVec) -> Self {
         ThinBlobIterUnsafe {
             vec: blob,
             marker: PhantomData,
@@ -352,7 +371,7 @@ pub struct ThinBlobIterMutUnsafe<'vec, T: 'static> {
 }
 
 impl<'vec, T: 'static> ThinBlobIterMutUnsafe<'vec, T> {
-    pub fn new(blob: &'vec mut ThinBlobVec) -> Self {
+    pub(crate) fn new(blob: &'vec mut ThinBlobVec) -> Self {
         ThinBlobIterMutUnsafe {
             vec: blob,
             marker: PhantomData,
@@ -374,7 +393,7 @@ pub struct ThinBlobInnerTypeIterUnsafe<'vec, T: 'static> {
 }
 
 impl<'vec, T: 'static> ThinBlobInnerTypeIterUnsafe<'vec, T> {
-    pub fn new(blob: &'vec ThinBlobVec, offset: usize) -> Self {
+    pub(crate) fn new(blob: &'vec ThinBlobVec, offset: usize) -> Self {
         ThinBlobInnerTypeIterUnsafe {
             vec: blob,
             offset,
@@ -397,7 +416,7 @@ pub struct ThinBlobInnerTypeIterMutUnsafe<'vec, T: 'static> {
 }
 
 impl<'vec, T: 'static> ThinBlobInnerTypeIterMutUnsafe<'vec, T> {
-    pub fn new(blob: &'vec mut ThinBlobVec, offset: usize) -> Self {
+    pub(crate) fn new(blob: &'vec mut ThinBlobVec, offset: usize) -> Self {
         ThinBlobInnerTypeIterMutUnsafe {
             vec: blob,
             offset,
@@ -413,7 +432,7 @@ impl<'vec, T: Component + 'static> TupleIterator for ThinBlobInnerTypeIterMutUns
     }
 }
 
-pub struct ThinBlobIter<'vec, T: 'static> {
+pub(crate) struct ThinBlobIter<'vec, T: 'static> {
     vec: &'vec mut ThinBlobVec,
     len: usize,
     index: usize,
@@ -421,7 +440,7 @@ pub struct ThinBlobIter<'vec, T: 'static> {
 }
 
 impl<'vec, T: 'static> ThinBlobIter<'vec, T> {
-    pub fn new(blob: &'vec mut ThinBlobVec, len: usize) -> Self {
+    pub(crate) fn new(blob: &'vec mut ThinBlobVec, len: usize) -> Self {
         ThinBlobIter {
             vec: blob,
             len,
