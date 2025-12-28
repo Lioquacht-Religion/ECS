@@ -161,7 +161,7 @@ fn test_system2(
 
 fn test_system3() {}
 
-static CAPACITY: usize = 100_000;
+const CAPACITY: usize = 127;
 
 fn init_es_insert(es: &mut EntityStorage) {
     let start1 = std::time::Instant::now();

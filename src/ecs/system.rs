@@ -4,7 +4,7 @@ use std::{
     any::TypeId,
     cell::UnsafeCell,
     collections::{HashMap, HashSet},
-    marker::PhantomData,
+    marker::PhantomData, ops::{Deref, DerefMut},
 };
 
 use builder::{IntoSystemConfig, IntoSystemTuple, SystemConfig};
@@ -248,7 +248,7 @@ pub trait System {
         &mut self,
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &UnsafeCell<WorldData>,
+        world_data: &mut UnsafeCell<WorldData>,
     );
     fn run(&mut self, system_param_ids: &[SystemParamId], world_data: &UnsafeCell<WorldData>);
 }
@@ -264,7 +264,7 @@ pub trait SystemParam {
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &UnsafeCell<WorldData>,
+        world_data: &mut UnsafeCell<WorldData>,
     );
 }
 
@@ -272,8 +272,28 @@ pub struct Res<'a, T> {
     pub value: &'a T,
 }
 
+impl<'a, T> Deref for Res<'a, T>{
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.value
+    }
+}
+
 pub struct ResMut<'a, T> {
     pub value: &'a mut T,
+}
+
+impl<'a, T> Deref for ResMut<'a, T>{
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        self.value
+    }
+}
+
+impl<'a, T> DerefMut for ResMut<'a, T>{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
 }
 
 pub struct ResOwned<T> {
@@ -299,7 +319,7 @@ impl<'res, T: 'static> SystemParam for Res<'res, T> {
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &UnsafeCell<WorldData>,
+        world_data: &mut UnsafeCell<WorldData>,
     ) {
         let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
@@ -333,7 +353,7 @@ impl<'res, T: 'static> SystemParam for ResMut<'res, T> {
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &UnsafeCell<WorldData>,
+        world_data: &mut UnsafeCell<WorldData>,
     ) {
         let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
@@ -362,7 +382,7 @@ impl<T: 'static> SystemParam for ResOwned<T> {
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &UnsafeCell<WorldData>,
+        world_data: &mut UnsafeCell<WorldData>,
     ) {
         let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
@@ -399,7 +419,7 @@ macro_rules! impl_systemparam_for_tuples {
          fn create_system_param_data(
              system_id: SystemId,
              system_param_ids: &mut Vec<SystemParamId>,
-             world_data: &UnsafeCell<WorldData>
+             world_data: &mut UnsafeCell<WorldData>
          ){
              $(
                 $t::create_system_param_data(system_id, system_param_ids, world_data);
@@ -425,7 +445,7 @@ impl<F: FnMut()> System for FunctionSystem<(), F> {
         &mut self,
         _system_id: SystemId,
         _system_param_ids: &mut Vec<SystemParamId>,
-        _world_data: &UnsafeCell<WorldData>,
+        _world_data: &mut UnsafeCell<WorldData>,
     ) {
     }
     fn run(&mut self, _system_params: &[SystemParamId], _world_data: &UnsafeCell<WorldData>) {
@@ -440,7 +460,7 @@ macro_rules! impl_system_for_params {
          for<'a, 'b> &'a mut F : FnMut($($t,)*)
          + FnMut($(<$t as SystemParam>::Item<'b>,)*),
        {
-           fn init(&mut self, system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, world_data: &UnsafeCell<WorldData>) {
+           fn init(&mut self, system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, world_data: &mut UnsafeCell<WorldData>) {
               $(
                 $t::create_system_param_data(system_id, system_param_ids, world_data);
               )*

@@ -63,34 +63,30 @@ pub enum FilterElem {
 
 impl QueryFilter for () {
     fn get_and_filters(_es: &mut EntityStorage, _filter_elems: &mut Vec<FilterElem>) {
-        println!("empty filter: {:?};", &_filter_elems);
+        dbg!("empty filter: {:?};", &_filter_elems);
     }
     fn get_or_filters(_es: &mut EntityStorage, _filter_elems: &mut Vec<Vec<FilterElem>>) {
-        println!("empty filter: {:?};", &_filter_elems);
+        dbg!("empty filter: {:?};", &_filter_elems);
     }
 }
 impl<T: Component> QueryFilter for With<T> {
     fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
         filter_elems.push(FilterElem::With(es.create_or_get_component::<T>()));
-
-        println!("with filter: {:?};", &filter_elems);
+        dbg!("with filter: {:?};", &filter_elems);
     }
     fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>) {
         filter_elems.push(vec![FilterElem::With(es.create_or_get_component::<T>())]);
-
-        println!("with filter: {:?};", &filter_elems);
+        dbg!("with filter: {:?};", &filter_elems);
     }
 }
 impl<T: Component> QueryFilter for Without<T> {
     fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
         filter_elems.push(FilterElem::Without(es.create_or_get_component::<T>()));
-
-        println!("tuple filter: {:?};", &filter_elems);
+        dbg!("tuple filter: {:?};", &filter_elems);
     }
     fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>) {
         filter_elems.push(vec![FilterElem::Without(es.create_or_get_component::<T>())]);
-
-        println!("tuple filter: {:?};", &filter_elems);
+        dbg!("tuple filter: {:?};", &filter_elems);
     }
 }
 impl<F: QueryFilter> QueryFilter for Or<F> {

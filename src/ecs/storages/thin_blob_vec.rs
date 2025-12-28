@@ -36,33 +36,33 @@ impl Ord for CompElemPtr {
 }
 
 pub struct ThinBlobVec {
-    pub data: NonNull<u8>,
-    pub layout: Layout,
+    pub data_ptr: NonNull<u8>,
+    pub elem_layout: Layout,
     pub drop_fn: Option<unsafe fn(*mut u8)>,
 }
 
 impl ThinBlobVec {
     pub(crate) fn new(layout: Layout, drop_fn: Option<unsafe fn(*mut u8)>) -> Self {
         Self {
-            data: NonNull::dangling(),
-            layout,
+            data_ptr: NonNull::dangling(),
+            elem_layout: layout,
             drop_fn,
         }
     }
 
     pub(crate) fn new_typed<T>() -> Self {
         Self {
-            data: NonNull::dangling(),
-            layout: Layout::new::<T>(),
+            data_ptr: NonNull::dangling(),
+            elem_layout: Layout::new::<T>(),
             drop_fn: Some(Self::drop_ptr::<T>),
         }
     }
 
     pub(crate) unsafe fn call_drop_on_elem(&mut self, index: usize) -> NonNull<u8> {
         unsafe {
-            let elem_ptr = self.data.add(self.layout.size() * index);
+            let elem_ptr = self.data_ptr.add(self.elem_layout.size() * index);
             if let Some(drop_fn) = self.drop_fn {
-                let elem_ptr = self.data.add(self.layout.size() * index);
+                let elem_ptr = self.data_ptr.add(self.elem_layout.size() * index);
                 drop_fn(elem_ptr.as_ptr());
                 elem_ptr
             } else {
@@ -79,14 +79,14 @@ impl ThinBlobVec {
         unsafe {
             let to_ptr = self.call_drop_on_elem(to);
             if to == len - 1 {
-                let from = self.data.add(self.layout.size() * (len - 1));
-                std::ptr::copy(from.as_ptr(), to_ptr.as_ptr(), self.layout.size());
+                let from = self.data_ptr.add(self.elem_layout.size() * (len - 1));
+                std::ptr::copy(from.as_ptr(), to_ptr.as_ptr(), self.elem_layout.size());
             }
         }
     }
 
     pub(crate) unsafe fn dealloc(&mut self, cap: usize, len: usize) {
-        if cap == 0 || self.layout.size() == 0{
+        if cap == 0 || self.elem_layout.size() == 0 {
             return;
         }
 
@@ -94,18 +94,18 @@ impl ThinBlobVec {
         if let Some(drop_fn) = self.drop_fn {
             for i in 0..len {
                 unsafe {
-                    let elem_ptr = self.data.add(self.layout.size() * i);
+                    let elem_ptr = self.data_ptr.add(self.elem_layout.size() * i);
                     drop_fn(elem_ptr.as_ptr());
                 }
             }
         }
 
         //dealloc allocation
-        let alloc_size = cap * self.layout.size();
-        let cur_array_layout = Layout::from_size_align(alloc_size, self.layout.align())
+        let alloc_size = cap * self.elem_layout.size();
+        let cur_array_layout = Layout::from_size_align(alloc_size, self.elem_layout.align())
             .expect("err dealloc layout creation!");
         unsafe {
-            std::alloc::dealloc(self.data.as_ptr(), cur_array_layout);
+            std::alloc::dealloc(self.data_ptr.as_ptr(), cur_array_layout);
         }
     }
 
@@ -130,26 +130,27 @@ impl ThinBlobVec {
         let (new_ptr, new_cap) = if cap == 0 {
             let new_cap = 4;
             let cur_array_layout =
-                Layout::from_size_align(self.layout.size() * new_cap, self.layout.align())
+                Layout::from_size_align(self.elem_layout.size() * new_cap, self.elem_layout.align())
                     .expect("err realloc layout creation!");
 
             let new_ptr = unsafe { std::alloc::alloc(cur_array_layout) };
             (new_ptr, new_cap)
         } else {
             let new_cap = cap * 2;
-            let new_alloc_size = self.layout.size() * new_cap;
-            let cur_array_layout = Layout::from_size_align(cap, self.layout.align())
-                .expect("err realloc layout creation!");
+            let new_alloc_size = self.elem_layout.size() * new_cap;
+            let cur_array_layout =
+                Layout::from_size_align(self.elem_layout.size() * cap, self.elem_layout.align())
+                    .expect("err realloc layout creation!");
             let new_ptr = unsafe {
                 std::alloc::realloc(
-                    self.data.as_ptr() as *mut u8,
+                    self.data_ptr.as_ptr() as *mut u8,
                     cur_array_layout,
                     new_alloc_size,
                 )
             };
             (new_ptr, new_cap)
         };
-        self.data = NonNull::new(new_ptr).unwrap();
+        self.data_ptr = NonNull::new(new_ptr).unwrap();
         new_cap
     }
 
@@ -159,15 +160,20 @@ impl ThinBlobVec {
     /// #SAFETY:
     /// Call std::mem::forget on the pushed value
     /// after calling this function to prevent it from being dropped.
-    pub(crate) unsafe fn push_untyped(&mut self, cap: usize, len: usize, value_ptr: NonNull<u8>) -> usize {
-        if self.layout.size() != 0 {
+    pub(crate) unsafe fn push_untyped(
+        &mut self,
+        cap: usize,
+        len: usize,
+        value_ptr: NonNull<u8>,
+    ) -> usize {
+        if self.elem_layout.size() != 0 {
             unsafe {
                 let new_cap = if len == cap { self.grow(cap) } else { cap };
 
-                let base_offset = self.layout.size() * len;
-                let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
+                let base_offset = self.elem_layout.size() * len;
+                let entry_ptr: *mut u8 = self.data_ptr.as_ptr().add(base_offset).cast();
 
-                std::ptr::copy(value_ptr.as_ptr(), entry_ptr, self.layout.size());
+                std::ptr::copy(value_ptr.as_ptr(), entry_ptr, self.elem_layout.size());
 
                 return new_cap;
             }
@@ -210,19 +216,20 @@ impl ThinBlobVec {
         value_ptrs_offset: usize,
     ) {
         // do not allocate memory for zero-sized-types, e.g. layout size is zero
-        if self.layout.size() > 0 {
+        if self.elem_layout.size() > 0 {
             unsafe {
                 *cap = if len == cap { self.grow(*cap) } else { *cap };
 
-                let base_offset = self.layout.size() * *len;
-                let entry_ptr: *mut u8 = self.data.as_ptr().add(base_offset).cast();
+                let base_offset = self.elem_layout.size() * *len;
+                let entry_ptr: *mut u8 = self.data_ptr.as_ptr().add(base_offset).cast();
 
                 for (i, value_ptr) in value_ptrs.iter().enumerate() {
                     let comp_info = &comp_infos[value_ptr.comp_id.0 as usize];
                     let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i].ptr_offset);
                     let layout_size = comp_info.layout.size();
                     // do not copy zero sized types to different location
-                    if true//layout_size > 0 
+                    if true
+                    //layout_size > 0
                     {
                         let value_ptr_src = value_ptr.ptr.add(value_ptrs_offset);
                         std::ptr::copy(value_ptr_src.as_ptr(), dst_comp_ptr, layout_size);
@@ -250,10 +257,9 @@ impl ThinBlobVec {
     pub(crate) unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
         //TODO: add ZST safety
         if layout.size() != 0 {
-            unsafe { self.data.add(index * layout.size()) }
-        }
-        else{
-            self.data
+            unsafe { self.data_ptr.add(index * layout.size()) }
+        } else {
+            self.data_ptr
         }
     }
 
@@ -300,17 +306,21 @@ impl ThinBlobVec {
     ) -> &'vec mut T {
         unsafe {
             &mut *self
-                .get_ptr_untyped(index, self.layout)
+                .get_ptr_untyped(index, self.elem_layout)
                 .cast::<T>()
                 .byte_offset(offset as isize)
                 .as_ptr()
         }
     }
 
-    pub(crate) unsafe fn get_inner_typed_lifetime<'vec, T>(&self, index: usize, offset: usize) -> &'vec T {
+    pub(crate) unsafe fn get_inner_typed_lifetime<'vec, T>(
+        &self,
+        index: usize,
+        offset: usize,
+    ) -> &'vec T {
         unsafe {
             &*self
-                .get_ptr_untyped(index, self.layout)
+                .get_ptr_untyped(index, self.elem_layout)
                 .cast::<T>()
                 .byte_offset(offset as isize)
                 .as_ptr()
@@ -468,25 +478,35 @@ mod test {
     use super::ThinBlobVec;
 
     #[derive(Debug)]
-    struct Comp1(usize, usize, u8, u8);
-    struct Comp2(usize, u8, u8, u16);
-    struct Comp3(usize, Box<Comp2>);
+    struct Comp1(usize, usize, u8, u8, Box<Comp2>);
+    #[derive(Debug)]
+    struct Comp2(usize, u8, u16);
+
+    impl Default for Comp1 {
+        fn default() -> Self {
+            Comp1(23, 435, 2, 5, Box::new(Comp2(64, 99, 5000)))
+        }
+    }
 
     #[test]
     fn test_thin_vec() {
         let mut bv = ThinBlobVec::new_typed::<Comp1>();
         unsafe {
-            let cap = bv.push_typed(0, 0, Comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 1, Comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 2, Comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 3, Comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 4, Comp1(23, 435, 2, 5));
-            let cap = bv.push_typed(cap, 5, Comp1(23, 435, 2, 5));
+            let cap = bv.push_typed(0, 0, Comp1::default());
+            let cap = bv.push_typed(cap, 1, Comp1::default());
+            let cap = bv.push_typed(cap, 2, Comp1::default());
+            let cap = bv.push_typed(cap, 3, Comp1::default());
+            let cap = bv.push_typed(cap, 4, Comp1::default());
+            let cap = bv.push_typed(cap, 5, Comp1::default());
             let _v: &mut Comp1 = bv.get_mut_typed(0);
             let _v: &mut Comp1 = bv.get_mut_typed(4);
 
             for c in bv.iter::<Comp1>(6) {
                 println!("{:?}", c);
+                assert_eq!(
+                    format!("{:?}", c),
+                    format!("{:?}", Comp1(23, 435, 2, 5, Box::new(Comp2(64, 99, 5000))))
+                );
             }
 
             bv.dealloc_typed::<Comp1>(cap, 6);

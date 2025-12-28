@@ -1,6 +1,8 @@
 // prelude.rs
 
 pub use crate::ecs::{
+    entity::EntityKey,
+    commands::Commands,
     component::{Component, StorageTypes},
     query::{
         Query,
@@ -10,5 +12,3 @@ pub use crate::ecs::{
     system::{Res, builder::IntoSystemConfig},
     world::World,
 };
-
-

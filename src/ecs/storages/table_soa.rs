@@ -44,7 +44,7 @@ impl TableSoA {
         }
     }
 
-    /// #SAFETY: 
+    /// #SAFETY:
     ///
     /// ##Input values:
     /// Supplied ComponentInfo, ComponentId and component pointer slice
@@ -52,8 +52,8 @@ impl TableSoA {
     /// The types and layouts of the inserted components should exactly match
     /// the types of the already inserted components.
     ///
-    /// The order in which the components are stored in the table 
-    /// and in which they are supplied do not need to match. 
+    /// The order in which the components are stored in the table
+    /// and in which they are supplied do not need to match.
     ///
     /// ##After call needed actions
     /// The caller of this function
@@ -84,15 +84,15 @@ impl TableSoA {
         self.len += 1;
     }
 
-    /// #SAFETY: 
+    /// #SAFETY:
     /// ##Input values:
     /// Supplied ComponentInfo, ComponentId and component pointer slice
     /// should be of the same length and component order.
     /// The types and layouts of the inserted components should exactly match
     /// the types of the already inserted components.
     ///
-    /// The order in which the components are stored in the table 
-    /// and in which they are supplied do not need to match. 
+    /// The order in which the components are stored in the table
+    /// and in which they are supplied do not need to match.
     ///
     /// ##After call needed actions
     /// Caller of this function
@@ -116,7 +116,7 @@ impl TableSoA {
         //TODO: why did i do this, document
         let mut thin_columns: Vec<NonNull<ThinBlobVec>> = Vec::with_capacity(soa_comp_ids.len());
         for cid in soa_comp_ids.iter() {
-            let cinfo : &ComponentInfo = &component_infos[cid.0 as usize];
+            let cinfo: &ComponentInfo = &component_infos[cid.0 as usize];
             thin_columns.push(
                 self.columns
                     .get_mut(&cinfo.type_id)
@@ -128,7 +128,7 @@ impl TableSoA {
         for i in 0..batch_len {
             for j in 0..soa_comp_ids.len() {
                 unsafe {
-                    let column : &mut ThinBlobVec = thin_columns[j].as_mut();
+                    let column: &mut ThinBlobVec = thin_columns[j].as_mut();
                     let value_offset = value_layout.size() * i;
                     let entry_ptr = soa_base_ptrs[j].add(value_offset);
                     column.push_untyped(self.cap, self.len, entry_ptr);
@@ -167,7 +167,9 @@ impl TableSoA {
     /// #SAFETY:
     /// Component type T needs to be contained by the table,
     /// otherwise this function will panic.
-    pub(crate) unsafe fn get_single_comp_iter<'c, T: Component>(&'c self) -> ThinBlobIterUnsafe<'c, T> {
+    pub(crate) unsafe fn get_single_comp_iter<'c, T: Component>(
+        &'c self,
+    ) -> ThinBlobIterUnsafe<'c, T> {
         unsafe {
             self.columns
                 .get(&TypeId::of::<T>())
@@ -219,13 +221,12 @@ pub(crate) unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSo
 ) -> TableSoaTupleIter<TC::Construct<'table>> {
     unsafe {
         TableSoaTupleIter {
-            tuple_iters: TC::construct(table),
+            tuple_iters: TC::construct(table.into()),
             len: table.len,
             index: 0,
         }
     }
 }
-
 
 impl<T: TupleIterator> Iterator for TableSoaTupleIter<T> {
     type Item = T::Item;

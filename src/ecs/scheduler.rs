@@ -8,7 +8,7 @@ use crate::ecs::{
 };
 
 pub(crate) trait Scheduler {
-    fn execute(&mut self, systems: &mut Systems, world_data: &UnsafeCell<WorldData>);
+    fn execute(&mut self, systems: &mut Systems, world_data: &mut UnsafeCell<WorldData>);
 }
 
 pub(crate) struct SingleThreadScheduler {
@@ -24,7 +24,7 @@ impl SingleThreadScheduler {
 }
 
 impl Scheduler for SingleThreadScheduler {
-    fn execute(&mut self, systems: &mut Systems, world_data: &UnsafeCell<WorldData>) {
+    fn execute(&mut self, systems: &mut Systems, world_data: &mut UnsafeCell<WorldData>) {
         let mut to_run_systems = self.schedule.clone();
         let mut finished_systems: HashSet<SystemId> = HashSet::new();
         let mut cur_sys_ind: usize = 0;
@@ -42,6 +42,9 @@ impl Scheduler for SingleThreadScheduler {
 
             if run_system {
                 systems.run_system(sysid, &world_data);
+                // execute commands after each sequential system run immediately
+                // so that the next running system has the most up to date world state
+                world_data.get_mut().execute_commands();
                 let removed_sysid = to_run_systems.remove(cur_sys_ind);
                 finished_systems.insert(removed_sysid);
                 if to_run_systems.len() >= cur_sys_ind && cur_sys_ind > 0 {
@@ -62,6 +65,7 @@ impl Scheduler for SingleThreadScheduler {
     }
 }
 
+//TODO: add parallel execution and scheduling
 pub(crate) struct ParallelScheduler {
     schedule: Vec<Vec<SystemId>>,
 }

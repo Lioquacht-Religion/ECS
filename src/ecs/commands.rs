@@ -75,7 +75,7 @@ impl<'w, 's> SystemParam for Commands<'w, 's> {
     fn create_system_param_data(
         _system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        _world_data: &UnsafeCell<WorldData>,
+        _world_data: &mut UnsafeCell<WorldData>,
     ) {
         system_param_ids.push(SystemParamId::NotRelevant);
     }
@@ -132,9 +132,129 @@ impl<'w, 's> Commands<'w, 's> {
 
 #[cfg(test)]
 mod test {
+    use crate::ecs::{prelude::*, system::ResMut};
+
+    struct Comp1SoA();
+    impl Component for Comp1SoA{
+        const STORAGE: StorageTypes = StorageTypes::TableSoA;
+    }
+    struct Comp2SoA();
+    impl Component for Comp2SoA{
+        const STORAGE: StorageTypes = StorageTypes::TableSoA;
+    }
+
+    struct Comp1AoS();
+    impl Component for Comp1AoS{
+        const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    }
+    struct Comp2AoS();
+    impl Component for Comp2AoS{
+        const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    }
+
+    struct EntityCount(isize);
+
+    impl EntityCount{
+        fn increase(&mut self){
+            self.0 += 1;
+        }
+        fn decrease(&mut self){
+            self.0 -= 1;
+        }
+    }
+
+    fn test_system_spawn(
+        mut commands: Commands, 
+        count: ResMut<EntityCount>,
+        mut query_soa: Query<(&Comp1SoA, &Comp2SoA)>,
+        mut query_aos: Query<(&Comp1AoS, &Comp2AoS)>
+    ){
+        let _entity_key = commands.spawn((Comp1SoA(), Comp2SoA()));
+        count.value.increase();
+        let _entity_key = commands.spawn(Comp1SoA());
+        let _entity_key = commands.spawn(Comp2SoA());
+        let _entity_key = commands.spawn((Comp1AoS(), Comp2AoS()));
+        let _entity_key = commands.spawn(Comp1AoS());
+        let _entity_key = commands.spawn(Comp2AoS());
+
+        for (_c1, _c2) in query_soa.iter() {
+            let _entity_key = commands.spawn((Comp1SoA(), Comp2SoA()));
+            count.value.increase();
+            let _entity_key = commands.spawn(Comp1SoA());
+            let _entity_key = commands.spawn(Comp2SoA());
+        }
+        for (_c1, _c2) in query_aos.iter() {
+            let _entity_key = commands.spawn((Comp1AoS(), Comp2AoS()));
+            let _entity_key = commands.spawn(Comp1AoS());
+            let _entity_key = commands.spawn(Comp2AoS());
+        }
+    }
+
+    fn test_system_count_after_commands(
+        count: ResMut<EntityCount>,
+        mut query_soa: Query<(&Comp1SoA, &Comp2SoA)>,
+    ){
+        assert_eq!(count.0, query_soa.iter().count().try_into().unwrap());
+    }
+
+    fn test_system_despawn_soa(
+        mut commands: Commands, 
+        count: ResMut<EntityCount>,
+        mut query_soa: Query<(EntityKey, &Comp1SoA, &Comp2SoA)>,
+    ){
+        for (ek, _c1, _c2) in query_soa.iter(){
+            commands.despawn(ek);
+            count.value.decrease();
+        }
+    }
+
+    fn test_system_despawn_aos(
+        mut commands: Commands, 
+        mut query_aos: Query<(EntityKey, &Comp1AoS, &Comp2AoS)>
+    ){
+        for (ek, _c1, _c2) in query_aos.iter(){
+            commands.despawn(ek);
+        }
+    }
+
+    fn add_entities_to_world(world: &mut World) {
+        world.add_entity((Comp1AoS(), Comp2AoS()));
+        world.add_entity((Comp1AoS(), Comp2AoS()));
+        world.add_entity((Comp1SoA(), Comp2SoA()));
+        world.add_entity((Comp1SoA(), Comp2SoA()));
+        world.add_resource(EntityCount(2));
+    }
 
     #[test]
-    fn spawn_command_test() {
-        todo!()
+    fn command_spawn_test() {
+        let mut world = World::new();
+        world.add_system(test_system_spawn);
+        add_entities_to_world(&mut world);
+        world.init_and_run();
+        world.run();
+    }
+
+    #[test]
+    fn command_despawn_soa_test() {
+        let mut world = World::new();
+        world.add_system_builder(
+            (test_system_spawn, test_system_despawn_soa, test_system_count_after_commands)
+            .chain()
+        );
+        add_entities_to_world(&mut world);
+        world.init_and_run();
+        world.run();
+    }
+
+    #[test]
+    fn command_despawn_aos_test() {
+        let mut world = World::new();
+        world.add_system_builder(
+            (test_system_spawn, test_system_despawn_aos)
+            .chain()
+        );
+        add_entities_to_world(&mut world);
+        world.init_and_run();
+        world.run();
     }
 }

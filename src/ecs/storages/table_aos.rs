@@ -124,7 +124,7 @@ impl TableAoS {
     #[allow(unused)]
     pub(crate) fn print_internals(&self, component_infos: &[ComponentInfo]) {
         println!("TableAoS: ");
-        println!("layout: {:?}", self.vec.layout);
+        println!("layout: {:?}", self.vec.elem_layout);
         for (i, tm) in self.type_meta_data.iter().enumerate() {
             println!(
                 "i: {}; tm: {:?}, cinfo: {:?}",
@@ -213,7 +213,7 @@ impl TableAoS {
         &mut self,
         index: usize,
     ) -> Option<&mut T> {
-        let _row_ptr = unsafe { self.vec.get_ptr_untyped(index, self.vec.layout) };
+        let _row_ptr = unsafe { self.vec.get_ptr_untyped(index, self.vec.elem_layout) };
 
         unimplemented!()
     }
@@ -272,8 +272,8 @@ impl Drop for TableAoS {
 
         for meta_data in self.type_meta_data.iter() {
             if let Some(drop_fn) = meta_data.drop_fn {
-                let base_ptr = self.vec.data;
-                let row_size = self.vec.layout.size();
+                let base_ptr = self.vec.data_ptr;
+                let row_size = self.vec.elem_layout.size();
                 for i in 0..self.len {
                     unsafe {
                         let row_ptr = base_ptr.add(row_size * i);
@@ -301,7 +301,7 @@ pub unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
 ) -> TableAosTupleIter<TC::Construct<'table>> {
     unsafe {
         TableAosTupleIter {
-            tuple_iters: TC::construct(table),
+            tuple_iters: TC::construct(table.into()),
             len: table.len,
             index: 0,
         }
@@ -461,8 +461,8 @@ mod test {
         let num1: i32 = 2324;
         let num2: usize = 2324;
         world.add_system(test_system1);
-        unsafe { (&mut *world.data.get()).add_resource(num1) };
-        unsafe { (&mut *world.data.get()).add_resource(num2) };
+        world.add_resource(num1);
+        world.add_resource(num2);
 
         let es = &mut world.data.get_mut().entity_storage;
         init_es_insert(es);
@@ -479,20 +479,6 @@ mod test {
             .table_aos
             .print_internals(&es.components);
 
-        unsafe {
-            let iter = world
-                .data
-                .get_mut()
-                .entity_storage
-                .tables
-                .get_mut(&ArchetypeId(0))
-                .unwrap()
-                .tuple_iter::<(&Comp1, &Comp2)>();
-
-            for (p, p2) in iter {
-                println!("p1: {:?}, p2: {:?}", p, p2);
-            }
-        }
         world.run();
     }
 }

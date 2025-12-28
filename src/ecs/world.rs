@@ -80,8 +80,8 @@ impl World {
 
     pub fn run(&mut self) {
         self.data.get_mut().entity_storage.entities.reset_barriers();
-        self.scheduler.execute(&mut self.systems, &self.data);
-        self.data.get_mut().execute_commands();
+        self.scheduler.execute(&mut self.systems, &mut self.data);
+        //TODO: at what point should commands be executed?: self.data.get_mut().execute_commands();
         self.data
             .get_mut()
             .entity_storage

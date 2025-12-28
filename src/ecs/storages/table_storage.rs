@@ -43,7 +43,7 @@ impl TableStorage {
     //
     // #SAFETY:
     // The caller of this function should forget/leak the batch inserted values,
-    // so that their owned allocations will not be freed, 
+    // so that their owned allocations will not be freed,
     // after the original values have gone out of their scope and were dropped.
     pub(crate) unsafe fn insert<T: TupleTypesExt>(
         &mut self,
@@ -83,7 +83,7 @@ impl TableStorage {
     //
     // #SAFETY:
     // The caller of this function should forget/leak the batch inserted values,
-    // so that their owned allocations will not be freed, 
+    // so that their owned allocations will not be freed,
     // after the original values have gone out of their scope and were dropped.
     pub(crate) unsafe fn insert_batch<T: TupleTypesExt>(
         &mut self,
@@ -140,7 +140,11 @@ impl TableStorage {
     }
 
     /// Removes supplied entity with all its components from table.
-    /// Returns a tuple of the new EntityKey and the entities new row id in the world.
+    /// TODO: this description is wrong, one entity gets removed 
+    /// and another may need to be moved in the table to fill the empty spot
+    /// of removed entity.
+    /// The changes to this moved entity should be returned, e.g. entity key and new row id.
+    /// WRONG: Returns a tuple of the new EntityKey and the entities new row id in the world.
     pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, u32)> {
         assert!(self.len > entity.row_id);
         let key = self.entities.remove(entity.row_id as usize);
@@ -178,7 +182,7 @@ pub(crate) unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<Tab
 ) -> TableStorageTupleIter<TC::Construct<'table>> {
     unsafe {
         TableStorageTupleIter {
-            tuple_iters: TC::construct(table),
+            tuple_iters: TC::construct(table.into()),
             len: table.len as usize,
             index: 0,
         }

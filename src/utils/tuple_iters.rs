@@ -1,5 +1,7 @@
 // tuple_iters.rs
 
+use std::ptr::NonNull;
+
 use crate::{
     all_tuples,
     ecs::{component::Component, entity::EntityKeyIterUnsafe},
@@ -26,20 +28,24 @@ pub trait TupleConstructorSource: 'static {
 
 pub trait TupleIterConstructor<S: TupleConstructorSource> {
     type Construct<'c>: TupleIterator;
-    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s>;
+    //unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s>;
+    unsafe fn construct<'s>(source: NonNull<S>) -> Self::Construct<'s>;
 }
 
 impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &T {
     type Construct<'c> = S::IterType<'c, T>;
-    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-        unsafe { (&mut *source).get_iter() }
+    unsafe fn construct<'s>(mut source: NonNull<S>) -> Self::Construct<'s> {
+        //unsafe { (&mut *source).get_iter() }
+        unsafe { source.as_mut().get_iter() }
     }
 }
 
 impl<T: Component, S: TupleConstructorSource> TupleIterConstructor<S> for &mut T {
     type Construct<'c> = S::IterMutType<'c, T>;
-    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-        unsafe { (&mut *source).get_iter_mut() }
+    unsafe fn construct<'s>(mut source: NonNull<S>) -> Self::Construct<'s> {
+        //unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+        //unsafe { (&mut *source).get_iter_mut() }
+        unsafe { source.as_mut().get_iter_mut() }
     }
 }
 
@@ -48,7 +54,7 @@ macro_rules! impl_tuple_iter_constructor{
        impl<S: TupleConstructorSource, $($t : TupleIterConstructor<S>), *> TupleIterConstructor<S> for ($($t),*,){
             #[allow(unused_parens, non_snake_case)]
             type Construct<'c> = ($($t::Construct<'c>), *);
-            unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
+            unsafe fn construct<'s>(source: NonNull<S>) -> Self::Construct<'s> {
                 unsafe{ ($($t::construct(source)), *) }
             }
         }

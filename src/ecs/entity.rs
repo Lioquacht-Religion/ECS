@@ -1,6 +1,9 @@
 // entity.rs
 
-use std::sync::atomic::{self, AtomicU32};
+use std::{
+    ptr::NonNull,
+    sync::atomic::{self, AtomicU32},
+};
 
 use crate::{
     ecs::component::Component,
@@ -203,7 +206,7 @@ impl<'vec> TupleIterator for EntityKeyIterUnsafe<'vec> {
 impl<S: TupleConstructorSource> TupleIterConstructor<S> for EntityKey {
     type Construct<'c> = EntityKeyIterUnsafe<'c>;
 
-    unsafe fn construct<'s>(source: *mut S) -> Self::Construct<'s> {
-        unsafe { (&mut *source).get_entity_key_iter() }
+    unsafe fn construct<'s>(mut source: NonNull<S>) -> Self::Construct<'s> {
+        unsafe { source.as_mut().get_entity_key_iter() }
     }
 }

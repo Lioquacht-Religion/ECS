@@ -165,10 +165,10 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &UnsafeCell<WorldData>,
+        world_data: &mut UnsafeCell<WorldData>,
     ) {
-        let world_data_mut = unsafe { world_data.get().as_mut().unwrap() };
-        let mut comp_ids = world_data_mut
+        let mut comp_ids = world_data
+            .get_mut()
             .entity_storage
             .cache
             .compid_vec_cache
@@ -179,11 +179,12 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         P::ref_kinds(&mut ref_kinds);
 
         let mut filter = Vec::new();
-        F::get_and_filters(&mut world_data_mut.entity_storage, &mut filter);
+        F::get_and_filters(&mut world_data.get_mut().entity_storage, &mut filter);
 
         let query_state_key = QueryStateKey { comp_ids, filter };
 
-        let arch_ids = world_data_mut
+        let arch_ids = world_data
+            .get_mut()
             .entity_storage
             .find_fitting_archetypes(&query_state_key.comp_ids);
 
@@ -191,7 +192,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         let arch_ids: Vec<ArchetypeId> = arch_ids
             .iter()
             .filter(|aid| {
-                let arch = &world_data_mut.entity_storage.archetypes[aid.0 as usize];
+                let arch = &world_data.get_mut().entity_storage.archetypes[aid.0 as usize];
                 let comp_ids_set: HashSet<ComponentId> = HashSet::from_iter(
                     arch.soa_comp_ids
                         .iter()
@@ -207,13 +208,13 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .cloned()
             .collect();
 
-        let next_query_id = world_data_mut.query_data.len().into();
+        let next_query_id = world_data.get_mut().query_data.len().into();
         system_param_ids.push(SystemParamId::Query(next_query_id));
 
         // adding system dependencies to graph
         // systems <- add queries <- add components and filtered archetypes
 
-        let depend_graph = &mut world_data_mut.entity_storage.depend_graph;
+        let depend_graph = &mut world_data.get_mut().entity_storage.depend_graph;
         depend_graph.insert_system_components(
             system_id,
             &query_state_key.comp_ids.get_vec(),
@@ -230,7 +231,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             filter: query_state_key.filter.clone(),
         };
 
-        world_data_mut.query_data.push(query_data);
+        world_data.get_mut().query_data.push(query_data);
     }
 }
 
@@ -393,8 +394,7 @@ mod test {
         assert_eq!(query.iter().count(), 3);
     }
 
-    fn test_system5(mut query2: Query<(&Pos1, &Pos2)>, 
-        mut query: Query<(&Comp1, &Marker1)>) {
+    fn test_system5(mut query2: Query<(&Pos1, &Pos2)>, mut query: Query<(&Comp1, &Marker1)>) {
         for (comp1, _m) in query.iter() {
             println!("comp1: {}; {}", comp1.0, comp1.1);
         }
