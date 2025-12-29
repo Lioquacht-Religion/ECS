@@ -146,13 +146,36 @@ impl TableStorage {
     /// The changes to this moved entity should be returned, e.g. entity key and new row id.
     /// WRONG: Returns a tuple of the new EntityKey and the entities new row id in the world.
     pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, u32)> {
-        assert!(self.len > entity.row_id);
-        let key = self.entities.remove(entity.row_id as usize);
+        // if row id cannot be contained in table,
+        // its entity may have already been deleted
+        // return early
+        if self.len <= entity.row_id {
+            dbg!("Row id of entity from despawn command is not contained in table.");
+            return None;
+        }
+
         self.table_soa.remove(&entity);
         self.table_aos.remove(&entity);
 
         self.len -= 1;
 
+        //TODO: swap and then remove, instead of just a normal remove 
+        if entity.row_id == self.len-1 {
+            self.entities.pop();
+            None
+        }
+        else {
+            self.entities.swap_remove(entity.row_id as usize);
+            if let Some(moved_entity_key) = self.entities.get(entity.row_id as usize){
+                Some((*moved_entity_key, entity.row_id))
+            }
+            else{
+                None
+            }
+        }
+
+
+        /*
         // update moved entities table position
         if entity.row_id == self.len {
             None
@@ -162,6 +185,7 @@ impl TableStorage {
             //TODO: the removal of entities seems to be incorrectly implemented in general
             Some((key, entity.row_id))
         }
+        */
     }
 
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(

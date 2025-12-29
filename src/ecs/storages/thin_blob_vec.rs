@@ -62,7 +62,6 @@ impl ThinBlobVec {
         unsafe {
             let elem_ptr = self.data_ptr.add(self.elem_layout.size() * index);
             if let Some(drop_fn) = self.drop_fn {
-                let elem_ptr = self.data_ptr.add(self.elem_layout.size() * index);
                 drop_fn(elem_ptr.as_ptr());
                 elem_ptr
             } else {

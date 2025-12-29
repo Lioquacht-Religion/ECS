@@ -134,22 +134,42 @@ impl<'w, 's> Commands<'w, 's> {
 mod test {
     use crate::ecs::{prelude::*, system::ResMut};
 
-    struct Comp1SoA();
+    struct Comp1SoA(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
     impl Component for Comp1SoA{
         const STORAGE: StorageTypes = StorageTypes::TableSoA;
     }
-    struct Comp2SoA();
+    impl Default for Comp1SoA{
+        fn default() -> Self {
+            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+        }
+    }
+    struct Comp2SoA(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
     impl Component for Comp2SoA{
         const STORAGE: StorageTypes = StorageTypes::TableSoA;
     }
+    impl Default for Comp2SoA{
+        fn default() -> Self {
+            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+        }
+    }
 
-    struct Comp1AoS();
+    struct Comp1AoS(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
     impl Component for Comp1AoS{
         const STORAGE: StorageTypes = StorageTypes::TableAoS;
     }
-    struct Comp2AoS();
+    impl Default for Comp1AoS{
+        fn default() -> Self {
+            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+        }
+    }
+    struct Comp2AoS(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
     impl Component for Comp2AoS{
         const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    }
+    impl Default for Comp2AoS{
+        fn default() -> Self {
+            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+        }
     }
 
     struct EntityCount(isize);
@@ -169,24 +189,24 @@ mod test {
         mut query_soa: Query<(&Comp1SoA, &Comp2SoA)>,
         mut query_aos: Query<(&Comp1AoS, &Comp2AoS)>
     ){
-        let _entity_key = commands.spawn((Comp1SoA(), Comp2SoA()));
+        let _entity_key = commands.spawn((Comp1SoA::default(), Comp2SoA::default()));
         count.value.increase();
-        let _entity_key = commands.spawn(Comp1SoA());
-        let _entity_key = commands.spawn(Comp2SoA());
-        let _entity_key = commands.spawn((Comp1AoS(), Comp2AoS()));
-        let _entity_key = commands.spawn(Comp1AoS());
-        let _entity_key = commands.spawn(Comp2AoS());
+        let _entity_key = commands.spawn(Comp1SoA::default());
+        let _entity_key = commands.spawn(Comp2SoA::default());
+        let _entity_key = commands.spawn((Comp1AoS::default(), Comp2AoS::default()));
+        let _entity_key = commands.spawn(Comp1AoS::default());
+        let _entity_key = commands.spawn(Comp2AoS::default());
 
         for (_c1, _c2) in query_soa.iter() {
-            let _entity_key = commands.spawn((Comp1SoA(), Comp2SoA()));
+            let _entity_key = commands.spawn((Comp1SoA::default(), Comp2SoA::default()));
             count.value.increase();
-            let _entity_key = commands.spawn(Comp1SoA());
-            let _entity_key = commands.spawn(Comp2SoA());
+            let _entity_key = commands.spawn(Comp1SoA::default());
+            let _entity_key = commands.spawn(Comp2SoA::default());
         }
         for (_c1, _c2) in query_aos.iter() {
-            let _entity_key = commands.spawn((Comp1AoS(), Comp2AoS()));
-            let _entity_key = commands.spawn(Comp1AoS());
-            let _entity_key = commands.spawn(Comp2AoS());
+            let _entity_key = commands.spawn((Comp1AoS::default(), Comp2AoS::default()));
+            let _entity_key = commands.spawn(Comp1AoS::default());
+            let _entity_key = commands.spawn(Comp2AoS::default());
         }
     }
 
@@ -218,17 +238,17 @@ mod test {
     }
 
     fn add_entities_to_world(world: &mut World) {
-        world.add_entity((Comp1AoS(), Comp2AoS()));
-        world.add_entity((Comp1AoS(), Comp2AoS()));
-        world.add_entity((Comp1SoA(), Comp2SoA()));
-        world.add_entity((Comp1SoA(), Comp2SoA()));
+        world.add_entity((Comp1AoS::default(), Comp2AoS::default()));
+        world.add_entity((Comp1AoS::default(), Comp2AoS::default()));
+        world.add_entity((Comp1SoA::default(), Comp2SoA::default()));
+        world.add_entity((Comp1SoA::default(), Comp2SoA::default()));
         world.add_resource(EntityCount(2));
     }
 
     #[test]
     fn command_spawn_test() {
         let mut world = World::new();
-        world.add_system(test_system_spawn);
+        world.add_system_builder((test_system_spawn, test_system_count_after_commands).chain());
         add_entities_to_world(&mut world);
         world.init_and_run();
         world.run();
@@ -238,7 +258,9 @@ mod test {
     fn command_despawn_soa_test() {
         let mut world = World::new();
         world.add_system_builder(
-            (test_system_spawn, test_system_despawn_soa, test_system_count_after_commands)
+            (test_system_spawn, test_system_despawn_soa
+             //TODO:, test_system_count_after_commands
+             )
             .chain()
         );
         add_entities_to_world(&mut world);

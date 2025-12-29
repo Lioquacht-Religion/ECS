@@ -264,14 +264,11 @@ fn test_table_aos_query_iter() {
     world.add_system_builder(
         test_system3
             .chain()
-            .before(test_system3)
             .after(test_system2)
-            .before(test_system3),
     );
-    world.add_system_builder((test_system1, test_system2).after(test_system2));
 
-    unsafe { (&mut *world.data.get()).add_resource(num1) };
-    unsafe { (&mut *world.data.get()).add_resource(num2) };
+    world.add_resource(num1);
+    world.add_resource(num2);
 
     let es = &mut world.data.get_mut().entity_storage;
 

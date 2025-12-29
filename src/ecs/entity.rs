@@ -130,7 +130,7 @@ impl Entities {
                 .empty_indices_barrier
                 .fetch_add(1, atomic::Ordering::Relaxed) as usize;
             if empty_barrier < self.empty_indices.len() {
-                let empty_barrier = self.empty_indices.len() - empty_barrier;
+                let empty_barrier = self.empty_indices.len() - empty_barrier - 1;
                 let id = self.empty_indices[empty_barrier];
                 let generation = *&self.vec[id as usize].generation;
                 return EntityKey::new(id, generation);

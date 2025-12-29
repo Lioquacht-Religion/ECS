@@ -219,12 +219,14 @@ impl TableAoS {
     }
 
     pub(crate) fn remove(&mut self, entity: &Entity) {
-        assert!(self.len > entity.row_id as usize);
-        unsafe {
-            self.vec
-                .remove_and_replace_with_last(self.len, entity.row_id as usize);
+        if self.len > entity.row_id as usize {
+            //TODO: drop inner packed components individually too
+            unsafe {
+                self.drop_entity_row(entity.row_id as usize);
+                self.vec.remove_and_replace_with_last(self.len, entity.row_id as usize);
+            }
+            self.len -= 1;
         }
-        self.len -= 1;
     }
 
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
@@ -260,6 +262,20 @@ impl TableAoS {
             ));
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         unsafe { self.vec.tuple_inner_type_iter_mut(*offset) }
+    }
+
+    unsafe fn drop_entity_row(&mut self, index: usize){
+        let base_ptr = self.vec.data_ptr;
+        let row_size = self.vec.elem_layout.size();
+        let row_ptr = unsafe{ base_ptr.add(row_size * index) };
+        for meta_data in self.type_meta_data.iter() {
+            if let Some(drop_fn) = meta_data.drop_fn {
+                unsafe {
+                    let elem_ptr = row_ptr.add(meta_data.ptr_offset);
+                    drop_fn(elem_ptr.as_ptr());
+                }
+            }
+        }
     }
 }
 
