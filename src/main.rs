@@ -69,10 +69,11 @@ impl Component for Comp2AoS {
 }
 
 fn test_system1(
+    mut commands: Commands,
     prm: Res<i32>,
     prm2: Res<usize>,
     mut query: Query<(&Comp1, &mut Comp2), Or<(Without<Pos4>, Without<Comp1>)>>,
-    mut query2: Query<(&Pos, &mut Pos4, &Pos3), Or<(Without<Pos4>, Without<Comp1>)>>,
+    mut query2: Query<(EntityKey, &Pos, &mut Pos4, &Pos3), Or<(Without<Pos4>, Without<Comp1>)>>,
 ) {
     println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
@@ -83,7 +84,7 @@ fn test_system1(
         //println!("comp2: {}", comp2.0);
     }
 
-    for (_pos, pos4, _pos3) in query2.iter() {
+    for (ek, _pos, pos4, _pos3) in query2.iter() {
         //println!("pos4 : {}", pos4.0);
         pos4.0 = 23234;
         pos4.0 -= 2344;
@@ -93,15 +94,16 @@ fn test_system1(
         pos4.1.0 = 23234;
         pos4.1.0 -= 2344;
         //println!("pos4.1 box pointer: {}", pos4.1 .0);
+        commands.despawn(ek);
     }
 }
 
 fn test_system2(
-    //#[allow(unused)] mut commands: Commands,
+    mut commands: Commands,
     mut query: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-    mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
+    mut query_aos: Query<(EntityKey, &mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
 ) {
     let start1 = std::time::Instant::now();
     for (comp1, comp2) in query.iter() {
@@ -119,23 +121,21 @@ fn test_system2(
     }
 
     let start2 = std::time::Instant::now();
-    for (comp1, comp2) in query_aos.iter() {
-        /*comp1.0 /= 21;
+    for (entity, comp1, comp2) in query_aos.iter() {
+        comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
-        comp2.1 /= 437;*/
+        comp2.1 /= 437;
 
-        /*
-        let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
-        let _key = commands.spawn((Comp1(999999, 29029), Comp2(999999, 29029)));
+        let _key = commands.spawn((Comp1AoS(999999, 29029), Comp2(999999, 29029)));
+        let _key = commands.spawn((Comp1(999999, 29029), Comp2AoS(999999, 29029)));
         let _key = commands.spawn(Comp1(999999, 29029));
-        */
         comp1.0 /= 392049;
         comp1.1 /= 392049;
         comp2.0 /= 392049;
         comp2.1 /= 392049;
 
-        //commands.despawn(entity);
+        commands.despawn(entity);
 
         /*
         println!(

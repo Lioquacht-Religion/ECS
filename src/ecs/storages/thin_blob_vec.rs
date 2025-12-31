@@ -77,7 +77,9 @@ impl ThinBlobVec {
 
         unsafe {
             let to_ptr = self.call_drop_on_elem(to);
-            if to == len - 1 {
+            // if not 'to' - row id is not the last element,
+            // replace now dropped element at 'to' with currently last element
+            if to < len - 1 {
                 let from = self.data_ptr.add(self.elem_layout.size() * (len - 1));
                 std::ptr::copy(from.as_ptr(), to_ptr.as_ptr(), self.elem_layout.size());
             }

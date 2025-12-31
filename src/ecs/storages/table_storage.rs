@@ -159,8 +159,11 @@ impl TableStorage {
 
         self.len -= 1;
 
+            //TODO: does the row id need to be updated?
+            //TODO: what does the row id even mean anymore?
+            //TODO: the removal of entities seems to be incorrectly implemented in general
         //TODO: swap and then remove, instead of just a normal remove 
-        if entity.row_id == self.len-1 {
+        if entity.row_id == self.len {
             self.entities.pop();
             None
         }
@@ -173,19 +176,6 @@ impl TableStorage {
                 None
             }
         }
-
-
-        /*
-        // update moved entities table position
-        if entity.row_id == self.len {
-            None
-        } else {
-            //TODO: does the row id need to be updated?
-            //TODO: what does the row id even mean anymore?
-            //TODO: the removal of entities seems to be incorrectly implemented in general
-            Some((key, entity.row_id))
-        }
-        */
     }
 
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
