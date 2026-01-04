@@ -275,7 +275,7 @@ mod test {
     #[test]
     fn command_spawn_test() {
         let mut world = World::new();
-        world.add_system_builder((test_system_spawn, test_system_count_after_commands).chain());
+        world.add_systems((test_system_spawn, test_system_count_after_commands).chain());
         add_entities_to_world(&mut world);
         world.init_and_run();
         world.run();
@@ -284,7 +284,7 @@ mod test {
     #[test]
     fn command_despawn_soa_test() {
         let mut world = World::new();
-        world.add_system_builder(
+        world.add_systems(
             (
                 test_system_spawn,
                 test_system_despawn_soa, //TODO:, test_system_count_after_commands
@@ -299,7 +299,7 @@ mod test {
     #[test]
     fn command_despawn_aos_test() {
         let mut world = World::new();
-        world.add_system_builder((test_system_spawn, test_system_despawn_aos).chain());
+        world.add_systems((test_system_spawn, test_system_despawn_aos).chain());
         add_entities_to_world(&mut world);
         world.init_and_run();
         world.run();

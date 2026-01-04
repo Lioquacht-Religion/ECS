@@ -220,9 +220,9 @@ mod test {
             .before((test_system6, test_system8))
             .chain();
 
-        world.add_system_builder(b);
+        world.add_systems(b);
 
-        world.add_system_builder(
+        world.add_systems(
             test_system5
                 .after((test_system2, test_system3, test_system4))
                 .before((test_system6, test_system8)),
@@ -250,9 +250,9 @@ mod test {
             test_system3
         ).chain();
 
-        world.add_system_builder(b);
+        world.add_systems(b);
 
-        world.add_system_builder(
+        world.add_systems(
             test_system5
                 .after((test_system2, test_system3, test_system4))
                 .before((

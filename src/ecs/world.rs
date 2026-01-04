@@ -86,8 +86,7 @@ impl World {
         self.systems.add_system(value)
     }
 
-    //TODO: rename to add_systems
-    pub fn add_system_builder<
+    pub fn add_systems<
         I,
         ST: IntoSystemTuple<I>,
         IA,

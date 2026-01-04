@@ -256,10 +256,10 @@ fn test_table_aos_query_iter() {
     world.add_system(test_system1);
     world.add_system(test_system2);
 
-    world.add_system_builder((test_system1, test_system2));
-    world.add_system_builder(test_system1);
-    world.add_system_builder(test_system2);
-    world.add_system_builder(test_system3.chain().after(test_system2));
+    world.add_systems((test_system1, test_system2));
+    world.add_systems(test_system1);
+    world.add_systems(test_system2);
+    world.add_systems(test_system3.chain().after(test_system2));
 
     world.add_resource(num1);
     world.add_resource(num2);

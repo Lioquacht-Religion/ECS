@@ -559,7 +559,7 @@ mod test {
         let num1: i32 = 2324;
         let num2: usize = 4350;
 
-        world.add_system_builder(test_system1);
+        world.add_systems(test_system1);
         world.add_resource(num1);
         world.add_resource(num2);
 
