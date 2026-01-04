@@ -103,7 +103,10 @@ fn test_system2(
     mut query: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-    mut query_aos: Query<(EntityKey, &mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
+    mut query_aos: Query<
+        (EntityKey, &mut Comp1AoS, &mut Comp2AoS),
+        Or<(With<Pos4AoS>, With<Comp1AoS>)>,
+    >,
 ) {
     let start1 = std::time::Instant::now();
     for (comp1, comp2) in query.iter() {
@@ -163,7 +166,7 @@ fn test_system3() {}
 
 const CAPACITY: usize = 127;
 
-fn init_es_insert(es: &mut EntityStorage) {
+fn init_es_insert(es: &mut World) {
     let start1 = std::time::Instant::now();
     for i in 0..CAPACITY {
         es.add_entity((Comp1(i, 34), Comp2(i, 34)));
@@ -246,11 +249,6 @@ fn init_es_insert(es: &mut EntityStorage) {
     es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
 }
 
-fn test_table_soa_insert() {
-    let mut es = EntityStorage::new();
-    init_es_insert(&mut es);
-}
-
 fn test_table_aos_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
@@ -261,18 +259,12 @@ fn test_table_aos_query_iter() {
     world.add_system_builder((test_system1, test_system2));
     world.add_system_builder(test_system1);
     world.add_system_builder(test_system2);
-    world.add_system_builder(
-        test_system3
-            .chain()
-            .after(test_system2)
-    );
+    world.add_system_builder(test_system3.chain().after(test_system2));
 
     world.add_resource(num1);
     world.add_resource(num2);
 
-    let es = &mut world.data.get_mut().entity_storage;
-
-    init_es_insert(es);
+    init_es_insert(&mut world);
 
     world.init_systems();
     world.run();
@@ -286,7 +278,6 @@ fn test_table_aos_query_iter() {
 
 fn main() {
     test_table_aos_query_iter();
-    test_table_soa_insert();
     normal_loop_test();
 }
 

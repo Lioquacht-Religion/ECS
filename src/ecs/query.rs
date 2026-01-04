@@ -77,6 +77,19 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
         QueryIter::new(self)
     }
 
+    pub fn get_entry(
+        &mut self,
+        entity_key: EntityKey,
+    ) -> Option<<P::Construct<'_> as TupleIterator>::Item> {
+        unsafe {
+            self.world
+                .get()
+                .as_mut()
+                .unwrap()
+                .get_entity_components::<P>(entity_key)
+        }
+    }
+
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
@@ -86,8 +99,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
                 .get()
                 .as_mut()
                 .unwrap()
-                .entity_storage
-                .tables
+                .get_tables_mut()
                 .get_mut(&arch_id)
                 .expect("Table with archetype id could not be found.")
                 .tuple_iter::<P>()
@@ -169,8 +181,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     ) {
         let mut comp_ids = world_data
             .get_mut()
-            .entity_storage
-            .cache
+            .get_cache_mut()
             .compid_vec_cache
             .take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
@@ -179,20 +190,19 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         P::ref_kinds(&mut ref_kinds);
 
         let mut filter = Vec::new();
-        F::get_and_filters(&mut world_data.get_mut().entity_storage, &mut filter);
+        F::get_and_filters(&mut world_data.get_mut(), &mut filter);
 
         let query_state_key = QueryStateKey { comp_ids, filter };
 
         let arch_ids = world_data
             .get_mut()
-            .entity_storage
             .find_fitting_archetypes(&query_state_key.comp_ids);
 
         // remove archetypes that do not match the filter
         let arch_ids: Vec<ArchetypeId> = arch_ids
             .iter()
             .filter(|aid| {
-                let arch = &world_data.get_mut().entity_storage.archetypes[aid.0 as usize];
+                let arch = &world_data.get_mut().get_archetypes()[aid.0 as usize];
                 let comp_ids_set: HashSet<ComponentId> = HashSet::from_iter(
                     arch.soa_comp_ids
                         .iter()
@@ -214,7 +224,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         // adding system dependencies to graph
         // systems <- add queries <- add components and filtered archetypes
 
-        let depend_graph = &mut world_data.get_mut().entity_storage.depend_graph;
+        let depend_graph = &mut world_data.get_mut().get_depend_graph_mut();
         depend_graph.insert_system_components(
             system_id,
             &query_state_key.comp_ids.get_vec(),
@@ -252,7 +262,6 @@ impl<T: Component> QueryParam for &T {
     fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
         let comp_id = unsafe {
             (&mut *world_data.get())
-                .entity_storage
                 .create_or_get_component::<T>()
         };
         vec.push(comp_id);
@@ -270,7 +279,6 @@ impl<T: Component> QueryParam for &mut T {
     fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
         let comp_id = unsafe {
             (&mut *world_data.get())
-                .entity_storage
                 .create_or_get_component::<T>()
         };
 

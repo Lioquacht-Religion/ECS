@@ -9,8 +9,7 @@ use std::{alloc::Layout, any::TypeId, ptr::NonNull};
 use crate::{
     all_tuples,
     ecs::{
-        component::{Component, ComponentId, StorageTypes},
-        storages::entity_storage::EntityStorage,
+        component::{Component, ComponentId, StorageTypes}, entity::EntityKey, storages::entity_storage::EntityStorage, world::WorldData
     },
 };
 
@@ -79,6 +78,14 @@ pub trait TupleTypesExt: 'static {
         soa_vec: &mut Vec<NonNull<u8>>,
         aos_vec: &mut Vec<NonNull<u8>>,
     );
+    fn on_add() -> Option<for<'a> fn(world: &mut WorldData, entity: EntityKey)> {
+        None
+    }
+    fn exec_on_add_rec(world_data: &mut WorldData, entity: EntityKey);
+    fn on_remove() -> Option<for<'a> fn(world_data: &mut WorldData, entity: EntityKey)> {
+        None
+    }
+    fn exec_on_remove_rec(world_data: &mut WorldData, entity: EntityKey);
 }
 
 impl<T: Component> TupleTypesExt for T {
@@ -114,6 +121,22 @@ impl<T: Component> TupleTypesExt for T {
             StorageTypes::SparseSet => unimplemented!(),
         }
     }
+    fn on_add() -> Option<for<'a> fn(world_data: &mut WorldData, entity: EntityKey)> {
+        T::on_add()
+    }
+    fn exec_on_add_rec(world_data: &mut WorldData, entity: EntityKey){
+        if let Some(on_add) = Self::on_add(){
+            on_add(world_data, entity);
+        }
+    }
+    fn on_remove() -> Option<for<'a> fn(world_data: &mut WorldData, entity: EntityKey)> {
+        T::on_remove()
+    }
+    fn exec_on_remove_rec(world_data: &mut WorldData, entity: EntityKey){
+        if let Some(on_remove) = Self::on_add(){
+            on_remove(world_data, entity);
+        }
+    }
 }
 
 impl TupleTypesExt for () {
@@ -132,6 +155,10 @@ impl TupleTypesExt for () {
         _soa_vec: &mut Vec<NonNull<u8>>,
         _aos_vec: &mut Vec<NonNull<u8>>,
     ) {
+    }
+    fn exec_on_add_rec(_world_data: &mut WorldData, _entity: EntityKey){
+    }
+    fn exec_on_remove_rec(_world_data: &mut WorldData, _entity: EntityKey){
     }
 }
 
@@ -175,6 +202,12 @@ macro_rules! impl_tuple_ext {
                 #[allow(non_snake_case)]
                 let ( $($t,)+ ) = self;
                 $($t::self_get_value_ptrs_by_storage($t, soa_vec, aos_vec);)*
+            }
+            fn exec_on_add_rec(world_data: &mut WorldData, entity: EntityKey){
+                $($t::exec_on_add_rec(world_data, entity);)*
+            }
+            fn exec_on_remove_rec(world_data: &mut WorldData, entity: EntityKey){
+                $($t::exec_on_remove_rec(world_data, entity);)*
             }
        }
     };

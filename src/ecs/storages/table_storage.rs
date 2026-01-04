@@ -6,6 +6,7 @@ use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, StorageTypes},
         entity::{Entity, EntityKey, EntityKeyIterUnsafe},
+        query::QueryParam,
         storages::thin_blob_vec::{
             ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
             ThinBlobIterUnsafe,
@@ -139,8 +140,9 @@ impl TableStorage {
         Some((row_id_start, row_id_end))
     }
 
+    /// TODO: changes are finished, update description
     /// Removes supplied entity with all its components from table.
-    /// TODO: this description is wrong, one entity gets removed 
+    /// TODO: this description is wrong, one entity gets removed
     /// and another may need to be moved in the table to fill the empty spot
     /// of removed entity.
     /// The changes to this moved entity should be returned, e.g. entity key and new row id.
@@ -159,23 +161,28 @@ impl TableStorage {
 
         self.len -= 1;
 
-            //TODO: does the row id need to be updated?
-            //TODO: what does the row id even mean anymore?
-            //TODO: the removal of entities seems to be incorrectly implemented in general
-        //TODO: swap and then remove, instead of just a normal remove 
+        //TODO: does the row id need to be updated?
+        //TODO: what does the row id even mean anymore?
+        //TODO: the removal of entities seems to be incorrectly implemented in general
+        //TODO: swap and then remove, instead of just a normal remove
         if entity.row_id == self.len {
             self.entities.pop();
             None
-        }
-        else {
+        } else {
             self.entities.swap_remove(entity.row_id as usize);
-            if let Some(moved_entity_key) = self.entities.get(entity.row_id as usize){
+            if let Some(moved_entity_key) = self.entities.get(entity.row_id as usize) {
                 Some((*moved_entity_key, entity.row_id))
-            }
-            else{
+            } else {
                 None
             }
         }
+    }
+
+    pub(crate) fn get_entity_components<P: QueryParam>(
+        &mut self,
+        entity: Entity,
+    ) -> Option<<P::Construct<'_> as TupleIterator>::Item> {
+        unsafe { new_table_storage_iter_with_index::<P>(self, entity.row_id as usize).next() }
     }
 
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableStorage>>(
@@ -199,6 +206,22 @@ pub(crate) unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<Tab
             tuple_iters: TC::construct(table.into()),
             len: table.len as usize,
             index: 0,
+        }
+    }
+}
+
+pub(crate) unsafe fn new_table_storage_iter_with_index<
+    'table,
+    TC: TupleIterConstructor<TableStorage>,
+>(
+    table: &'table mut TableStorage,
+    index: usize,
+) -> TableStorageTupleIter<TC::Construct<'table>> {
+    unsafe {
+        TableStorageTupleIter {
+            tuple_iters: TC::construct(table.into()),
+            len: table.len as usize,
+            index: index,
         }
     }
 }

@@ -1,7 +1,5 @@
 //thin_blob_vec.rs
 
-//TODO: fix UB, add check for not allocation for layouts of size zero
-
 use std::{alloc::Layout, marker::PhantomData, ptr::NonNull};
 
 use crate::{
@@ -50,6 +48,7 @@ impl ThinBlobVec {
         }
     }
 
+    #[allow(unused)]
     pub(crate) fn new_typed<T>() -> Self {
         Self {
             data_ptr: NonNull::dangling(),
@@ -71,8 +70,6 @@ impl ThinBlobVec {
     }
 
     pub(crate) unsafe fn remove_and_replace_with_last(&mut self, len: usize, to: usize) {
-        //TODO: i do not think this works correctly,
-        // check it again, especially if this works for both soa and aos
         assert!(to < len);
 
         unsafe {
@@ -101,18 +98,12 @@ impl ThinBlobVec {
             }
         }
 
-        //dealloc allocation
+        //dealloc thin blob vec allocation
         let alloc_size = cap * self.elem_layout.size();
         let cur_array_layout = Layout::from_size_align(alloc_size, self.elem_layout.align())
             .expect("err dealloc layout creation!");
         unsafe {
             std::alloc::dealloc(self.data_ptr.as_ptr(), cur_array_layout);
-        }
-    }
-
-    pub(crate) unsafe fn dealloc_typed<T>(&mut self, cap: usize, len: usize) {
-        unsafe {
-            self.dealloc(cap, len);
         }
     }
 
@@ -130,9 +121,11 @@ impl ThinBlobVec {
     pub(crate) unsafe fn grow(&mut self, cap: usize) -> usize {
         let (new_ptr, new_cap) = if cap == 0 {
             let new_cap = 4;
-            let cur_array_layout =
-                Layout::from_size_align(self.elem_layout.size() * new_cap, self.elem_layout.align())
-                    .expect("err realloc layout creation!");
+            let cur_array_layout = Layout::from_size_align(
+                self.elem_layout.size() * new_cap,
+                self.elem_layout.align(),
+            )
+            .expect("err realloc layout creation!");
 
             let new_ptr = unsafe { std::alloc::alloc(cur_array_layout) };
             (new_ptr, new_cap)
@@ -242,6 +235,7 @@ impl ThinBlobVec {
         }
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn push_typed<T>(&mut self, cap: usize, len: usize, mut value: T) -> usize {
         let new_cap = unsafe {
             self.push_untyped(
@@ -256,7 +250,6 @@ impl ThinBlobVec {
     }
 
     pub(crate) unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
-        //TODO: add ZST safety
         if layout.size() != 0 {
             unsafe { self.data_ptr.add(index * layout.size()) }
         } else {
@@ -264,6 +257,7 @@ impl ThinBlobVec {
         }
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn get_typed<T>(&self, index: usize) -> &T {
         unsafe {
             &*self
@@ -282,6 +276,7 @@ impl ThinBlobVec {
         }
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn get_mut_typed<T>(&mut self, index: usize) -> &mut T {
         unsafe {
             &mut *self
@@ -328,6 +323,7 @@ impl ThinBlobVec {
         }
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn iter<T: 'static>(&mut self, len: usize) -> ThinBlobIter<'_, T> {
         ThinBlobIter::new(self, len)
     }
@@ -443,6 +439,7 @@ impl<'vec, T: Component + 'static> TupleIterator for ThinBlobInnerTypeIterMutUns
     }
 }
 
+#[allow(unused)]
 pub(crate) struct ThinBlobIter<'vec, T: 'static> {
     vec: &'vec mut ThinBlobVec,
     len: usize,
@@ -451,6 +448,7 @@ pub(crate) struct ThinBlobIter<'vec, T: 'static> {
 }
 
 impl<'vec, T: 'static> ThinBlobIter<'vec, T> {
+    #[allow(unused)]
     pub(crate) fn new(blob: &'vec mut ThinBlobVec, len: usize) -> Self {
         ThinBlobIter {
             vec: blob,
@@ -510,7 +508,7 @@ mod test {
                 );
             }
 
-            bv.dealloc_typed::<Comp1>(cap, 6);
+            bv.dealloc(cap, 6);
 
             drop(bv);
         }

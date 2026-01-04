@@ -6,7 +6,7 @@ use crate::{
     all_tuples,
     ecs::{
         component::{Component, ComponentId},
-        storages::entity_storage::EntityStorage,
+        world::WorldData,
     },
 };
 
@@ -40,8 +40,8 @@ fn handle_or_elems(comp_ids: &HashSet<ComponentId>, or_elems: &[Vec<FilterElem>]
 }
 
 pub trait QueryFilter {
-    fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>);
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>);
+    fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>);
+    fn get_or_filters(es: &mut WorldData, filter_elems: &mut Vec<Vec<FilterElem>>);
 }
 
 pub struct With<T: Component> {
@@ -62,40 +62,40 @@ pub enum FilterElem {
 }
 
 impl QueryFilter for () {
-    fn get_and_filters(_es: &mut EntityStorage, _filter_elems: &mut Vec<FilterElem>) {
+    fn get_and_filters(_es: &mut WorldData, _filter_elems: &mut Vec<FilterElem>) {
         dbg!("empty filter: {:?};", &_filter_elems);
     }
-    fn get_or_filters(_es: &mut EntityStorage, _filter_elems: &mut Vec<Vec<FilterElem>>) {
+    fn get_or_filters(_es: &mut WorldData, _filter_elems: &mut Vec<Vec<FilterElem>>) {
         dbg!("empty filter: {:?};", &_filter_elems);
     }
 }
 impl<T: Component> QueryFilter for With<T> {
-    fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
+    fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>) {
         filter_elems.push(FilterElem::With(es.create_or_get_component::<T>()));
         dbg!("with filter: {:?};", &filter_elems);
     }
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>) {
+    fn get_or_filters(es: &mut WorldData, filter_elems: &mut Vec<Vec<FilterElem>>) {
         filter_elems.push(vec![FilterElem::With(es.create_or_get_component::<T>())]);
         dbg!("with filter: {:?};", &filter_elems);
     }
 }
 impl<T: Component> QueryFilter for Without<T> {
-    fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
+    fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>) {
         filter_elems.push(FilterElem::Without(es.create_or_get_component::<T>()));
         dbg!("tuple filter: {:?};", &filter_elems);
     }
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>) {
+    fn get_or_filters(es: &mut WorldData, filter_elems: &mut Vec<Vec<FilterElem>>) {
         filter_elems.push(vec![FilterElem::Without(es.create_or_get_component::<T>())]);
         dbg!("tuple filter: {:?};", &filter_elems);
     }
 }
 impl<F: QueryFilter> QueryFilter for Or<F> {
-    fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
+    fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>) {
         let mut or_inner_elems = Vec::new();
         F::get_or_filters(es, &mut or_inner_elems);
         filter_elems.push(FilterElem::Or(or_inner_elems));
     }
-    fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>) {
+    fn get_or_filters(es: &mut WorldData, filter_elems: &mut Vec<Vec<FilterElem>>) {
         let mut or_inner_elems = Vec::new();
         F::get_or_filters(es, &mut or_inner_elems);
         filter_elems.push(vec![FilterElem::Or(or_inner_elems)]);
@@ -105,7 +105,7 @@ impl<F: QueryFilter> QueryFilter for Or<F> {
 macro_rules! impl_query_filter_tuples {
     ($($t:ident), *) => {
         impl<$($t : QueryFilter), *> QueryFilter for ($($t),*,){
-            fn get_and_filters(es: &mut EntityStorage, filter_elems: &mut Vec<FilterElem>) {
+            fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>) {
 
                 $($t::get_and_filters(es, filter_elems);) *
 
@@ -115,7 +115,7 @@ macro_rules! impl_query_filter_tuples {
                     &filter_elems
                 );
             }
-            fn get_or_filters(es: &mut EntityStorage, filter_elems: &mut Vec<Vec<FilterElem>>) {
+            fn get_or_filters(es: &mut WorldData, filter_elems: &mut Vec<Vec<FilterElem>>) {
 
                 $(
                    #[allow(non_snake_case)]
@@ -160,7 +160,7 @@ mod test {
     #[test]
     fn query_filters_test1() {
         let mut world = World::new();
-        let es = &mut world.data.get_mut().entity_storage;
+        let es = &mut world.data.get_mut();
         let mut filter_elems = Vec::new();
         <FilterType1 as QueryFilter>::get_and_filters(es, &mut filter_elems);
         println!("query filters: {:?}", &filter_elems);

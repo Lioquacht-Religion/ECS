@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::{all_tuples, all_tuples_wout_single};
+use crate::all_tuples_wout_single;
 
 use super::{IntoSystem, System, SystemId, Systems};
 
@@ -191,15 +191,7 @@ mod test {
 
     use super::IntoSystemConfig;
 
-    struct SystemExecCount(usize);
-
-    fn test_system1(prm: Res<i32>, prm2: ResMut<usize>, exec_count: ResMut<SystemExecCount>) {
-        println!("testsystem1 exec count: {}", exec_count.value.0);
-        assert_eq!(exec_count.value.0, 0);
-        exec_count.value.0 += 1;
-        println!("testsystem1 exec count after: {}", exec_count.value.0);
-        assert_eq!(exec_count.value.0, 1);
-
+    fn test_system1(prm: Res<i32>, prm2: ResMut<usize>) {
         println!("testsystem1 res: {}, {}", prm.value, prm2.value);
         assert_eq!(2324, *prm.value);
         assert_eq!(4350, *prm2.value);
@@ -251,7 +243,12 @@ mod test {
     fn test_system_scheduler_builder_infinite_loop_check() {
         let mut world = World::new();
 
-        let b = (test_system1, test_system2, test_system3).chain();
+        let b = (
+            test_system7, //causes cyclic dependency
+            test_system1, 
+            test_system2, 
+            test_system3
+        ).chain();
 
         world.add_system_builder(b);
 
@@ -269,7 +266,6 @@ mod test {
         let num2: usize = 4350;
         world.add_resource(num1);
         world.add_resource(num2);
-        world.add_resource(SystemExecCount(0));
 
         println!("system constraints: {:?}", &world.systems.constraints);
 

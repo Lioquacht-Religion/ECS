@@ -1,6 +1,6 @@
 // cache.rs
 
-use std::{any::TypeId, ptr::NonNull};
+use std::ptr::NonNull;
 
 use crate::ecs::component::ComponentId;
 
@@ -41,7 +41,6 @@ impl<T> Cachable for Vec<T> {
 pub(crate) struct EntityStorageCache {
     pub(crate) ptr_vec_cache: CollectionCache<Vec<NonNull<u8>>>,
     pub(crate) compid_vec_cache: CollectionCache<Vec<ComponentId>>,
-    pub(crate) typeid_vec_cache: CollectionCache<Vec<TypeId>>,
     pub(crate) compelemptr_vec_cache: CollectionCache<Vec<CompElemPtr>>,
 }
 
@@ -50,7 +49,6 @@ impl EntityStorageCache {
         Self {
             ptr_vec_cache: CollectionCache::new(),
             compid_vec_cache: CollectionCache::new(),
-            typeid_vec_cache: CollectionCache::new(),
             compelemptr_vec_cache: CollectionCache::new(),
         }
     }

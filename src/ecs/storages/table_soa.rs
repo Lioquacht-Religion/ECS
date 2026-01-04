@@ -158,6 +158,7 @@ impl TableSoA {
         }
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
@@ -209,13 +210,14 @@ impl Drop for TableSoA {
     }
 }
 
-//TODO: are these unused things later useful
+#[allow(unused)]
 pub(crate) struct TableSoaTupleIter<T: TupleIterator> {
     tuple_iters: T,
     len: usize,
     index: usize,
 }
 
+#[allow(unused)]
 pub(crate) unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
     table: &'table mut TableSoA,
 ) -> TableSoaTupleIter<TC::Construct<'table>> {
@@ -245,6 +247,7 @@ impl TupleConstructorSource for TableSoA {
     type IterType<'c, T: Component> = ThinBlobIterUnsafe<'c, T>;
     type IterMutType<'c, T: Component> = ThinBlobIterMutUnsafe<'c, T>;
     fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
+        //TODO:?
         todo!()
     }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
@@ -270,6 +273,7 @@ mod tests {
     use crate::ecs::component::StorageTypes;
     use crate::ecs::query::Query;
     use crate::ecs::storages::entity_storage::EntityStorage;
+    use crate::ecs::world::WorldData;
     use crate::ecs::{component::Component, system::Res, world::World};
 
     struct Pos(i32);
@@ -337,7 +341,7 @@ mod tests {
         assert_eq!(query2.iter().count(), 4);
     }
 
-    fn init_es_insert(es: &mut EntityStorage) {
+    fn init_es_insert(es: &mut WorldData) {
         es.add_entity((Comp1(12, 34), Comp2(12, 34)));
         es.add_entity((Comp1(12, 34), Comp2(12, 34)));
         es.add_entity((Comp2(12, 34), Comp1(12, 34)));
@@ -353,23 +357,15 @@ mod tests {
     }
 
     #[test]
-    fn test_table_soa_insert() {
-        let mut es = EntityStorage::new();
-        init_es_insert(&mut es);
-    }
-
-    #[test]
     fn test_table_soa_query_iter() {
         let mut world = World::new();
         let num1: i32 = 2324;
         let num2: usize = 2324;
         world.add_system(test_system1);
-        unsafe { (&mut *world.data.get()).add_resource(num1) };
-        unsafe { (&mut *world.data.get()).add_resource(num2) };
+        world.add_resource(num1);
+        world.add_resource(num2);
 
-        let es = &mut world.data.get_mut().entity_storage;
-
-        init_es_insert(es);
+        init_es_insert(world.data.get_mut());
 
         world.init_and_run();
     }

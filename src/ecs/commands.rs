@@ -67,8 +67,8 @@ impl<'w, 's> SystemParam for Commands<'w, 's> {
         let command_queue_ptr = world_data.commands_queues.put_inuse();
 
         //SAFETY: Because vec is stored behind box pointer on the heap,
-        // it's address should be stable when moved.
-        Commands::new(&world_data.entity_storage.entities, unsafe {
+        // it's address should be stable if moved.
+        Commands::new(world_data.get_entities(), unsafe {
             &mut *command_queue_ptr
         })
     }
@@ -89,7 +89,6 @@ pub(crate) struct SpawnCommand<T: TupleTypesExt> {
 impl<T: TupleTypesExt> Command for SpawnCommand<T> {
     fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
         world_data
-            .entity_storage
             .add_entity_with_reserved_key(self.reserved_key, self.entity_value);
     }
 }
@@ -100,7 +99,7 @@ pub(crate) struct DespawnCommand {
 
 impl Command for DespawnCommand {
     fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
-        world_data.entity_storage.remove_entity(self.entity_key);
+        world_data.remove_entity(self.entity_key);
     }
 }
 
@@ -135,60 +134,88 @@ mod test {
     use crate::ecs::{prelude::*, system::ResMut};
 
     struct Comp1SoA(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
-    impl Component for Comp1SoA{
+    impl Component for Comp1SoA {
         const STORAGE: StorageTypes = StorageTypes::TableSoA;
     }
-    impl Default for Comp1SoA{
+    impl Default for Comp1SoA {
         fn default() -> Self {
-            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+            Self(
+                43,
+                555,
+                250,
+                Box::new((23, 66, "first_str".to_string())),
+                32,
+                "second_str".to_string(),
+            )
         }
     }
     struct Comp2SoA(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
-    impl Component for Comp2SoA{
+    impl Component for Comp2SoA {
         const STORAGE: StorageTypes = StorageTypes::TableSoA;
     }
-    impl Default for Comp2SoA{
+    impl Default for Comp2SoA {
         fn default() -> Self {
-            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+            Self(
+                43,
+                555,
+                250,
+                Box::new((23, 66, "first_str".to_string())),
+                32,
+                "second_str".to_string(),
+            )
         }
     }
 
     struct Comp1AoS(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
-    impl Component for Comp1AoS{
+    impl Component for Comp1AoS {
         const STORAGE: StorageTypes = StorageTypes::TableAoS;
     }
-    impl Default for Comp1AoS{
+    impl Default for Comp1AoS {
         fn default() -> Self {
-            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+            Self(
+                43,
+                555,
+                250,
+                Box::new((23, 66, "first_str".to_string())),
+                32,
+                "second_str".to_string(),
+            )
         }
     }
     struct Comp2AoS(u8, u16, u8, Box<(u8, u8, String)>, u8, String);
-    impl Component for Comp2AoS{
+    impl Component for Comp2AoS {
         const STORAGE: StorageTypes = StorageTypes::TableAoS;
     }
-    impl Default for Comp2AoS{
+    impl Default for Comp2AoS {
         fn default() -> Self {
-            Self(43, 555, 250, Box::new((23, 66, "first_str".to_string())), 32, "second_str".to_string())
+            Self(
+                43,
+                555,
+                250,
+                Box::new((23, 66, "first_str".to_string())),
+                32,
+                "second_str".to_string(),
+            )
         }
     }
 
     struct EntityCount(isize);
 
-    impl EntityCount{
-        fn increase(&mut self){
+    impl EntityCount {
+        fn increase(&mut self) {
             self.0 += 1;
         }
-        fn decrease(&mut self){
+        fn decrease(&mut self) {
             self.0 -= 1;
         }
     }
 
     fn test_system_spawn(
-        mut commands: Commands, 
+        mut commands: Commands,
         count: ResMut<EntityCount>,
         mut query_soa: Query<(&Comp1SoA, &Comp2SoA)>,
-        mut query_aos: Query<(&Comp1AoS, &Comp2AoS)>
-    ){
+        mut query_aos: Query<(&Comp1AoS, &Comp2AoS)>,
+    ) {
         let _entity_key = commands.spawn((Comp1SoA::default(), Comp2SoA::default()));
         count.value.increase();
         let _entity_key = commands.spawn(Comp1SoA::default());
@@ -213,26 +240,26 @@ mod test {
     fn test_system_count_after_commands(
         count: ResMut<EntityCount>,
         mut query_soa: Query<(&Comp1SoA, &Comp2SoA)>,
-    ){
+    ) {
         assert_eq!(count.0, query_soa.iter().count().try_into().unwrap());
     }
 
     fn test_system_despawn_soa(
-        mut commands: Commands, 
+        mut commands: Commands,
         count: ResMut<EntityCount>,
         mut query_soa: Query<(EntityKey, &Comp1SoA, &Comp2SoA)>,
-    ){
-        for (ek, _c1, _c2) in query_soa.iter(){
+    ) {
+        for (ek, _c1, _c2) in query_soa.iter() {
             commands.despawn(ek);
             count.value.decrease();
         }
     }
 
     fn test_system_despawn_aos(
-        mut commands: Commands, 
-        mut query_aos: Query<(EntityKey, &Comp1AoS, &Comp2AoS)>
-    ){
-        for (ek, _c1, _c2) in query_aos.iter(){
+        mut commands: Commands,
+        mut query_aos: Query<(EntityKey, &Comp1AoS, &Comp2AoS)>,
+    ) {
+        for (ek, _c1, _c2) in query_aos.iter() {
             commands.despawn(ek);
         }
     }
@@ -258,10 +285,11 @@ mod test {
     fn command_despawn_soa_test() {
         let mut world = World::new();
         world.add_system_builder(
-            (test_system_spawn, test_system_despawn_soa
-             //TODO:, test_system_count_after_commands
-             )
-            .chain()
+            (
+                test_system_spawn,
+                test_system_despawn_soa, //TODO:, test_system_count_after_commands
+            )
+                .chain(),
         );
         add_entities_to_world(&mut world);
         world.init_and_run();
@@ -271,10 +299,7 @@ mod test {
     #[test]
     fn command_despawn_aos_test() {
         let mut world = World::new();
-        world.add_system_builder(
-            (test_system_spawn, test_system_despawn_aos)
-            .chain()
-        );
+        world.add_system_builder((test_system_spawn, test_system_despawn_aos).chain());
         add_entities_to_world(&mut world);
         world.init_and_run();
         world.run();

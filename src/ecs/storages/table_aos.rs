@@ -14,7 +14,6 @@ use crate::{
     utils::{
         sorted_vec::SortedVec,
         tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
-        tuple_types::TupleTypesExt,
     },
 };
 
@@ -209,26 +208,18 @@ impl TableAoS {
         cache.compelemptr_vec_cache.insert(comp_elem_ptrs.into());
     }
 
-    pub(crate) unsafe fn get_mut_by_index<T: TupleTypesExt>(
-        &mut self,
-        index: usize,
-    ) -> Option<&mut T> {
-        let _row_ptr = unsafe { self.vec.get_ptr_untyped(index, self.vec.elem_layout) };
-
-        unimplemented!()
-    }
-
     pub(crate) fn remove(&mut self, entity: &Entity) {
         if self.len > entity.row_id as usize {
-            //TODO: drop inner packed components individually too
             unsafe {
                 self.drop_entity_row(entity.row_id as usize);
-                self.vec.remove_and_replace_with_last(self.len, entity.row_id as usize);
+                self.vec
+                    .remove_and_replace_with_last(self.len, entity.row_id as usize);
             }
             self.len -= 1;
         }
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
         &'a mut self,
     ) -> TableAosTupleIter<TC::Construct<'a>> {
@@ -264,10 +255,10 @@ impl TableAoS {
         unsafe { self.vec.tuple_inner_type_iter_mut(*offset) }
     }
 
-    unsafe fn drop_entity_row(&mut self, index: usize){
+    unsafe fn drop_entity_row(&mut self, index: usize) {
         let base_ptr = self.vec.data_ptr;
         let row_size = self.vec.elem_layout.size();
-        let row_ptr = unsafe{ base_ptr.add(row_size * index) };
+        let row_ptr = unsafe { base_ptr.add(row_size * index) };
         for meta_data in self.type_meta_data.iter() {
             if let Some(drop_fn) = meta_data.drop_fn {
                 unsafe {
@@ -281,11 +272,6 @@ impl TableAoS {
 
 impl Drop for TableAoS {
     fn drop(&mut self) {
-        //TODO: what about removing already empty entry in thin_blob_vec?
-        //TODO: remove free indexes concept everywhere
-        // just move last entry to empty spot and updat entity vec with new position
-        // generation entity index stored by other systems is not effected
-
         for meta_data in self.type_meta_data.iter() {
             if let Some(drop_fn) = meta_data.drop_fn {
                 let base_ptr = self.vec.data_ptr;
@@ -306,13 +292,15 @@ impl Drop for TableAoS {
     }
 }
 
+#[allow(unused)]
 pub(crate) struct TableAosTupleIter<T: TupleIterator> {
     tuple_iters: T,
     len: usize,
     index: usize,
 }
 
-pub unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
+#[allow(unused)]
+pub(crate) unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
     table: &'table mut TableAoS,
 ) -> TableAosTupleIter<TC::Construct<'table>> {
     unsafe {
@@ -367,6 +355,7 @@ mod test {
     use crate::ecs::component::{ArchetypeId, StorageTypes};
     use crate::ecs::query::Query;
     use crate::ecs::storages::entity_storage::EntityStorage;
+    use crate::ecs::world::WorldData;
     use crate::ecs::{component::Component, system::Res, world::World};
 
     #[derive(Debug)]
@@ -447,7 +436,7 @@ mod test {
         assert_eq!(query2.iter().count(), 4);
     }
 
-    fn init_es_insert(es: &mut EntityStorage) {
+    fn init_es_insert(es: &mut WorldData) {
         es.add_entity((Comp1(12, 34), Comp2(12, 34)));
         es.add_entity((Comp1(12, 34), Comp2(12, 34)));
         es.add_entity((Comp2(12, 34), Comp1(12, 34)));
@@ -466,12 +455,6 @@ mod test {
     }
 
     #[test]
-    fn test_table_aos_insert() {
-        let mut es = EntityStorage::new();
-        init_es_insert(&mut es);
-    }
-
-    #[test]
     fn test_table_aos_query_iter() {
         let mut world = World::new();
         let num1: i32 = 2324;
@@ -480,20 +463,8 @@ mod test {
         world.add_resource(num1);
         world.add_resource(num2);
 
-        let es = &mut world.data.get_mut().entity_storage;
-        init_es_insert(es);
+        init_es_insert(world.data.get_mut());
         world.init_systems();
-        println!(
-            "archid and comps: {:?}",
-            world.data.get_mut().entity_storage.compids_archid_map
-        );
-
-        let es = &mut world.data.get_mut().entity_storage;
-        es.tables
-            .get_mut(&ArchetypeId(0))
-            .unwrap()
-            .table_aos
-            .print_internals(&es.components);
 
         world.run();
     }

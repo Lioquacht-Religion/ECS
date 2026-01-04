@@ -4,7 +4,8 @@ use std::{
     any::TypeId,
     cell::UnsafeCell,
     collections::{HashMap, HashSet},
-    marker::PhantomData, ops::{Deref, DerefMut},
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
 };
 
 use builder::{IntoSystemConfig, IntoSystemTuple, SystemConfig};
@@ -272,7 +273,7 @@ pub struct Res<'a, T> {
     pub value: &'a T,
 }
 
-impl<'a, T> Deref for Res<'a, T>{
+impl<'a, T> Deref for Res<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.value
@@ -283,14 +284,14 @@ pub struct ResMut<'a, T> {
     pub value: &'a mut T,
 }
 
-impl<'a, T> Deref for ResMut<'a, T>{
+impl<'a, T> Deref for ResMut<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.value
     }
 }
 
-impl<'a, T> DerefMut for ResMut<'a, T>{
+impl<'a, T> DerefMut for ResMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
@@ -311,7 +312,8 @@ impl<'res, T: 'static> SystemParam for Res<'res, T> {
         *system_param_index += 1;
         unsafe {
             Res {
-                value: (&*world_data.get()).resources.get().unwrap(),
+                value: world_data.get().as_ref().unwrap().resources.get()
+                    .expect("Requested resource does not exist!"),
             }
         }
     }
@@ -324,8 +326,7 @@ impl<'res, T: 'static> SystemParam for Res<'res, T> {
         let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
         world_data
-            .entity_storage
-            .depend_graph
+            .get_depend_graph_mut()
             .insert_system_resource(system_id, resource_id, EcsEdge::Shared);
         system_param_ids.push(SystemParamId::Resource(
             ResourceId::new(TypeId::of::<T>()),
@@ -345,7 +346,8 @@ impl<'res, T: 'static> SystemParam for ResMut<'res, T> {
         *system_param_index += 1;
         unsafe {
             ResMut {
-                value: (&mut *world_data.get()).resources.get_mut().unwrap(),
+                value: world_data.get().as_mut().unwrap().resources.get_mut()
+                    .expect("Requested resource does not exist!"),
             }
         }
     }
@@ -358,8 +360,7 @@ impl<'res, T: 'static> SystemParam for ResMut<'res, T> {
         let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
         world_data
-            .entity_storage
-            .depend_graph
+            .get_depend_graph_mut()
             .insert_system_resource(system_id, resource_id, EcsEdge::Excl);
         system_param_ids.push(SystemParamId::Resource(
             ResourceId::new(TypeId::of::<T>()),
@@ -377,7 +378,9 @@ impl<T: 'static> SystemParam for ResOwned<T> {
         world_data: &'r UnsafeCell<WorldData>,
     ) -> Self::Item<'r> {
         *system_param_index += 1;
-        unsafe { (*world_data.get()).resources.remove().unwrap() }
+        unsafe { (*world_data.get()).resources.remove()
+            .expect("Requested resource does not exist!")
+        }
     }
     fn create_system_param_data(
         system_id: SystemId,
@@ -387,8 +390,7 @@ impl<T: 'static> SystemParam for ResOwned<T> {
         let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
         world_data
-            .entity_storage
-            .depend_graph
+            .get_depend_graph_mut()
             .insert_system_resource(system_id, resource_id, EcsEdge::Owned);
         system_param_ids.push(SystemParamId::Resource(
             ResourceId::new(TypeId::of::<T>()),
@@ -503,25 +505,6 @@ impl<F: FnMut()> IntoSystem<()> for F {
         }
     }
 }
-
-/*
-       impl<
-       F: FnMut(T1, T2), T1 : SystemParam, T2: SystemParam>
-       IntoSystem<(T1, T2)> for F
-           where
-             for<'a, 'b> &'a mut F:
-             FnMut(T1, T2) + FnMut(<T1 as SystemParam>::Item<'b>, <T2 as SystemParam>::Item<'b>)
-        {
-           type System = FunctionSystem<(T1, T2), Self>;
-
-           fn into_system(self) -> Self::System {
-               FunctionSystem{
-                   f : self,
-                   marker : Default::default(),
-               }
-           }
-        }
-*/
 
 macro_rules! impl_into_system_for_functionsystem {
     ( $($t:ident), * ) => {

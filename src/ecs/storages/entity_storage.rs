@@ -7,15 +7,14 @@ use crate::{
         component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
         ecs_dependency_graph::EcsDependencyGraph,
         entity::{Entities, Entity, EntityKey},
+        query::QueryParam,
     },
-    utils::{sorted_vec::SortedVec, tuple_types::TupleTypesExt},
+    utils::{sorted_vec::SortedVec, tuple_iters::TupleIterator, tuple_types::TupleTypesExt},
 };
 
 use super::{cache::EntityStorageCache, table_storage::TableStorage};
 
 pub struct EntityStorage {
-    //TODO: probably replace with specific Datastructure
-    //pub(crate) entities: GenVec<Entity>,
     pub(crate) entities: Entities,
     pub(crate) components: Vec<ComponentInfo>,
     pub(crate) archetypes: Vec<Archetype>,
@@ -28,7 +27,7 @@ pub struct EntityStorage {
 }
 
 impl EntityStorage {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             entities: Entities::new(),
             components: Vec::new(),
@@ -41,7 +40,7 @@ impl EntityStorage {
         }
     }
 
-    pub fn find_fitting_archetypes(
+    pub(crate) fn find_fitting_archetypes(
         &self,
         query_comp_ids: &SortedVec<ComponentId>,
     ) -> Vec<ArchetypeId> {
@@ -57,7 +56,7 @@ impl EntityStorage {
             .collect()
     }
 
-    pub fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
+    pub(crate) fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
         let archetype_id = self.create_or_get_archetype::<T>();
         let key = self.entities.insert(Entity {
             archetype_id,
@@ -67,7 +66,27 @@ impl EntityStorage {
         self.add_entity_inner(key, input, archetype_id)
     }
 
-    pub fn add_entity_with_reserved_key<T: TupleTypesExt>(
+    pub(crate) fn get_entity_components<P: QueryParam>(
+        &mut self,
+        entity_key: EntityKey,
+    ) -> Option<<P::Construct<'_> as TupleIterator>::Item> {
+        if let Some(entity) = self.entities.get(entity_key) {
+            if let Some(table) = self.tables.get_mut(&entity.archetype_id) {
+                return table.get_entity_components::<P>(*entity);
+            }
+        }
+        None
+    }
+
+    pub(crate) fn get_single_component<T: Component>(&mut self, entity_key: EntityKey) -> Option<&T> {
+        self.get_entity_components::<&T>(entity_key)
+    }
+
+    pub(crate) fn get_single_component_mut<T: Component>(&mut self, entity_key: EntityKey) -> Option<&mut T> {
+        self.get_entity_components::<&mut T>(entity_key)
+    }
+
+    pub(crate) fn add_entity_with_reserved_key<T: TupleTypesExt>(
         &mut self,
         key: EntityKey,
         input: T,
@@ -84,7 +103,7 @@ impl EntityStorage {
         self.add_entity_inner(key, input, archetype_id)
     }
 
-    pub fn add_entity_inner<T: TupleTypesExt>(
+    pub(crate) fn add_entity_inner<T: TupleTypesExt>(
         &mut self,
         key: EntityKey,
         input: T,
@@ -115,10 +134,10 @@ impl EntityStorage {
         if let Some(e) = self.entities.get_mut(key) {
             e.row_id = row_id;
         }
-        EntityKey::new(key.get_id(), key.get_generation())
+        key
     }
 
-    pub fn add_entities_batch<T: TupleTypesExt>(&mut self, input: Vec<T>) -> Vec<EntityKey> {
+    pub(crate) fn add_entities_batch<T: TupleTypesExt>(&mut self, input: Vec<T>) -> Vec<EntityKey> {
         let archetype_id = self.create_or_get_archetype::<T>();
 
         let mut soa_comp_ids = self.cache.compid_vec_cache.take_cached();
@@ -158,7 +177,7 @@ impl EntityStorage {
         entity_keys
     }
 
-    pub fn remove_entity(&mut self, entity_key: EntityKey) {
+    pub(crate) fn remove_entity(&mut self, entity_key: EntityKey) {
         if let Some(entity) = self.entities.remove(entity_key) {
             if let Some(table) = self.tables.get_mut(&entity.archetype_id) {
                 if let Some((key, row_id)) = table.remove_entity(entity) {
@@ -170,7 +189,7 @@ impl EntityStorage {
         }
     }
 
-    pub fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
+    pub(crate) fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
         let mut comp_ids: Vec<ComponentId> = self.cache.compid_vec_cache.take_cached();
         T::create_or_get_component(self, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
@@ -185,7 +204,7 @@ impl EntityStorage {
             panic!("INVALID: Same component contained multiple times inside of entity.");
         }
 
-        // TODO: should this vecs be taken from cache?
+        // TODO: should these vecs be taken from cache?
         let mut soa_comp_ids: Vec<ComponentId> = self.cache.compid_vec_cache.take_cached();
         let mut aos_comp_ids: Vec<ComponentId> = self.cache.compid_vec_cache.take_cached();
         T::get_comp_ids_by_storage(self, &mut soa_comp_ids, &mut aos_comp_ids);
@@ -201,11 +220,11 @@ impl EntityStorage {
         archetype_id
     }
 
-    pub fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
+    pub(crate) fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
         self.create_or_get_component_by_typeid::<T>(TypeId::of::<T>())
     }
 
-    pub fn create_or_get_component_by_typeid<T: Component>(
+    pub(crate) fn create_or_get_component_by_typeid<T: Component>(
         &mut self,
         type_id: TypeId,
     ) -> ComponentId {
