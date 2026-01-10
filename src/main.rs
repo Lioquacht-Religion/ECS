@@ -68,6 +68,8 @@ impl Component for Comp2AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
+
+#[inline(never)]
 fn test_system1(
     mut commands: Commands,
     prm: Res<i32>,
@@ -94,10 +96,11 @@ fn test_system1(
         pos4.1.0 = 23234;
         pos4.1.0 -= 2344;
         //println!("pos4.1 box pointer: {}", pos4.1 .0);
-        commands.despawn(ek);
+        //commands.despawn(ek);
     }
 }
 
+#[inline(never)]
 fn test_system2(
     mut commands: Commands,
     mut query: Query<
@@ -130,6 +133,7 @@ fn test_system2(
         comp2.0 /= 21;
         comp2.1 /= 437;
 
+        /*
         let _key = commands.spawn((Comp1AoS(999999, 29029), Comp2(999999, 29029)));
         let _key = commands.spawn((Comp1(999999, 29029), Comp2AoS(999999, 29029)));
         let _key = commands.spawn(Comp1(999999, 29029));
@@ -139,6 +143,7 @@ fn test_system2(
         comp2.1 /= 392049;
 
         commands.despawn(entity);
+        */
 
         /*
         println!(
@@ -164,7 +169,7 @@ fn test_system2(
 
 fn test_system3() {}
 
-const CAPACITY: usize = 127;
+const CAPACITY: usize = 100_000;
 
 fn init_es_insert(es: &mut World) {
     let start1 = std::time::Instant::now();
@@ -249,7 +254,13 @@ fn init_es_insert(es: &mut World) {
     es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
 }
 
-fn test_table_aos_query_iter() {
+fn test_system14(){
+}
+fn test_system15(){
+}
+
+#[inline(never)]
+fn test_table_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
     let num2: usize = 2324;
@@ -259,6 +270,9 @@ fn test_table_aos_query_iter() {
     world.add_systems((test_system1, test_system2));
     world.add_systems(test_system1);
     world.add_systems(test_system2);
+
+    world.add_systems(test_system15.after(test_system14));
+    world.add_systems(test_system15.after(test_system14));
     world.add_systems(test_system3.chain().after(test_system2));
 
     world.add_resource(num1);
@@ -277,10 +291,11 @@ fn test_table_aos_query_iter() {
 }
 
 fn main() {
-    test_table_aos_query_iter();
+    test_table_query_iter();
     normal_loop_test();
 }
 
+#[inline(never)]
 fn normal_loop_test() {
     let mut ents = Vec::with_capacity(CAPACITY);
     let mut ents2 = Vec::with_capacity(CAPACITY);
@@ -294,7 +309,11 @@ fn normal_loop_test() {
             Pos2(232, 2423),
         ));
     }
+    normal_loop(&mut ents, &mut ents2);
+}
 
+#[inline(never)]
+fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4, Comp2, Pos2)>){
     let start3 = std::time::Instant::now();
     for c in ents.iter_mut() {
         c.0.0 /= 392049;
@@ -309,7 +328,9 @@ fn normal_loop_test() {
         c.4.1 /= 392049;
     }
     println!(
-        "normal loop time aos: {} nanos",
+        "normal loop time aos: {} micros; {} nanos",
+        start3.elapsed().as_micros(),
         start3.elapsed().as_nanos()
     );
 }
+

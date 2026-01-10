@@ -28,6 +28,15 @@ macro_rules! impl_ecs_id {
                 $id_type(id)
             }
         }
+        impl From<&usize> for $id_type {
+            fn from(value: &usize) -> Self {
+                let id: u32 = value
+                    .clone()
+                    .try_into()
+                    .expect("Archetype Ids have increased over their max possible u32 value!");
+                $id_type(id)
+            }
+        }
     };
 }
 

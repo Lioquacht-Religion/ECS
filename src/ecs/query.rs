@@ -1,6 +1,6 @@
 // query.rs
 
-use std::{any::TypeId, cell::UnsafeCell, collections::HashSet, marker::PhantomData};
+use std::{any::TypeId, collections::HashSet, marker::PhantomData};
 
 use crate::{
     all_tuples,
@@ -29,15 +29,19 @@ pub mod query_filter;
 type QueryDataType = TableStorage;
 
 pub struct Query<'w, 's, P: QueryParam, F: QueryFilter = ()> {
-    world: &'w UnsafeCell<WorldData>,
+    world: *mut WorldData,
     state: &'s QueryState,
-    _param_marker: PhantomData<P>,
-    _filter_marker: PhantomData<F>,
+    _param_marker: PhantomData<fn() -> P>,
+    _filter_marker: PhantomData<fn() -> F>,
+    _world_lt_marker: PhantomData<&'w WorldData>,
 }
+
+unsafe impl<'w, 's, P: QueryParam, F: QueryFilter> Send for Query<'w, 's, P, F> {}
+unsafe impl<'w, 's, P: QueryParam, F: QueryFilter> Sync for Query<'w, 's, P, F> {}
 
 #[derive(Debug)]
 pub(crate) struct QueryState {
-    //TODO: are these unsued fields needed for new features
+    //TODO: are these unused fields needed for new features
     #[allow(unused)]
     comp_ids: SortedVec<ComponentId>,
     #[allow(unused)]
@@ -63,12 +67,16 @@ pub enum RefKind {
 }
 
 impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
-    pub(crate) fn new(world: &'w UnsafeCell<WorldData>, state: &'s QueryState) -> Self {
+    pub(crate) fn new(
+        world: /*TODO: should be: &'w*/ *mut WorldData,
+        state: &'s QueryState,
+    ) -> Self {
         Self {
             world,
             state,
             _param_marker: Default::default(),
             _filter_marker: Default::default(),
+            _world_lt_marker: Default::default(),
         }
     }
 
@@ -81,24 +89,16 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
         &mut self,
         entity_key: EntityKey,
     ) -> Option<<P::Construct<'_> as TupleIterator>::Item> {
-        unsafe {
-            self.world
-                .get()
-                .as_mut()
-                .unwrap()
-                .get_entity_components::<P>(entity_key)
-        }
+        unsafe { (&mut *self.world).get_entity_components::<P>(entity_key) }
     }
 
+    #[inline(never)]
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
     ) -> TableStorageTupleIter<<P as TupleIterConstructor<QueryDataType>>::Construct<'w>> {
         unsafe {
-            self.world
-                .get()
-                .as_mut()
-                .unwrap()
+            (&mut *self.world)
                 .get_tables_mut()
                 .get_mut(&arch_id)
                 .expect("Table with archetype id could not be found.")
@@ -134,7 +134,7 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some(cur_query) = &mut self.cur_arch_query {
-                match cur_query.next() {
+                match <_ as Iterator>::next(cur_query) {
                     Some(elem) => return Some(elem),
                     None => {
                         self.cur_arch_index += 1;
@@ -159,13 +159,15 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     unsafe fn retrieve<'r>(
         system_param_index: &mut usize,
         system_param_ids: &[SystemParamId],
-        world_data: &'r UnsafeCell<WorldData>,
+        world_data: *mut WorldData,
     ) -> Self::Item<'r> {
-        let world_data_mut = unsafe { world_data.get().as_mut().unwrap() };
+        let world_data_mut = unsafe { world_data.as_mut().unwrap() };
         let sys_prm_id = &system_param_ids[*system_param_index];
         if let SystemParamId::Query(qid) = sys_prm_id {
             let qs = &world_data_mut.query_data[qid.id_usize()];
             *system_param_index += 1;
+            //TODO: wrap WorldData reference in some temporary unsafe access type that is Sync and
+            //Send
             return Query::new(world_data, qs);
         }
         panic!(
@@ -177,32 +179,26 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &mut UnsafeCell<WorldData>,
+        world_data: &mut WorldData,
     ) {
-        let mut comp_ids = world_data
-            .get_mut()
-            .get_cache_mut()
-            .compid_vec_cache
-            .take_cached();
+        let mut comp_ids = world_data.get_cache_mut().compid_vec_cache.take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
         let mut ref_kinds: Vec<RefKind> = Vec::with_capacity(comp_ids.get_vec().len());
         P::ref_kinds(&mut ref_kinds);
 
         let mut filter = Vec::new();
-        F::get_and_filters(&mut world_data.get_mut(), &mut filter);
+        F::get_and_filters(world_data, &mut filter);
 
         let query_state_key = QueryStateKey { comp_ids, filter };
 
-        let arch_ids = world_data
-            .get_mut()
-            .find_fitting_archetypes(&query_state_key.comp_ids);
+        let arch_ids = world_data.find_fitting_archetypes(&query_state_key.comp_ids);
 
         // remove archetypes that do not match the filter
         let arch_ids: Vec<ArchetypeId> = arch_ids
             .iter()
             .filter(|aid| {
-                let arch = &world_data.get_mut().get_archetypes()[aid.0 as usize];
+                let arch = &world_data.get_archetypes()[aid.0 as usize];
                 let comp_ids_set: HashSet<ComponentId> = HashSet::from_iter(
                     arch.soa_comp_ids
                         .iter()
@@ -218,13 +214,13 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .cloned()
             .collect();
 
-        let next_query_id = world_data.get_mut().query_data.len().into();
+        let next_query_id = world_data.query_data.len().into();
         system_param_ids.push(SystemParamId::Query(next_query_id));
 
         // adding system dependencies to graph
         // systems <- add queries <- add components and filtered archetypes
 
-        let depend_graph = &mut world_data.get_mut().get_depend_graph_mut();
+        let depend_graph = &mut world_data.get_depend_graph_mut();
         depend_graph.insert_system_components(
             system_id,
             &query_state_key.comp_ids.get_vec(),
@@ -241,7 +237,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             filter: query_state_key.filter.clone(),
         };
 
-        world_data.get_mut().query_data.push(query_data);
+        world_data.query_data.push(query_data);
     }
 }
 
@@ -249,7 +245,7 @@ pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     type QueryItem<'new>: QueryParam;
 
     fn type_ids_rec(vec: &mut Vec<TypeId>);
-    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>);
+    fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>);
     fn ref_kinds(vec: &mut Vec<RefKind>);
 }
 
@@ -259,11 +255,8 @@ impl<T: Component> QueryParam for &T {
     fn type_ids_rec(vec: &mut Vec<TypeId>) {
         vec.push(TypeId::of::<T>());
     }
-    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
-        let comp_id = unsafe {
-            (&mut *world_data.get())
-                .create_or_get_component::<T>()
-        };
+    fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
+        let comp_id = world_data.create_or_get_component::<T>();
         vec.push(comp_id);
     }
     fn ref_kinds(vec: &mut Vec<RefKind>) {
@@ -276,12 +269,8 @@ impl<T: Component> QueryParam for &mut T {
     fn type_ids_rec(vec: &mut Vec<TypeId>) {
         vec.push(TypeId::of::<T>());
     }
-    fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
-        let comp_id = unsafe {
-            (&mut *world_data.get())
-                .create_or_get_component::<T>()
-        };
-
+    fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
+        let comp_id = world_data.create_or_get_component::<T>();
         vec.push(comp_id);
     }
     fn ref_kinds(vec: &mut Vec<RefKind>) {
@@ -298,7 +287,7 @@ impl QueryParam for EntityKey {
     fn type_ids_rec(_vec: &mut Vec<TypeId>) {
         //TODO: do nothing here?
     }
-    fn comp_ids_rec(_world_data: &UnsafeCell<WorldData>, _vec: &mut Vec<ComponentId>) {
+    fn comp_ids_rec(_world_data: &mut WorldData, _vec: &mut Vec<ComponentId>) {
         //TODO: do nothing here?
     }
     fn ref_kinds(_vec: &mut Vec<RefKind>) {
@@ -315,7 +304,7 @@ macro_rules! impl_query_param_tuples {
                fn type_ids_rec(vec: &mut Vec<TypeId>){
                    $($t::type_ids_rec(vec);)*
                }
-               fn comp_ids_rec(world_data: &UnsafeCell<WorldData>, vec: &mut Vec<ComponentId>) {
+               fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
                    $($t::comp_ids_rec(world_data, vec);)*
                }
                fn ref_kinds(vec: &mut Vec<RefKind>){

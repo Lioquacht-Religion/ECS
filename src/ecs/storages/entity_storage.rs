@@ -78,11 +78,17 @@ impl EntityStorage {
         None
     }
 
-    pub(crate) fn get_single_component<T: Component>(&mut self, entity_key: EntityKey) -> Option<&T> {
+    pub(crate) fn get_single_component<T: Component>(
+        &mut self,
+        entity_key: EntityKey,
+    ) -> Option<&T> {
         self.get_entity_components::<&T>(entity_key)
     }
 
-    pub(crate) fn get_single_component_mut<T: Component>(&mut self, entity_key: EntityKey) -> Option<&mut T> {
+    pub(crate) fn get_single_component_mut<T: Component>(
+        &mut self,
+        entity_key: EntityKey,
+    ) -> Option<&mut T> {
         self.get_entity_components::<&mut T>(entity_key)
     }
 

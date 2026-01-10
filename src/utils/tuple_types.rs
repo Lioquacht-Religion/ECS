@@ -9,7 +9,10 @@ use std::{alloc::Layout, any::TypeId, ptr::NonNull};
 use crate::{
     all_tuples,
     ecs::{
-        component::{Component, ComponentId, StorageTypes}, entity::EntityKey, storages::entity_storage::EntityStorage, world::WorldData
+        component::{Component, ComponentId, StorageTypes},
+        entity::EntityKey,
+        storages::entity_storage::EntityStorage,
+        world::WorldData,
     },
 };
 
@@ -124,16 +127,16 @@ impl<T: Component> TupleTypesExt for T {
     fn on_add() -> Option<for<'a> fn(world_data: &mut WorldData, entity: EntityKey)> {
         T::on_add()
     }
-    fn exec_on_add_rec(world_data: &mut WorldData, entity: EntityKey){
-        if let Some(on_add) = Self::on_add(){
+    fn exec_on_add_rec(world_data: &mut WorldData, entity: EntityKey) {
+        if let Some(on_add) = Self::on_add() {
             on_add(world_data, entity);
         }
     }
     fn on_remove() -> Option<for<'a> fn(world_data: &mut WorldData, entity: EntityKey)> {
         T::on_remove()
     }
-    fn exec_on_remove_rec(world_data: &mut WorldData, entity: EntityKey){
-        if let Some(on_remove) = Self::on_add(){
+    fn exec_on_remove_rec(world_data: &mut WorldData, entity: EntityKey) {
+        if let Some(on_remove) = Self::on_add() {
             on_remove(world_data, entity);
         }
     }
@@ -156,10 +159,8 @@ impl TupleTypesExt for () {
         _aos_vec: &mut Vec<NonNull<u8>>,
     ) {
     }
-    fn exec_on_add_rec(_world_data: &mut WorldData, _entity: EntityKey){
-    }
-    fn exec_on_remove_rec(_world_data: &mut WorldData, _entity: EntityKey){
-    }
+    fn exec_on_add_rec(_world_data: &mut WorldData, _entity: EntityKey) {}
+    fn exec_on_remove_rec(_world_data: &mut WorldData, _entity: EntityKey) {}
 }
 
 macro_rules! impl_tuple_ext {

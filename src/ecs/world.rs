@@ -4,9 +4,20 @@ use std::{any::TypeId, cell::UnsafeCell, collections::HashMap};
 
 use crate::{
     ecs::{
-        component::{Archetype, ArchetypeId, ComponentId}, ecs_dependency_graph::EcsDependencyGraph, entity::{Entities, EntityKey}, prelude::Component, query::QueryParam, resource::ResourceId, storages::{cache::EntityStorageCache, table_storage::TableStorage}, system::{IntoSystem, System, SystemId}
+        component::{Archetype, ArchetypeId, ComponentId},
+        ecs_dependency_graph::EcsDependencyGraph,
+        entity::{Entities, EntityKey},
+        prelude::Component,
+        query::QueryParam,
+        resource::ResourceId,
+        scheduler::ParallelScheduler,
+        storages::{cache::EntityStorageCache, table_storage::TableStorage},
+        system::{IntoSystem, System, SystemId},
     },
-    utils::{any_map::AnyMap, sorted_vec::SortedVec, tuple_iters::TupleIterator, tuple_types::TupleTypesExt},
+    utils::{
+        any_map::AnyMap, sorted_vec::SortedVec, tuple_iters::TupleIterator,
+        tuple_types::TupleTypesExt,
+    },
 };
 
 use super::{
@@ -23,7 +34,8 @@ use super::{
 pub struct World {
     pub data: UnsafeCell<WorldData>,
     pub systems: Systems,
-    pub(crate) scheduler: SingleThreadScheduler,
+    pub(crate) scheduler: ParallelScheduler, 
+                          //SingleThreadScheduler,
 }
 
 pub struct WorldData {
@@ -33,17 +45,34 @@ pub struct WorldData {
     pub(crate) commands_queues: CommandQueuesStorage,
 }
 
+unsafe impl Send for WorldData {}
+unsafe impl Sync for WorldData {}
+
+pub(crate) struct SharedWorldData<'w>(pub(crate) &'w UnsafeCell<WorldData>);
+
+unsafe impl<'w> Send for SharedWorldData<'w> {}
+unsafe impl<'w> Sync for SharedWorldData<'w> {}
+
 impl World {
     pub fn new() -> Self {
         World {
             data: WorldData::new().into(),
             systems: Systems::new(),
-            scheduler: SingleThreadScheduler::new(),
+            scheduler: ParallelScheduler::new(4), 
+                       //SingleThreadScheduler::new(),
         }
     }
 
     pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId {
         self.data.get_mut().add_resource(value)
+    }
+
+    pub fn get_resource<T: 'static>(&mut self) -> Option<&T> {
+        self.data.get_mut().get_resource()
+    }
+
+    pub fn get_resource_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.data.get_mut().get_resource_mut()
     }
 
     pub fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
@@ -67,7 +96,8 @@ impl World {
     pub fn get_single_component<T: Component>(&mut self, entity_key: EntityKey) -> Option<&T> {
         self.data
             .get_mut()
-            .entity_storage.get_single_component(entity_key)
+            .entity_storage
+            .get_single_component(entity_key)
     }
 
     pub fn get_single_component_mut<T: Component>(
@@ -76,7 +106,8 @@ impl World {
     ) -> Option<&mut T> {
         self.data
             .get_mut()
-            .entity_storage.get_single_component_mut(entity_key)
+            .entity_storage
+            .get_single_component_mut(entity_key)
     }
 
     pub fn add_system<Input, S: System + 'static>(
@@ -101,8 +132,8 @@ impl World {
     }
 
     pub fn init_systems(&mut self) {
-        self.systems.init_systems(&mut self.data);
-        (0..self.systems.system_vec.len()).for_each(|n| self.scheduler.schedule.push(n.into()));
+        self.systems.init_systems(&mut self.data.get_mut());
+        self.scheduler.init_schedule(&mut self.systems);
     }
 
     pub fn run(&mut self) {
@@ -180,12 +211,19 @@ impl WorldData {
         resource_id
     }
 
+    pub fn get_resource<T: 'static>(&self) -> Option<&T> {
+        self.resources.get()
+    }
+
+    pub fn get_resource_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.resources.get_mut()
+    }
+
     pub fn get_entity_components<P: QueryParam>(
         &mut self,
         entity_key: EntityKey,
     ) -> Option<<P::Construct<'_> as TupleIterator>::Item> {
-        self.entity_storage
-            .get_entity_components::<P>(entity_key)
+        self.entity_storage.get_entity_components::<P>(entity_key)
     }
 
     pub fn get_single_component<T: Component>(&mut self, entity_key: EntityKey) -> Option<&T> {
@@ -200,51 +238,61 @@ impl WorldData {
     }
 
     #[allow(unused)]
-    pub(crate) fn get_depend_graph(&self) -> &EcsDependencyGraph{
+    pub(crate) fn get_depend_graph(&self) -> &EcsDependencyGraph {
         &self.entity_storage.depend_graph
     }
 
-    pub(crate) fn get_depend_graph_mut(&mut self) -> &mut EcsDependencyGraph{
+    pub(crate) fn get_depend_graph_mut(&mut self) -> &mut EcsDependencyGraph {
         &mut self.entity_storage.depend_graph
     }
 
     #[allow(unused)]
-    pub(crate) fn get_tables(&self) -> &HashMap<ArchetypeId, TableStorage>{
+    pub(crate) fn get_tables(&self) -> &HashMap<ArchetypeId, TableStorage> {
         &self.entity_storage.tables
     }
 
-    pub(crate) fn get_tables_mut(&mut self) -> &mut HashMap<ArchetypeId, TableStorage>{
+    pub(crate) fn get_tables_mut(&mut self) -> &mut HashMap<ArchetypeId, TableStorage> {
         &mut self.entity_storage.tables
     }
 
-    pub(crate) fn get_entities(&self) -> &Entities{
+    pub(crate) fn get_entities(&self) -> &Entities {
         &self.entity_storage.entities
     }
 
     #[allow(unused)]
-    pub(crate) fn get_entities_mut(&mut self) -> &mut Entities{
+    pub(crate) fn get_entities_mut(&mut self) -> &mut Entities {
         &mut self.entity_storage.entities
     }
 
     #[allow(unused)]
-    pub(crate) fn get_cache(&self) -> &EntityStorageCache{
+    pub(crate) fn get_cache(&self) -> &EntityStorageCache {
         &self.entity_storage.cache
     }
 
-    pub(crate) fn get_cache_mut(&mut self) -> &mut EntityStorageCache{
+    pub(crate) fn get_cache_mut(&mut self) -> &mut EntityStorageCache {
         &mut self.entity_storage.cache
     }
 
-    pub(crate) fn get_archetypes(&self) -> &Vec<Archetype>{
+    pub(crate) fn get_archetypes(&self) -> &Vec<Archetype> {
         &self.entity_storage.archetypes
     }
 
     pub(crate) fn execute_commands(&mut self) {
-        while let Some(mut cq) = self.commands_queues.command_queues_inuse.pop() {
+        while let Some(mut cq) = self
+            .commands_queues
+            .command_queues_inuse
+            .get_mut()
+            .unwrap()
+            .pop()
+        {
             while let Some(command) = cq.get_mut().pop() {
                 command.exec(self);
             }
-            self.commands_queues.command_queues_unused.push(cq);
+            self.commands_queues
+                .command_queues_unused
+                .get_mut()
+                .unwrap()
+                .push(cq);
         }
     }
 }

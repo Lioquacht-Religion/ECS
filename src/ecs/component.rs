@@ -8,7 +8,7 @@ use std::{
 use crate::{
     ecs::{entity::EntityKey, world::WorldData},
     utils::{
-        ecs_id::{impl_ecs_id, EcsId},
+        ecs_id::{EcsId, impl_ecs_id},
         sorted_vec::SortedVec,
     },
 };
@@ -109,7 +109,12 @@ pub enum StorageTypes {
 #[cfg(test)]
 mod test {
     use crate::{
-        ecs::{entity::EntityKey, prelude::{StorageTypes, With}, query::Query, world::{World, WorldData}},
+        ecs::{
+            entity::EntityKey,
+            prelude::{StorageTypes, With},
+            query::Query,
+            world::{World, WorldData},
+        },
         utils::tuple_types::TupleTypesExt,
     };
 
@@ -189,21 +194,17 @@ mod test {
         }
     }
 
-    fn test_player_count_wout_filter(
-        mut player_query: Query<&Player>, 
-    ) {
+    fn test_player_count_wout_filter(mut player_query: Query<&Player>) {
         assert_eq!(2, player_query.iter().count());
     }
 
-    fn test_player_count(
-        mut player_query: Query<(&mut Pos3, &Velocity), With<Player>>, 
-    ) {
+    fn test_player_count(mut player_query: Query<(&mut Pos3, &Velocity), With<Player>>) {
         assert_eq!(2, player_query.iter().count());
     }
 
     fn test_particle_count(
-        mut player_query: Query<(&mut Pos3, &Velocity), With<Player>>, 
-        mut particle_query: Query<(&mut Pos3, &Velocity), With<Particle>>
+        mut player_query: Query<(&mut Pos3, &Velocity), With<Player>>,
+        mut particle_query: Query<(&mut Pos3, &Velocity), With<Particle>>,
     ) {
         assert_eq!(2, player_query.iter().count());
         for (p, v) in particle_query.iter() {

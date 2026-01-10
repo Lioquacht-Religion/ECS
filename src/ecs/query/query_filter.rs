@@ -39,16 +39,16 @@ fn handle_or_elems(comp_ids: &HashSet<ComponentId>, or_elems: &[Vec<FilterElem>]
     false
 }
 
-pub trait QueryFilter {
+pub trait QueryFilter: Send + Sync {
     fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>);
     fn get_or_filters(es: &mut WorldData, filter_elems: &mut Vec<Vec<FilterElem>>);
 }
 
 pub struct With<T: Component> {
-    _marker: PhantomData<T>,
+    _marker: PhantomData<fn() -> T>,
 }
 pub struct Without<T: Component> {
-    _marker: PhantomData<T>,
+    _marker: PhantomData<fn() -> T>,
 }
 pub struct Or<F: QueryFilter> {
     _marker: PhantomData<F>,

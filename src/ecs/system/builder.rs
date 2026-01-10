@@ -243,14 +243,14 @@ mod test {
     fn test_system_scheduler_builder_infinite_loop_check() {
         let mut world = World::new();
 
-        let b = (
+        world.add_systems((
             test_system7, //causes cyclic dependency
-            test_system1, 
-            test_system2, 
-            test_system3
-        ).chain();
-
-        world.add_systems(b);
+            test_system1,
+            test_system2,
+            test_system3,
+        )
+            .chain()
+        );
 
         world.add_systems(
             test_system5

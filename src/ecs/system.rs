@@ -2,7 +2,6 @@
 
 use std::{
     any::TypeId,
-    cell::UnsafeCell,
     collections::{HashMap, HashSet},
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -15,6 +14,7 @@ use crate::{
     ecs::{
         ecs_dependency_graph::{EcsEdge, QueryId},
         resource::ResourceId,
+        world::SharedWorldData,
     },
     utils::ecs_id::{EcsId, impl_ecs_id},
 };
@@ -23,15 +23,20 @@ use super::world::WorldData;
 
 pub mod builder;
 
-type StoredSystem = Box<dyn System>;
+type StoredSystem = Box<dyn System + Sync + Send>;
 
 /// Storage for systems.
 pub struct Systems {
     pub(crate) system_vec: Vec<StoredSystem>,
-    func_system_map: HashMap<TypeId, SystemId>,
+    //TODO: constraints and sysparmdata maps could maybe be a vec
+    // with systemId as index
     pub(crate) constraints: HashMap<SystemId, Constraint>,
-    system_param_data: HashMap<SystemId, Vec<SystemParamId>>,
+    pub(crate) system_param_data: HashMap<SystemId, Vec<SystemParamId>>,
+    func_system_map: HashMap<TypeId, SystemId>,
 }
+
+unsafe impl Send for Systems {}
+unsafe impl Sync for Systems {}
 
 #[derive(Debug)]
 pub enum RefType {
@@ -69,10 +74,20 @@ impl Systems {
     pub fn new() -> Self {
         Systems {
             system_vec: Vec::new(),
-            func_system_map: HashMap::new(),
             constraints: HashMap::new(),
             system_param_data: HashMap::new(),
+            func_system_map: HashMap::new(),
         }
+    }
+
+    pub(crate) fn get_constraint(&self, system_id: &SystemId) -> &Constraint {
+        //&self.constraints[system_id.id_usize()]
+        &self.constraints.get(system_id).unwrap()
+    }
+
+    pub(crate) fn get_sys_param_data(&self, system_id: &SystemId) -> &[SystemParamId] {
+        //&self.system_param_data[system_id.id_usize()]
+        &self.system_param_data.get(system_id).unwrap()
     }
 
     pub fn add_system<Input, S: System + 'static, IS: IntoSystem<Input, System = S> + 'static>(
@@ -203,8 +218,11 @@ impl Systems {
             insert_constraint_constraints(constraint, system_id);
         }
     }
+    pub fn get_system(&self, system_id: SystemId) -> &dyn System {
+        &*self.system_vec[system_id.id_usize()]
+    }
 
-    pub fn get_system(&mut self, system_id: SystemId) -> &mut dyn System {
+    pub fn get_system_mut(&mut self, system_id: SystemId) -> &mut dyn System {
         &mut *self.system_vec[system_id.id_usize()]
     }
 
@@ -214,7 +232,7 @@ impl Systems {
             .expect("Systems does not contain system params for system id.")
     }
 
-    pub fn init_systems(&mut self, world_data: &mut UnsafeCell<WorldData>) {
+    pub fn init_systems(&mut self, world_data: &mut WorldData) {
         for (system_id, system) in self.system_vec.iter_mut().enumerate() {
             let system_id: SystemId = system_id.into();
             let mut system_param_ids = Vec::new();
@@ -223,12 +241,23 @@ impl Systems {
         }
     }
 
-    pub fn run_system(&mut self, system_id: SystemId, world_data: &UnsafeCell<WorldData>) {
-        let _ = &mut self.system_vec[system_id.id_usize()]
-            .run(self.system_param_data.get(&system_id).unwrap(), world_data);
+    pub unsafe fn run_system2(&mut self, system_id: SystemId, world_data: SharedWorldData) {
+        unsafe {
+            let _ = &mut self.system_vec[system_id.0 as usize].run(
+                self.system_param_data.get(&system_id).unwrap(),
+                world_data.0.get(),
+            );
+        }
     }
 
-    pub fn run_systems(&mut self, world_data: &UnsafeCell<WorldData>) {
+    pub fn run_system(&mut self, system_id: SystemId, world_data: &mut WorldData) {
+        let _ = &mut self.system_vec[system_id.id_usize()].run(
+            self.system_param_data.get(&system_id).unwrap(),
+            world_data as *mut WorldData,
+        );
+    }
+
+    pub fn run_systems(&mut self, world_data: &mut WorldData) {
         for (i, sys) in self.system_vec.iter_mut().enumerate() {
             let system_id: SystemId = i.into();
             let system_params = self
@@ -244,34 +273,42 @@ impl Systems {
 pub struct SystemId(u32);
 impl_ecs_id!(SystemId);
 
-pub trait System {
+pub trait System: Send + Sync {
+    fn system_name(&self) -> &str{
+        std::any::type_name_of_val(self)
+    }
+
     fn init(
         &mut self,
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &mut UnsafeCell<WorldData>,
+        world_data: &mut WorldData,
     );
-    fn run(&mut self, system_param_ids: &[SystemParamId], world_data: &UnsafeCell<WorldData>);
+    //TODO: make unsafe
+    fn run(&mut self, system_param_ids: &[SystemParamId], world_data: *mut WorldData);
 }
 
-pub trait SystemParam {
+pub trait SystemParam: Send + Sync {
     type Item<'new>;
 
     unsafe fn retrieve<'r>(
         system_param_index: &mut usize,
         system_param_ids: &[SystemParamId],
-        world_data: &'r UnsafeCell<WorldData>,
+        world_data: *mut WorldData,
     ) -> Self::Item<'r>;
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &mut UnsafeCell<WorldData>,
+        world_data: &mut WorldData,
     );
 }
 
 pub struct Res<'a, T> {
     pub value: &'a T,
 }
+
+unsafe impl<'a, T> Send for Res<'a, T> {}
+unsafe impl<'a, T> Sync for Res<'a, T> {}
 
 impl<'a, T> Deref for Res<'a, T> {
     type Target = T;
@@ -283,6 +320,9 @@ impl<'a, T> Deref for Res<'a, T> {
 pub struct ResMut<'a, T> {
     pub value: &'a mut T,
 }
+
+unsafe impl<'a, T> Send for ResMut<'a, T> {}
+unsafe impl<'a, T> Sync for ResMut<'a, T> {}
 
 impl<'a, T> Deref for ResMut<'a, T> {
     type Target = T;
@@ -301,18 +341,23 @@ pub struct ResOwned<T> {
     pub value: T,
 }
 
+unsafe impl<'a, T> Send for ResOwned<T> {}
+unsafe impl<'a, T> Sync for ResOwned<T> {}
+
 impl<'res, T: 'static> SystemParam for Res<'res, T> {
     type Item<'new> = Res<'new, T>;
 
     unsafe fn retrieve<'r>(
         system_param_index: &mut usize,
         _system_param_ids: &[SystemParamId],
-        world_data: &'r UnsafeCell<WorldData>,
+        world_data: *mut WorldData,
     ) -> Self::Item<'r> {
         *system_param_index += 1;
         unsafe {
             Res {
-                value: world_data.get().as_ref().unwrap().resources.get()
+                value: (*world_data)
+                    .resources
+                    .get()
                     .expect("Requested resource does not exist!"),
             }
         }
@@ -321,13 +366,14 @@ impl<'res, T: 'static> SystemParam for Res<'res, T> {
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &mut UnsafeCell<WorldData>,
+        world_data: &mut WorldData,
     ) {
-        let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
-        world_data
-            .get_depend_graph_mut()
-            .insert_system_resource(system_id, resource_id, EcsEdge::Shared);
+        world_data.get_depend_graph_mut().insert_system_resource(
+            system_id,
+            resource_id,
+            EcsEdge::Shared,
+        );
         system_param_ids.push(SystemParamId::Resource(
             ResourceId::new(TypeId::of::<T>()),
             RefType::Shared,
@@ -341,12 +387,14 @@ impl<'res, T: 'static> SystemParam for ResMut<'res, T> {
     unsafe fn retrieve<'r>(
         system_param_index: &mut usize,
         _system_param_ids: &[SystemParamId],
-        world_data: &'r UnsafeCell<WorldData>,
+        world_data: *mut WorldData,
     ) -> Self::Item<'r> {
         *system_param_index += 1;
         unsafe {
             ResMut {
-                value: world_data.get().as_mut().unwrap().resources.get_mut()
+                value: (*world_data)
+                    .resources
+                    .get_mut()
                     .expect("Requested resource does not exist!"),
             }
         }
@@ -355,13 +403,14 @@ impl<'res, T: 'static> SystemParam for ResMut<'res, T> {
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &mut UnsafeCell<WorldData>,
+        world_data: &mut WorldData,
     ) {
-        let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
-        world_data
-            .get_depend_graph_mut()
-            .insert_system_resource(system_id, resource_id, EcsEdge::Excl);
+        world_data.get_depend_graph_mut().insert_system_resource(
+            system_id,
+            resource_id,
+            EcsEdge::Excl,
+        );
         system_param_ids.push(SystemParamId::Resource(
             ResourceId::new(TypeId::of::<T>()),
             RefType::Exclusive,
@@ -375,23 +424,27 @@ impl<T: 'static> SystemParam for ResOwned<T> {
     unsafe fn retrieve<'r>(
         system_param_index: &mut usize,
         _system_param_ids: &[SystemParamId],
-        world_data: &'r UnsafeCell<WorldData>,
+        world_data: *mut WorldData,
     ) -> Self::Item<'r> {
         *system_param_index += 1;
-        unsafe { (*world_data.get()).resources.remove()
-            .expect("Requested resource does not exist!")
+        unsafe {
+            (*world_data)
+                .resources
+                .remove()
+                .expect("Requested resource does not exist!")
         }
     }
     fn create_system_param_data(
         system_id: SystemId,
         system_param_ids: &mut Vec<SystemParamId>,
-        world_data: &mut UnsafeCell<WorldData>,
+        world_data: &mut WorldData,
     ) {
-        let world_data = unsafe { &mut *world_data.get() };
         let resource_id = ResourceId::new(TypeId::of::<T>());
-        world_data
-            .get_depend_graph_mut()
-            .insert_system_resource(system_id, resource_id, EcsEdge::Owned);
+        world_data.get_depend_graph_mut().insert_system_resource(
+            system_id,
+            resource_id,
+            EcsEdge::Owned,
+        );
         system_param_ids.push(SystemParamId::Resource(
             ResourceId::new(TypeId::of::<T>()),
             RefType::Owned,
@@ -407,7 +460,7 @@ macro_rules! impl_systemparam_for_tuples {
          unsafe fn retrieve<'r>(
              system_param_index: &mut usize,
              system_param_ids: &[SystemParamId],
-             world_data: &'r UnsafeCell<WorldData>
+             world_data: *mut WorldData
          ) -> Self::Item<'r> {
              unsafe{
                  (
@@ -421,7 +474,7 @@ macro_rules! impl_systemparam_for_tuples {
          fn create_system_param_data(
              system_id: SystemId,
              system_param_ids: &mut Vec<SystemParamId>,
-             world_data: &mut UnsafeCell<WorldData>
+             world_data: &mut WorldData
          ){
              $(
                 $t::create_system_param_data(system_id, system_param_ids, world_data);
@@ -442,33 +495,53 @@ pub struct FunctionSystem<Input, F> {
     pub marker: PhantomData<fn() -> Input>,
 }
 
+unsafe impl<F: FnMut()> Send for FunctionSystem<(), F> {}
+unsafe impl<F: FnMut()> Sync for FunctionSystem<(), F> {}
+
 impl<F: FnMut()> System for FunctionSystem<(), F> {
+    fn system_name(&self) -> &str {
+        std::any::type_name::<F>()
+    }
     fn init(
         &mut self,
         _system_id: SystemId,
         _system_param_ids: &mut Vec<SystemParamId>,
-        _world_data: &mut UnsafeCell<WorldData>,
+        _world_data: &mut WorldData,
     ) {
     }
-    fn run(&mut self, _system_params: &[SystemParamId], _world_data: &UnsafeCell<WorldData>) {
+    fn run(&mut self, _system_params: &[SystemParamId], _world_data: *mut WorldData) {
         (self.f)();
     }
 }
 
 macro_rules! impl_system_for_params {
     ( $($t:ident), * ) => {
+       unsafe impl<F, $($t : SystemParam,)*> Send for FunctionSystem<($($t,)*), F>
+       where
+         for<'a, 'b> &'a mut F : FnMut($($t,)*)
+         + FnMut($(<$t as SystemParam>::Item<'b>,)*), {}
+
+       unsafe impl<F, $($t : SystemParam,)*> Sync for FunctionSystem<($($t,)*), F>
+       where
+         for<'a, 'b> &'a mut F : FnMut($($t,)*)
+         + FnMut($(<$t as SystemParam>::Item<'b>,)*), {}
+
        impl<F, $($t : SystemParam,)*> System for FunctionSystem<($($t,)*), F>
        where
          for<'a, 'b> &'a mut F : FnMut($($t,)*)
          + FnMut($(<$t as SystemParam>::Item<'b>,)*),
        {
-           fn init(&mut self, system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, world_data: &mut UnsafeCell<WorldData>) {
+           fn system_name(&self) -> &str {
+               std::any::type_name::<F>()
+           }
+
+           fn init(&mut self, system_id: SystemId, system_param_ids: &mut Vec<SystemParamId>, world_data: &mut WorldData) {
               $(
                 $t::create_system_param_data(system_id, system_param_ids, world_data);
               )*
            }
            #[allow(non_snake_case)]
-           fn run(&mut self, system_params: &[SystemParamId], world_data: &UnsafeCell<WorldData>){
+           fn run(&mut self, system_params: &[SystemParamId], world_data: *mut WorldData){
                fn call_inner<$($t,)*>(
                    mut f: impl FnMut($($t,)*),
                    $( $t : $t,)*
