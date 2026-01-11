@@ -7,7 +7,7 @@ use crate::{
         system::{System, SystemId, SystemParamId, Systems},
         world::{SharedWorldData, WorldData},
     },
-    utils::{ecs_id::EcsId, threadpool::ThreadPool},
+    utils::threadpool::ThreadPool,
 };
 
 pub(crate) trait Scheduler {
@@ -74,7 +74,7 @@ impl Scheduler for SingleThreadScheduler {
 
 //TODO: add parallel execution and scheduling
 pub(crate) struct ParallelScheduler {
-    schedule: Vec<Vec<SystemId>>,
+    schedule: Vec<HashSet<SystemId>>,
     thread_pool: ThreadPool,
 }
 
@@ -86,81 +86,161 @@ impl ParallelScheduler {
         }
     }
 
-    fn print_system_id_paths(systems: &Systems, system_id_paths: &[Vec<SystemId>]){
+    fn print_schedule(systems: &Systems, schedule: &[HashSet<SystemId>]) {
+        println!("System schedule:");
+        for (i, batch) in schedule.iter().enumerate() {
+            let batch_str: String = batch
+                .iter()
+                .map(|s| systems.get_system(*s).system_name())
+                .collect::<Vec<&str>>()
+                .join("; ");
+            println!("batch: {i} = {batch_str}");
+        }
+    }
+
+    fn print_system_id_paths(systems: &Systems, system_id_paths: &[Vec<SystemId>]) {
         println!("Loops in system constraints were detected:");
-        for path in system_id_paths{
-            let path_str : String = path
-                .iter().map(
-                    |s| systems.get_system(*s).system_name())
+        for path in system_id_paths {
+            let path_str: String = path
+                .iter()
+                .map(|s| systems.get_system(*s).system_name())
                 .collect::<Vec<&str>>()
                 .join(" -> ");
             println!("{path_str}");
         }
     }
 
-    fn find_loops_for_all_system_constraints(&self, systems: &Systems) -> Result<(), Vec<Vec<SystemId>>>{
+    fn find_loops_for_all_system_constraints(
+        &self,
+        systems: &Systems,
+    ) -> Result<(), Vec<Vec<SystemId>>> {
         let mut result = Ok(());
-        for s in 0..systems.system_vec.len(){
+        for s in 0..systems.system_vec.len() {
             let mut sys_id_path = Vec::new();
-            if self.find_loops_in_system_constraints_rec(
-                systems, &mut sys_id_path, s.into()
-            ){
+            if self.find_loops_in_system_constraints_rec(systems, &mut sys_id_path, s.into()) {
                 match result {
-                    Ok(()) 
-                        => result = Err(vec![sys_id_path]),
-                    Err(ref mut sys_id_paths) 
-                        => sys_id_paths.push(sys_id_path),
+                    Ok(()) => result = Err(vec![sys_id_path]),
+                    Err(ref mut sys_id_paths) => sys_id_paths.push(sys_id_path),
                 }
             }
         }
         result
     }
     fn find_loops_in_system_constraints_rec(
-        &self, systems: &Systems, system_id_path: &mut Vec<SystemId>, cur_system_id: SystemId
-    ) -> bool{
+        &self,
+        systems: &Systems,
+        system_id_path: &mut Vec<SystemId>,
+        cur_system_id: SystemId,
+    ) -> bool {
         system_id_path.push(cur_system_id);
-        for next_system_id in systems.get_constraint(&cur_system_id).before.iter(){
-            if system_id_path.contains(next_system_id) {
-                system_id_path.push(*next_system_id);
-                return true;
+        if let Some(constraint) = systems.get_constraint(&cur_system_id) {
+            for next_system_id in constraint.before.iter() {
+                if system_id_path.contains(next_system_id) {
+                    system_id_path.push(*next_system_id);
+                    return true;
+                } else if self.find_loops_in_system_constraints_rec(
+                    systems,
+                    system_id_path,
+                    *next_system_id,
+                ) {
+                    return true;
+                }
+                system_id_path.pop();
             }
-            else if self.find_loops_in_system_constraints_rec(
-                systems, system_id_path, *next_system_id
-            ){
-                return true;
-            }
-            system_id_path.pop();
         }
         false
+    }
+
+    fn build_constraint_based_schedule(systems: &Systems) -> Vec<HashSet<SystemId>> {
+        let mut schd: Vec<HashSet<SystemId>> = Vec::new();
+
+        //find constraint roots, end, unconstraint systems
+        let mut roots: HashSet<SystemId> = HashSet::new();
+        let mut unconstrained: HashSet<SystemId> = HashSet::new();
+        //TODO: some unconstraint systems do not seem to have a constraints struct at all
+        // registered
+        // TODO: add unconstraint systems into schedule
+        for (s, c) in &systems.constraints {
+            if c.after.is_empty() && !c.before.is_empty() {
+                roots.insert(*s);
+            } else if c.after.is_empty() && c.before.is_empty() {
+                unconstrained.insert(*s);
+            }
+        }
+
+        schd.push(roots);
+        let mut next_batch: HashSet<SystemId> = HashSet::new();
+        for s in schd[0].iter() {
+            if let Some(constraint) = systems.get_constraint(s) {
+                next_batch.extend(constraint.before.iter());
+            }
+        }
+
+        schd.push(next_batch);
+
+        let mut batch_index = 1;
+        loop {
+            Self::print_schedule(systems, &schd);
+            let mut next_batch: HashSet<SystemId> = HashSet::new();
+            for s1 in schd[batch_index].iter() {
+                if let Some(s1_c) = systems.get_constraint(s1) {
+                    for s2 in schd[batch_index].iter() {
+                        if s1 != s2 {
+                            if s1_c.before.contains(s2) {
+                                next_batch.insert(*s2);
+                            }
+                        }
+                    }
+                }
+            }
+
+            for s in schd[batch_index].iter() {
+                if let Some(constraint) = systems.get_constraint(s) {
+                    next_batch.extend(constraint.before.iter());
+                }
+            }
+
+            // remove already existing system ids in the upper batches
+            for batch in schd.iter_mut() {
+                for s in next_batch.iter() {
+                    batch.remove(s);
+                }
+            }
+
+            if next_batch.is_empty() {
+                break;
+            }
+
+            schd.push(next_batch);
+
+            batch_index += 1;
+        }
+
+        // insert unconstrained systems into smallest batches possible
+        for s in unconstrained.iter() {
+            if let Some(smallest_batch) = schd.iter_mut().min_by(|x, y| x.len().cmp(&y.len())) {
+                smallest_batch.insert(*s);
+            }
+        }
+
+        schd
     }
 }
 
 impl Scheduler for ParallelScheduler {
     fn init_schedule(&mut self, systems: &Systems) {
-        //TODO:
+        //TODO: schedule systems in parallel according to their mutable and immutable Systemparams
 
-        if let Err(paths) = self.find_loops_for_all_system_constraints(systems){
+        if let Err(paths) = self.find_loops_for_all_system_constraints(systems) {
             Self::print_system_id_paths(systems, &paths);
-            panic!("Detected loops in system constraints.")
+            panic!("System scheduling loop detected!")
         }
 
-        let schd : Vec<HashSet<SystemId>> = Vec::new();
-
-        fn rec(systems: &Systems, system_id: SystemId){
-            let constraint = systems.get_constraint(&system_id);
-
-
-        }
-
-        for i in 0..systems.system_vec.len(){
-            let system_id : SystemId = i.into();
-            let constraint = systems.get_constraint(&system_id);
-
-
-        }
+        let schd: Vec<HashSet<SystemId>> = Self::build_constraint_based_schedule(systems);
+        Self::print_schedule(systems, &schd);
+        self.schedule = schd;
     }
     fn execute(&mut self, systems: &mut Systems, world_data: &mut UnsafeCell<WorldData>) {
-
         fn run_sys<'a>(
             system: &mut dyn System,
             sys_par_data: &Vec<SystemParamId>,
@@ -169,38 +249,37 @@ impl Scheduler for ParallelScheduler {
             system.run(sys_par_data, world_data.0.get());
         }
 
-        {
         let sys_par_data = &systems.system_param_data;
-        let world_data = SharedWorldData(&*world_data);
-        let world_data = &world_data;
 
-        //TODO: need way to receive signal, 
-        // when all jobs are finished, to reuse threads in pool
         //TODO: create thread pool that can act like scopes
-        std::thread::scope(|s| {
-            for (i, sys) in systems.system_vec.iter_mut().enumerate() {
-                let sys_id = SystemId::from(i);
-                s.spawn(move || {
-                    run_sys(
-                        sys.as_mut(), 
-                        &sys_par_data.get(&sys_id).unwrap(), 
-                        &world_data
-                    );
+        //TODO: need way to receive signal,
+        // when all jobs are finished, to reuse threads in pool
+        for (i, batch) in self.schedule.iter().enumerate() {
+            println!("exec batch {}:", i);
+            {
+                let world_data = SharedWorldData(&*world_data);
+                let world_data = &world_data;
+                std::thread::scope(|s| {
+                    for (i, sys) in systems
+                        .system_vec
+                        .iter_mut()
+                        .enumerate()
+                        .filter(|(i, _s)| batch.contains(&SystemId::from(i)))
+                    {
+                        println!("exec system: name {}; id {}:", sys.system_name(), i);
+                        let sys_id = SystemId::from(i);
+                        s.spawn(move || {
+                            run_sys(
+                                sys.as_mut(),
+                                &sys_par_data.get(&sys_id).unwrap(),
+                                &world_data,
+                            );
+                        });
+                    }
                 });
             }
-        });
+            // execute commands after all systems of one batch have run
+            world_data.get_mut().execute_commands();
         }
-        // execute commands after all systems have run
-        world_data.get_mut().execute_commands();
-
-        //TODO:
-        /*
-        self.thread_pool.execute(|| {
-            unsafe{
-                //(&mut *systems).run_system2(self.schedule[0][0], world_data);
-                system.run(sys_par_data, world_data.0.get());
-            }
-        });
-        */
     }
 }

@@ -228,9 +228,9 @@ mod test {
             Pos3::new(0., 0., 0.),
             Velocity::new(0.02, 0., 0.),
         ));
-        world.add_system(test_player_count);
-        world.add_system(test_player_count_wout_filter);
-        world.add_system(test_particle_count);
+        world.add_systems(test_player_count);
+        world.add_systems(test_player_count_wout_filter);
+        world.add_systems(test_particle_count);
         world.init_and_run();
     }
 

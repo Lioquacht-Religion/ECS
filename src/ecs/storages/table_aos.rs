@@ -352,9 +352,8 @@ impl TupleConstructorSource for TableAoS {
 #[cfg(test)]
 mod test {
 
-    use crate::ecs::component::{ArchetypeId, StorageTypes};
+    use crate::ecs::component::StorageTypes;
     use crate::ecs::query::Query;
-    use crate::ecs::storages::entity_storage::EntityStorage;
     use crate::ecs::world::WorldData;
     use crate::ecs::{component::Component, system::Res, world::World};
 
@@ -459,7 +458,7 @@ mod test {
         let mut world = World::new();
         let num1: i32 = 2324;
         let num2: usize = 2324;
-        world.add_system(test_system1);
+        world.add_systems(test_system1);
         world.add_resource(num1);
         world.add_resource(num2);
 

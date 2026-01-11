@@ -68,7 +68,6 @@ impl Component for Comp2AoS {
     const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
-
 #[inline(never)]
 fn test_system1(
     mut commands: Commands,
@@ -96,20 +95,21 @@ fn test_system1(
         pos4.1.0 = 23234;
         pos4.1.0 -= 2344;
         //println!("pos4.1 box pointer: {}", pos4.1 .0);
-        //commands.despawn(ek);
+
+        let _key = commands.spawn((Comp1AoS(999999, 29029), Comp2(999999, 29029)));
+        let _key = commands.spawn((Comp1(999999, 29029), Comp2AoS(999999, 29029)));
+        let _key = commands.spawn(Comp1(999999, 29029));
+
+        commands.despawn(ek);
     }
 }
 
 #[inline(never)]
 fn test_system2(
-    mut commands: Commands,
     mut query: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-    mut query_aos: Query<
-        (EntityKey, &mut Comp1AoS, &mut Comp2AoS),
-        Or<(With<Pos4AoS>, With<Comp1AoS>)>,
-    >,
+    mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
 ) {
     let start1 = std::time::Instant::now();
     for (comp1, comp2) in query.iter() {
@@ -127,23 +127,16 @@ fn test_system2(
     }
 
     let start2 = std::time::Instant::now();
-    for (entity, comp1, comp2) in query_aos.iter() {
+    for (comp1, comp2) in query_aos.iter() {
         comp1.0 /= 21;
         comp1.1 /= 437;
         comp2.0 /= 21;
         comp2.1 /= 437;
 
-        /*
-        let _key = commands.spawn((Comp1AoS(999999, 29029), Comp2(999999, 29029)));
-        let _key = commands.spawn((Comp1(999999, 29029), Comp2AoS(999999, 29029)));
-        let _key = commands.spawn(Comp1(999999, 29029));
         comp1.0 /= 392049;
         comp1.1 /= 392049;
         comp2.0 /= 392049;
         comp2.1 /= 392049;
-
-        commands.despawn(entity);
-        */
 
         /*
         println!(
@@ -254,26 +247,47 @@ fn init_es_insert(es: &mut World) {
     es.add_entity((Pos(12), Pos3(12, 34, 56), Pos4(12, Box::new(Pos3(1, 1, 1)))));
 }
 
-fn test_system14(){
-}
-fn test_system15(){
-}
+fn test_system14() {}
+fn test_system15() {}
+fn test_system16() {}
+fn test_system17() {}
+fn test_system18() {}
+fn test_system19() {}
+
+fn test_system20() {}
+
+fn test_system21() {}
+fn test_system22() {}
+fn test_system23() {}
+fn test_system24() {}
 
 #[inline(never)]
 fn test_table_query_iter() {
     let mut world = World::new();
     let num1: i32 = 2324;
     let num2: usize = 2324;
-    world.add_system(test_system1);
-    world.add_system(test_system2);
 
-    world.add_systems((test_system1, test_system2));
-    world.add_systems(test_system1);
-    world.add_systems(test_system2);
+    world.add_systems(test_system20);
+    world.add_systems((test_system1, test_system2).chain());
 
     world.add_systems(test_system15.after(test_system14));
-    world.add_systems(test_system15.after(test_system14));
-    world.add_systems(test_system3.chain().after(test_system2));
+    world.add_systems(test_system3.after(test_system2));
+
+    world.add_systems(test_system15.before(test_system18));
+
+    world.add_systems(
+        (
+            test_system14,
+            test_system15,
+            test_system16,
+            test_system17,
+            test_system18,
+            test_system19,
+        )
+            .chain(),
+    );
+
+    world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
 
     world.add_resource(num1);
     world.add_resource(num2);
@@ -313,7 +327,7 @@ fn normal_loop_test() {
 }
 
 #[inline(never)]
-fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4, Comp2, Pos2)>){
+fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4, Comp2, Pos2)>) {
     let start3 = std::time::Instant::now();
     for c in ents.iter_mut() {
         c.0.0 /= 392049;
@@ -333,4 +347,3 @@ fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4
         start3.elapsed().as_nanos()
     );
 }
-

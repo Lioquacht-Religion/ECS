@@ -182,12 +182,11 @@ impl TableStorage {
         &mut self,
         entity: Entity,
     ) -> Option<<P::Construct<'_> as TupleIterator>::Item> {
-        unsafe { 
-            <_ as Iterator>::next(
-            &mut new_table_storage_iter_with_index::<P>(
-                self, entity.row_id as usize
-                )
-            ) 
+        unsafe {
+            <_ as Iterator>::next(&mut new_table_storage_iter_with_index::<P>(
+                self,
+                entity.row_id as usize,
+            ))
         }
     }
 

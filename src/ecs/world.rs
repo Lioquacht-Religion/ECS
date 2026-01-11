@@ -34,8 +34,8 @@ use super::{
 pub struct World {
     pub data: UnsafeCell<WorldData>,
     pub systems: Systems,
-    pub(crate) scheduler: ParallelScheduler, 
-                          //SingleThreadScheduler,
+    pub(crate) scheduler: ParallelScheduler,
+    //SingleThreadScheduler,
 }
 
 pub struct WorldData {
@@ -58,8 +58,8 @@ impl World {
         World {
             data: WorldData::new().into(),
             systems: Systems::new(),
-            scheduler: ParallelScheduler::new(4), 
-                       //SingleThreadScheduler::new(),
+            scheduler: ParallelScheduler::new(4),
+            //SingleThreadScheduler::new(),
         }
     }
 
@@ -108,13 +108,6 @@ impl World {
             .get_mut()
             .entity_storage
             .get_single_component_mut(entity_key)
-    }
-
-    pub fn add_system<Input, S: System + 'static>(
-        &mut self,
-        value: impl IntoSystem<Input, System = S> + 'static,
-    ) -> SystemId {
-        self.systems.add_system(value)
     }
 
     pub fn add_systems<

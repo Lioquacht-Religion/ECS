@@ -410,11 +410,11 @@ mod test {
 
         world.add_resource(num1);
         world.add_resource(num2);
-        world.add_system(test_system1);
-        world.add_system(test_system2);
-        world.add_system(test_system3);
-        world.add_system(test_system4);
-        world.add_system(test_system5);
+        world.add_systems(test_system1);
+        world.add_systems(test_system2);
+        world.add_systems(test_system3);
+        world.add_systems(test_system4);
+        world.add_systems(test_system5);
 
         world.add_entity((
             Comp2(56, 78),

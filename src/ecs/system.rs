@@ -80,9 +80,9 @@ impl Systems {
         }
     }
 
-    pub(crate) fn get_constraint(&self, system_id: &SystemId) -> &Constraint {
+    pub(crate) fn get_constraint(&self, system_id: &SystemId) -> Option<&Constraint> {
         //&self.constraints[system_id.id_usize()]
-        &self.constraints.get(system_id).unwrap()
+        self.constraints.get(system_id)
     }
 
     pub(crate) fn get_sys_param_data(&self, system_id: &SystemId) -> &[SystemParamId] {
@@ -274,7 +274,7 @@ pub struct SystemId(u32);
 impl_ecs_id!(SystemId);
 
 pub trait System: Send + Sync {
-    fn system_name(&self) -> &str{
+    fn system_name(&self) -> &str {
         std::any::type_name_of_val(self)
     }
 
