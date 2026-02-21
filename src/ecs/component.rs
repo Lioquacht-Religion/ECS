@@ -15,7 +15,7 @@ use crate::{
 
 pub type Map<K, V> = HashMap<K, V>;
 
-pub trait Component: 'static {
+pub trait Component: 'static + Sized {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
     fn on_add() -> Option<for<'a> fn(world_data: &mut WorldData, entity: EntityKey)> {
         None
@@ -70,18 +70,6 @@ impl_ecs_id!(ArchetypeId);
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct ArchetypeHash(u32);
-
-impl From<u32> for ArchetypeId {
-    fn from(value: u32) -> Self {
-        ArchetypeId(value)
-    }
-}
-
-impl From<ArchetypeId> for u32 {
-    fn from(value: ArchetypeId) -> Self {
-        value.0
-    }
-}
 
 impl ComponentInfo {
     unsafe fn drop_ptr<T>(ptr: *mut u8) {
@@ -146,6 +134,7 @@ mod test {
         }
     }
     struct Particle {
+        #[allow(unused)]
         parent: EntityKey,
     }
     impl Component for Particle {}

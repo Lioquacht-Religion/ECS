@@ -20,6 +20,17 @@ macro_rules! impl_ecs_id {
             }
         }
 
+        impl From<u32> for $id_type {
+            fn from(value: u32) -> Self {
+                $id_type(value)
+            }
+        }
+        impl From<&u32> for $id_type {
+            fn from(value: &u32) -> Self {
+                $id_type(value.clone())
+            }
+        }
+
         impl From<usize> for $id_type {
             fn from(value: usize) -> Self {
                 let id: u32 = value

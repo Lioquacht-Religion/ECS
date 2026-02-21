@@ -12,7 +12,7 @@ use crate::{
         resource::ResourceId,
         scheduler::ParallelScheduler,
         storages::{cache::EntityStorageCache, table_storage::TableStorage},
-        system::{IntoSystem, System, SystemId},
+        system::SystemId,
     },
     utils::{
         any_map::AnyMap, sorted_vec::SortedVec, tuple_iters::TupleIterator,
@@ -126,7 +126,10 @@ impl World {
 
     pub fn init_systems(&mut self) {
         self.systems.init_systems(&mut self.data.get_mut());
-        self.scheduler.init_schedule(&mut self.systems);
+        self.scheduler.init_schedule(
+            &mut self.data.get_mut().get_depend_graph_mut(),
+            &mut self.systems,
+        );
     }
 
     pub fn run(&mut self) {

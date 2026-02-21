@@ -1,5 +1,7 @@
 // main.rs file for testing ECS package directly
 
+use std::time::Duration;
+
 use ecs::ecs::prelude::*;
 
 #[allow(unused)]
@@ -106,48 +108,16 @@ fn test_system1(
 
 #[inline(never)]
 fn test_system2(
-    mut query: Query<
+    mut query_soa: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-    mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS), Or<(With<Pos4AoS>, With<Comp1AoS>)>>,
+    mut query_aos: Query<
+        (&mut Comp1AoS, &mut Comp2AoS), //, Or<(With<Pos4AoS>, With<Comp1AoS>)>
+    >,
 ) {
-    let start1 = std::time::Instant::now();
-    for (comp1, comp2) in query.iter() {
-        comp1.0 /= 21;
-        comp1.1 /= 437;
-        comp2.0 /= 21;
-        comp2.1 /= 437;
+    let el1 = test_soa(query_soa);
+    let el2 = test_aos(query_aos);
 
-        /*
-        println!(
-            "soa iter: {i}; enitity key: {:?}; comp1: {}",
-            entity, comp1.0
-        );
-        */
-    }
-
-    let start2 = std::time::Instant::now();
-    for (comp1, comp2) in query_aos.iter() {
-        comp1.0 /= 21;
-        comp1.1 /= 437;
-        comp2.0 /= 21;
-        comp2.1 /= 437;
-
-        comp1.0 /= 392049;
-        comp1.1 /= 392049;
-        comp2.0 /= 392049;
-        comp2.1 /= 392049;
-
-        /*
-        println!(
-            "aos iter: {i}; enitity key: {:?}; comp1: {}",
-            entity, comp1.0
-        );
-        */
-    }
-
-    let el1 = start1.elapsed();
-    let el2 = start2.elapsed();
     println!(
         "soa time: {} nanos; {} micros",
         el1.as_nanos(),
@@ -160,9 +130,72 @@ fn test_system2(
     );
 }
 
+#[inline(never)]
+fn test_soa(
+    mut query_soa: Query<
+        (&mut Comp1, &mut Comp2), //, With<Pos4>
+    >,
+) -> Duration {
+    let start1 = std::time::Instant::now();
+    for (comp1, comp2) in query_soa.iter() {
+        comp1.0 /= 21;
+        comp1.1 /= 437;
+        comp2.0 /= 21;
+        comp2.1 /= 437;
+
+        comp1.0 /= 392049;
+        comp1.1 /= 392049;
+        comp2.0 /= 392049;
+        comp2.1 /= 392049;
+
+        comp1.0 *= comp2.1;
+        comp1.1 *= comp2.0;
+        comp2.0 += comp1.1;
+        comp2.1 += comp1.0;
+
+        /*
+        println!(
+            "soa iter: {i}; enitity key: {:?}; comp1: {}",
+            entity, comp1.0
+        );
+        */
+    }
+    start1.elapsed()
+}
+
+#[inline(never)]
+fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) -> Duration {
+    let start2 = std::time::Instant::now();
+    for (comp1, comp2) in query_aos.iter() {
+        comp1.0 /= 21;
+        comp1.1 /= 437;
+        comp2.0 /= 21;
+        comp2.1 /= 437;
+
+        comp1.0 /= 392049;
+        comp1.1 /= 392049;
+        comp2.0 /= 392049;
+        comp2.1 /= 392049;
+
+        comp1.0 *= comp2.1;
+        comp1.1 *= comp2.0;
+        comp2.0 += comp1.1;
+        comp2.1 += comp1.0;
+
+        /*
+        println!(
+            "aos iter: {i}; enitity key: {:?}; comp1: {}",
+            entity, comp1.0
+        );
+        */
+    }
+
+    start2.elapsed()
+}
+
 fn test_system3() {}
 
-const CAPACITY: usize = 100_000;
+const CAPACITY: usize = 1_000_000;
 
 fn init_es_insert(es: &mut World) {
     let start1 = std::time::Instant::now();
@@ -330,20 +363,48 @@ fn normal_loop_test() {
 fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4, Comp2, Pos2)>) {
     let start3 = std::time::Instant::now();
     for c in ents.iter_mut() {
+        c.0.0 /= 21;
+        c.0.1 /= 437;
+        c.1.0 /= 21;
+        c.1.1 /= 437;
+
         c.0.0 /= 392049;
         c.0.1 /= 392049;
         c.1.0 /= 392049;
         c.1.1 /= 392049;
+
+        c.0.0 *= c.1.1;
+        c.0.1 *= c.1.0;
+        c.1.0 += c.0.1;
+        c.1.1 += c.0.0;
     }
     for c in ents2.iter_mut() {
+        c.1.0 /= 21;
+        c.1.1 /= 437;
+        c.3.0 /= 21;
+        c.3.1 /= 437;
+
         c.1.0 /= 392049;
         c.1.1 /= 392049;
-        c.4.0 /= 392049;
-        c.4.1 /= 392049;
+        c.3.0 /= 392049;
+        c.3.1 /= 392049;
+
+        c.1.0 *= c.3.1;
+        c.1.1 *= c.3.0;
+        c.3.0 += c.1.1;
+        c.3.1 += c.1.0;
     }
+    let e3 = start3.elapsed();
+    let sum: usize = ents
+        .iter()
+        .fold(0, |a, e| a + e.0.0 + e.0.1 + e.1.0 + e.1.1)
+        + ents2
+            .iter()
+            .fold(0, |a, e| a + e.1.0 + e.1.1 + e.3.0 + e.3.1);
+    println!("normal loop aos sum : {sum}");
     println!(
         "normal loop time aos: {} micros; {} nanos",
-        start3.elapsed().as_micros(),
-        start3.elapsed().as_nanos()
+        e3.as_micros(),
+        e3.as_nanos()
     );
 }

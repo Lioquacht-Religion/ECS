@@ -13,7 +13,7 @@ pub struct Node<V, E = ()> {
 
 pub struct Edge<E = ()> {
     pub value: E,
-    node_key: Key,
+    pub node_key: Key,
 }
 
 impl<V, E> Graph<V, E> {

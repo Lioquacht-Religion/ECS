@@ -266,7 +266,7 @@ pub enum TableStorageIterMutUnsafe<'c, T: Component> {
 
 impl<'c, T: Component> TupleIterator for TableStorageIterMutUnsafe<'c, T> {
     type Item = &'c mut T;
-    #[inline]
+    #[inline(always)]
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
             TableStorageIterMutUnsafe::TableSoaIterMut(iter) => unsafe { iter.next(index) },
