@@ -265,7 +265,7 @@ impl ParallelScheduler {
             for compatible_sys_id in systems_to_check.difference(&conflict_systems) {
                 let conflict_systems = conflicting_systems_map.get(&compatible_sys_id).unwrap();
                 if parallel_systems
-                    .difference(conflict_systems)
+                    .intersection(conflict_systems)
                     .next()
                     .is_none()
                 {
@@ -291,6 +291,10 @@ impl ParallelScheduler {
         let (res_excl, res_shared) = Self::create_excl_shared_sets(sys_res);
         let sys_comps: &HashMap<u32, EcsEdge> = &system_node.component_edges;
         let (comp_excl, comp_shared) = Self::create_excl_shared_sets(sys_comps);
+
+        dbg!(&system_node.resource_edges);
+        dbg!(&res_excl);
+        dbg!(&res_shared);
 
         // Finding conflicting systems:
         // - find excl and shared res/comps sets for every system
@@ -354,6 +358,7 @@ impl ParallelScheduler {
                 }
             }
         }
+        dbg!(&conflict_systems);
         return conflict_systems;
     }
 
@@ -426,5 +431,91 @@ impl Scheduler for ParallelScheduler {
             // execute commands after all systems of one batch have run
             world_data.get_mut().execute_commands();
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ecs::{
+        scheduler::ParallelScheduler,
+        system::{Res, ResMut},
+        world::World,
+    };
+
+    struct Resource1(usize);
+    struct Resource2(usize);
+    struct Resource3(usize);
+    fn test_system_shared_access1(res1: Res<Resource1>, res2: Res<Resource2>) {
+        println!("sys 1: res1: {}, res2: {}", res1.0, res2.0);
+    }
+    fn test_system_shared_access2(res1: Res<Resource1>, res2: Res<Resource2>) {
+        println!("sys 2: res1: {}, res2: {}", res1.0, res2.0);
+    }
+    fn test_system_excl_shared_access3(mut res1: ResMut<Resource1>, res2: Res<Resource2>) {
+        res1.0 += 1;
+        println!("sys 3: resmut1: {}, res2: {}", res1.0, res2.0);
+    }
+    fn test_system_shared_excl_access4(res1: Res<Resource1>, mut res2: ResMut<Resource2>) {
+        res2.0 += 1;
+        println!("sys 4: res1: {}, resmut2: {}", res1.0, res2.0);
+    }
+    fn test_system_excl_shared_access5(mut res3: ResMut<Resource3>, res2: Res<Resource2>) {
+        res3.0 += 1;
+        println!("sys 4: res3: {}, resmut2: {}", res3.0, res2.0);
+    }
+
+    #[test]
+    fn test_build_parallel_schedule() {
+        let mut world = World::new();
+
+        world.add_resource(Resource1(0));
+        world.add_resource(Resource2(0));
+        world.add_resource(Resource3(0));
+
+        let sysid1 = world.add_systems(test_system_shared_access1).pop().unwrap();
+        let sysid2 = world.add_systems(test_system_shared_access2).pop().unwrap();
+        let sysid3 = world
+            .add_systems(test_system_excl_shared_access3)
+            .pop()
+            .unwrap();
+        let sysid4 = world
+            .add_systems(test_system_shared_excl_access4)
+            .pop()
+            .unwrap();
+        let sysid5 = world
+            .add_systems(test_system_excl_shared_access5)
+            .pop()
+            .unwrap();
+
+        world.init_systems();
+        world.run();
+        ParallelScheduler::print_schedule(&world.systems, &world.scheduler.schedule);
+
+        let scheduler = &world.scheduler.schedule;
+
+        let set_with_sysid1 = scheduler
+            .iter()
+            .find_map(|set| set.iter().find(|set| set.contains(&sysid1)))
+            .unwrap();
+
+        let set_with_sysid2 = scheduler
+            .iter()
+            .find_map(|set| set.iter().find(|set| set.contains(&sysid2)))
+            .unwrap();
+
+        let set_with_sysid5 = scheduler
+            .iter()
+            .find_map(|set| set.iter().find(|set| set.contains(&sysid5)))
+            .unwrap();
+
+        assert!(!set_with_sysid1.contains(&sysid3));
+        assert!(!set_with_sysid1.contains(&sysid4));
+
+        assert!(!set_with_sysid2.contains(&sysid3));
+        assert!(!set_with_sysid2.contains(&sysid4));
+
+        assert!(!set_with_sysid5.contains(&sysid3));
+        assert!(!set_with_sysid5.contains(&sysid4));
+        assert!(false);
     }
 }
