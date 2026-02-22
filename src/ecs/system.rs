@@ -241,15 +241,6 @@ impl Systems {
         }
     }
 
-    pub unsafe fn run_system2(&mut self, system_id: SystemId, world_data: SharedWorldData) {
-        unsafe {
-            let _ = &mut self.system_vec[system_id.0 as usize].run(
-                self.system_param_data.get(&system_id).unwrap(),
-                world_data.0.get(),
-            );
-        }
-    }
-
     pub fn run_system(&mut self, system_id: SystemId, world_data: &mut WorldData) {
         let _ = &mut self.system_vec[system_id.id_usize()].run(
             self.system_param_data.get(&system_id).unwrap(),

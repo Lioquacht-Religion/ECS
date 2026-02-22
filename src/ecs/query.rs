@@ -58,9 +58,7 @@ pub(crate) struct QueryStateKey {
     filter: Vec<FilterElem>,
 }
 
-//TODO: decide if to use this
-//pub struct CompRefKind(ComponentId, RefKind);
-
+#[derive(Debug, Clone, Copy)]
 pub enum RefKind {
     Shared,
     Exclusive,
@@ -183,9 +181,11 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     ) {
         let mut comp_ids = world_data.get_cache_mut().compid_vec_cache.take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
+        dbg!(&comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
         let mut ref_kinds: Vec<RefKind> = Vec::with_capacity(comp_ids.get_vec().len());
         P::ref_kinds(&mut ref_kinds);
+        dbg!(&ref_kinds);
 
         let mut filter = Vec::new();
         F::get_and_filters(world_data, &mut filter);
@@ -229,12 +229,14 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         depend_graph.insert_query_archetypes(next_query_id, &arch_ids);
         depend_graph.insert_system_query(system_id, next_query_id);
 
+        let QueryStateKey { comp_ids, filter } = query_state_key;
+
         let query_data = QueryState {
             //TODO: remove comp_ids/filter ? already used as key, remove cloning
-            comp_ids: query_state_key.comp_ids.clone(),
+            comp_ids: comp_ids,
             optional_comp_ids: SortedVec::new(),
             arch_ids,
-            filter: query_state_key.filter.clone(),
+            filter: filter,
         };
 
         world_data.query_data.push(query_data);

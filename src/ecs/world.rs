@@ -58,7 +58,7 @@ impl World {
         World {
             data: WorldData::new().into(),
             systems: Systems::new(),
-            scheduler: ParallelScheduler::new(4),
+            scheduler: ParallelScheduler::new(2),
             //SingleThreadScheduler::new(),
         }
     }

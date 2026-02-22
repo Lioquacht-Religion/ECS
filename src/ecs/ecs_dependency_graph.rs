@@ -39,9 +39,6 @@ pub struct SystemNode {
     pub(crate) component_edges: EcsEdges,
     pub(crate) resource_edges: EcsEdges,
     pub(crate) query_edges: EcsEdges,
-    pub(crate) excl_component_edges: HashSet<u32>,
-    pub(crate) shared_component_edges: HashSet<u32>,
-    pub(crate) conflict_system_edges: HashSet<u32>,
 }
 
 impl SystemNode {
@@ -51,9 +48,6 @@ impl SystemNode {
             resource_edges: HashMap::new(),
             component_edges: HashMap::new(),
             query_edges: HashMap::new(),
-            excl_component_edges: HashSet::new(),
-            shared_component_edges: HashSet::new(),
-            conflict_system_edges: HashSet::new(),
         }
     }
 }
@@ -243,6 +237,9 @@ impl EcsDependencyGraph {
             };
             let comp: &mut ComponentNode = &mut self.components[comp_key as usize];
             comp.system_edges.insert(system_key, edge);
+            let _ = &mut self.systems[system_key as usize]
+            .component_edges
+            .insert(comp_key, edge);
         }
     }
     pub fn insert_query_archetypes(&mut self, query_id: QueryId, archetype_ids: &[ArchetypeId]) {

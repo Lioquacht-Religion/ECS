@@ -21,7 +21,8 @@ impl ThreadPool {
             let sc = Arc::clone(&sc);
             let thread = std::thread::spawn(move || {
                 loop {
-                    match sc.lock().unwrap().recv() {
+                    let exec_func = sc.lock().unwrap().recv();
+                    match exec_func {
                         Ok(exec_func) => exec_func(),
                         Err(_) => break,
                     }

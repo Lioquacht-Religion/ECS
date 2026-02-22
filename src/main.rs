@@ -1,6 +1,6 @@
 // main.rs file for testing ECS package directly
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ecs::ecs::prelude::*;
 
@@ -10,6 +10,7 @@ impl Component for Pos {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
+#[allow(unused)]
 struct Pos2(i32, i64);
 impl Component for Pos2 {
     const STORAGE: StorageTypes = StorageTypes::TableSoA;
@@ -75,10 +76,10 @@ fn test_system1(
     mut commands: Commands,
     prm: Res<i32>,
     prm2: Res<usize>,
-    mut query: Query<(&Comp1, &mut Comp2), Or<(Without<Pos4>, Without<Comp1>)>>,
+    mut query: Query<(&Comp1, &mut Comp2), Or<Without<Pos4>>>,
     mut query2: Query<(EntityKey, &Pos, &mut Pos4, &Pos3), Or<(Without<Pos4>, Without<Comp1>)>>,
 ) {
-    println!("testsystem1 res: {}, {}", prm.value, prm2.value);
+    //println!("testsystem1 res: {}, {}", prm.value, prm2.value);
 
     for (comp1, comp2) in query.iter() {
         //println!("comp1: {}", comp1.0);
@@ -108,16 +109,17 @@ fn test_system1(
 
 #[inline(never)]
 fn test_system2(
-    mut query_soa: Query<
+    query_soa: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-    mut query_aos: Query<
+    query_aos: Query<
         (&mut Comp1AoS, &mut Comp2AoS), //, Or<(With<Pos4AoS>, With<Comp1AoS>)>
     >,
 ) {
     let el1 = test_soa(query_soa);
     let el2 = test_aos(query_aos);
 
+    /*
     println!(
         "soa time: {} nanos; {} micros",
         el1.as_nanos(),
@@ -128,6 +130,7 @@ fn test_system2(
         el2.as_nanos(),
         el2.as_micros()
     );
+    */
 }
 
 #[inline(never)]
@@ -135,7 +138,7 @@ fn test_soa(
     mut query_soa: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
-) -> Duration {
+) {
     let start1 = std::time::Instant::now();
     for (comp1, comp2) in query_soa.iter() {
         comp1.0 /= 21;
@@ -160,11 +163,10 @@ fn test_soa(
         );
         */
     }
-    start1.elapsed()
 }
 
 #[inline(never)]
-fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) -> Duration {
+fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
     let start2 = std::time::Instant::now();
     for (comp1, comp2) in query_aos.iter() {
         comp1.0 /= 21;
@@ -189,13 +191,11 @@ fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) -> Duration {
         );
         */
     }
-
-    start2.elapsed()
 }
 
 fn test_system3() {}
 
-const CAPACITY: usize = 1_000_000;
+const CAPACITY: usize = 100_000;
 
 fn init_es_insert(es: &mut World) {
     let start1 = std::time::Instant::now();
@@ -300,9 +300,11 @@ fn test_table_query_iter() {
     let num1: i32 = 2324;
     let num2: usize = 2324;
 
-    world.add_systems(test_system20);
-    world.add_systems((test_system1, test_system2).chain());
+    //world.add_systems(test_system20);
+    world.add_systems((test_system1).before((test_aos, test_soa)));
+    //world.add_systems((test_aos, test_soa));
 
+    /*
     world.add_systems(test_system15.after(test_system14));
     world.add_systems(test_system3.after(test_system2));
 
@@ -321,6 +323,7 @@ fn test_table_query_iter() {
     );
 
     world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
+    */
 
     world.add_resource(num1);
     world.add_resource(num2);
@@ -328,18 +331,17 @@ fn test_table_query_iter() {
     init_es_insert(&mut world);
 
     world.init_systems();
-    world.run();
-    /*
-    world.run();
-    world.run();
-    world.run();
-    world.run();
-    */
+
+    let start = Instant::now();
+    for _ in 0..100 {
+        world.run();
+    }
+    println!("total run duration: {} nanos", start.elapsed().as_nanos());
 }
 
 fn main() {
     test_table_query_iter();
-    normal_loop_test();
+    //normal_loop_test();
 }
 
 #[inline(never)]
@@ -401,10 +403,10 @@ fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4
         + ents2
             .iter()
             .fold(0, |a, e| a + e.1.0 + e.1.1 + e.3.0 + e.3.1);
-    println!("normal loop aos sum : {sum}");
+    /*println!("normal loop aos sum : {sum}");
     println!(
         "normal loop time aos: {} micros; {} nanos",
         e3.as_micros(),
         e3.as_nanos()
-    );
+    );*/
 }

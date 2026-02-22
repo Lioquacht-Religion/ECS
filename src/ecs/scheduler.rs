@@ -10,8 +10,7 @@ use crate::{
         ecs_dependency_graph::{EcsDependencyGraph, EcsEdge},
         system::{System, SystemId, SystemParamId, Systems},
         world::{SharedWorldData, WorldData},
-    },
-    utils::threadpool::ThreadPool,
+    }, utils::scoped_threadpool::ScopedThreadPool,
 };
 
 pub(crate) trait Scheduler {
@@ -79,14 +78,14 @@ impl Scheduler for SingleThreadScheduler {
 //TODO: add parallel execution and scheduling
 pub(crate) struct ParallelScheduler {
     schedule: Vec<Vec<HashSet<SystemId>>>,
-    //thread_pool: ThreadPool,
+    thread_pool: ScopedThreadPool,
 }
 
 impl ParallelScheduler {
     pub(crate) fn new(thread_count: usize) -> Self {
         Self {
             schedule: Vec::new(),
-            //thread_pool: ThreadPool::new(thread_count),
+            thread_pool: ScopedThreadPool::new(thread_count),
         }
     }
 
@@ -167,7 +166,7 @@ impl ParallelScheduler {
     fn build_constraint_based_schedule(systems: &Systems) -> Vec<HashSet<SystemId>> {
         let mut schd: Vec<HashSet<SystemId>> = Vec::new();
 
-        //find constraint roots, end, unconstraint systems
+        //find constraint roots and unconstraint systems
         let mut roots: HashSet<SystemId> = HashSet::new();
         let mut unconstrained: HashSet<SystemId> = HashSet::new();
         for (s, c) in &systems.constraints {
@@ -225,6 +224,16 @@ impl ParallelScheduler {
             batch_index += 1;
         }
 
+        // remove empty batches
+        schd.retain(|batch| !batch.is_empty());
+
+        // make sure that at least one batch exists
+        if schd.is_empty() {
+            schd.push(HashSet::new());
+        }
+
+        // TODO: this may hinder parallelization in simpler system constellations 
+        // TODO: maybe atleast change, that a schedule does not have always at least two batches
         // insert unconstrained systems into smallest batches possible
         for s in unconstrained.iter() {
             if let Some(smallest_batch) = schd.iter_mut().min_by(|x, y| x.len().cmp(&y.len())) {
@@ -292,9 +301,8 @@ impl ParallelScheduler {
         let sys_comps: &HashMap<u32, EcsEdge> = &system_node.component_edges;
         let (comp_excl, comp_shared) = Self::create_excl_shared_sets(sys_comps);
 
-        dbg!(&system_node.resource_edges);
-        dbg!(&res_excl);
-        dbg!(&res_shared);
+        dbg!(&comp_excl);
+        dbg!(&comp_shared);
 
         // Finding conflicting systems:
         // - find excl and shared res/comps sets for every system
@@ -358,7 +366,6 @@ impl ParallelScheduler {
                 }
             }
         }
-        dbg!(&conflict_systems);
         return conflict_systems;
     }
 
@@ -402,20 +409,19 @@ impl Scheduler for ParallelScheduler {
         //TODO: create thread pool that can act like scopes
         //TODO: need way to receive signal,
         // when all jobs are finished, to reuse threads in pool
-        for (i, batch) in self.schedule.iter().enumerate() {
-            println!("exec batch {}:", i);
+        for batch in self.schedule.iter() {
             for batch in batch.iter() {
                 {
                     let world_data = SharedWorldData(&*world_data);
                     let world_data = &world_data;
                     std::thread::scope(|s| {
+                    //self.thread_pool.scope(|s| {
                         for (i, sys) in systems
                             .system_vec
                             .iter_mut()
                             .enumerate()
                             .filter(|(i, _s)| batch.contains(&SystemId::from(i)))
                         {
-                            println!("exec system: name {}; id {}:", sys.system_name(), i);
                             let sys_id = SystemId::from(i);
                             s.spawn(move || {
                                 run_sys(
@@ -514,8 +520,6 @@ mod test {
         assert!(!set_with_sysid2.contains(&sysid3));
         assert!(!set_with_sysid2.contains(&sysid4));
 
-        assert!(!set_with_sysid5.contains(&sysid3));
         assert!(!set_with_sysid5.contains(&sysid4));
-        assert!(false);
     }
 }
