@@ -63,12 +63,12 @@ impl Component for Comp2 {
 
 struct Comp1AoS(usize, usize);
 impl Component for Comp1AoS {
-    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
 struct Comp2AoS(usize, usize);
 impl Component for Comp2AoS {
-    const STORAGE: StorageTypes = StorageTypes::TableAoS;
+    const STORAGE: StorageTypes = StorageTypes::TableSoA;
 }
 
 #[inline(never)]
@@ -300,16 +300,16 @@ fn test_table_query_iter() {
     let num1: i32 = 2324;
     let num2: usize = 2324;
 
-    //world.add_systems(test_system20);
+    world.add_systems(test_system20);
     world.add_systems((test_system1).before((test_aos, test_soa)));
-    //world.add_systems((test_aos, test_soa));
+    world.add_systems((test_aos, test_soa));
 
-    /*
     world.add_systems(test_system15.after(test_system14));
     world.add_systems(test_system3.after(test_system2));
 
     world.add_systems(test_system15.before(test_system18));
 
+    /*
     world.add_systems(
         (
             test_system14,
@@ -321,9 +321,9 @@ fn test_table_query_iter() {
         )
             .chain(),
     );
+    */
 
     world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
-    */
 
     world.add_resource(num1);
     world.add_resource(num2);
@@ -333,15 +333,18 @@ fn test_table_query_iter() {
     world.init_systems();
 
     let start = Instant::now();
-    for _ in 0..100 {
+    for _ in 0..60 {
         world.run();
     }
-    println!("total run duration: {} nanos", start.elapsed().as_nanos());
+    let end = start.elapsed();
+    println!("total run duration: {} nanos; {} millis; {} secs", 
+        end.as_nanos(), end.as_millis(), end.as_secs());
 }
 
 fn main() {
     test_table_query_iter();
-    //normal_loop_test();
+    normal_loop_test();
+    normal_loop_test_soa();
 }
 
 #[inline(never)]
@@ -358,7 +361,80 @@ fn normal_loop_test() {
             Pos2(232, 2423),
         ));
     }
-    normal_loop(&mut ents, &mut ents2);
+
+    let start = Instant::now();
+    for _ in 0..60 {
+        normal_loop(&mut ents, &mut ents2);
+    }
+    let end = start.elapsed();
+    println!("normal loop aos total run duration: {} nanos; {} millis; {} secs", 
+        end.as_nanos(), end.as_millis(), end.as_secs());
+}
+
+#[inline(never)]
+fn normal_loop_test_soa() {
+    let mut ents1 = Vec::with_capacity(CAPACITY);
+    let mut ents2 = Vec::with_capacity(CAPACITY);
+    let mut ents3 = Vec::with_capacity(CAPACITY);
+    let mut ents4 = Vec::with_capacity(CAPACITY);
+    for i in 0..CAPACITY {
+        ents1.push(Comp1(i, 34)); 
+        ents2.push(Comp2(i, 34));
+        ents3.push(Comp1(i, 34));
+        ents4.push(Comp2(i, 34));
+    }
+    let mut ents1 = (ents1, ents2);
+    let mut ents2 = (ents3, ents4);
+    let start = Instant::now();
+    for _ in 0..60 {
+        normal_loop_soa(&mut ents1, &mut ents2);
+    }
+    let end = start.elapsed();
+    println!("normal loop soa total run duration: {} nanos; {} millis; {} secs", 
+        end.as_nanos(), end.as_millis(), end.as_secs());
+}
+
+#[inline(never)]
+fn normal_loop_soa(ents: &mut (Vec<Comp1>, Vec<Comp2>), ents2: &mut (Vec<Comp1>, Vec<Comp2>)) {
+    let start3 = std::time::Instant::now();
+    let (c1, c2) = ents;
+    let (mut c1, mut c2) = (c1.iter_mut(), c2.iter_mut());
+    while let (Some(c1), Some(c2)) = (c1.next(), c2.next()) {
+        let c = (c1, c2);
+        c.0.0 /= 21;
+        c.0.1 /= 437;
+        c.1.0 /= 21;
+        c.1.1 /= 437;
+
+        c.0.0 /= 392049;
+        c.0.1 /= 392049;
+        c.1.0 /= 392049;
+        c.1.1 /= 392049;
+
+        c.0.0 *= c.1.1;
+        c.0.1 *= c.1.0;
+        c.1.0 += c.0.1;
+        c.1.1 += c.0.0;
+    }
+    let (c1, c2) = ents;
+    let (mut c1, mut c2) = (c1.iter_mut(), c2.iter_mut());
+    while let (Some(c1), Some(c2)) = (c1.next(), c2.next()) {
+        let c = (c1, c2);
+        c.0.0 /= 21;
+        c.0.1 /= 437;
+        c.1.0 /= 21;
+        c.1.1 /= 437;
+
+        c.0.0 /= 392049;
+        c.0.1 /= 392049;
+        c.1.0 /= 392049;
+        c.1.1 /= 392049;
+
+        c.0.0 *= c.1.1;
+        c.0.1 *= c.1.0;
+        c.1.0 += c.0.1;
+        c.1.1 += c.0.0;
+    }
 }
 
 #[inline(never)]

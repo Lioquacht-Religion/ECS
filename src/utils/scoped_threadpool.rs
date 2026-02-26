@@ -108,7 +108,7 @@ impl ScopedThreadPool {
             if cur_num_running_tasks == 0 {
                 break;
             }
-            //std::thread::yield_now();
+            std::thread::yield_now();
         }
         result
     }
