@@ -238,8 +238,8 @@ impl EcsDependencyGraph {
             let comp: &mut ComponentNode = &mut self.components[comp_key as usize];
             comp.system_edges.insert(system_key, edge);
             let _ = &mut self.systems[system_key as usize]
-            .component_edges
-            .insert(comp_key, edge);
+                .component_edges
+                .insert(comp_key, edge);
         }
     }
     pub fn insert_query_archetypes(&mut self, query_id: QueryId, archetype_ids: &[ArchetypeId]) {

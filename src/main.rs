@@ -63,12 +63,12 @@ impl Component for Comp2 {
 
 struct Comp1AoS(usize, usize);
 impl Component for Comp1AoS {
-    const STORAGE: StorageTypes = StorageTypes::TableSoA;
+    const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
 struct Comp2AoS(usize, usize);
 impl Component for Comp2AoS {
-    const STORAGE: StorageTypes = StorageTypes::TableSoA;
+    const STORAGE: StorageTypes = StorageTypes::TableAoS;
 }
 
 #[inline(never)]
@@ -76,28 +76,19 @@ fn test_system1(
     mut commands: Commands,
     prm: Res<i32>,
     prm2: Res<usize>,
-    mut query: Query<(&Comp1, &mut Comp2), Or<Without<Pos4>>>,
-    mut query2: Query<(EntityKey, &Pos, &mut Pos4, &Pos3), Or<(Without<Pos4>, Without<Comp1>)>>,
+    mut query: Query<(&Comp1, &mut Comp2), Without<Pos4>>,
+    mut query2: Query<(EntityKey, &Pos, &mut Pos4, &Pos2)>,
 ) {
-    //println!("testsystem1 res: {}, {}", prm.value, prm2.value);
-
     for (comp1, comp2) in query.iter() {
-        //println!("comp1: {}", comp1.0);
-        //println!("comp2: {}", comp2.0);
-        comp2.0 = comp1.1 / 3245345;
-        //println!("comp2: {}", comp2.0);
+        comp2.0 = comp1.1 / 3245345 * prm.abs() as usize;
+        comp2.1 = *prm2 / 7137;
     }
 
     for (ek, _pos, pos4, _pos3) in query2.iter() {
-        //println!("pos4 : {}", pos4.0);
         pos4.0 = 23234;
         pos4.0 -= 2344;
-        //println!("pos4 : {}", pos4.0);
-
-        //println!("pos4.1 box pointer: {}", pos4.1 .0);
         pos4.1.0 = 23234;
         pos4.1.0 -= 2344;
-        //println!("pos4.1 box pointer: {}", pos4.1 .0);
 
         let _key = commands.spawn((Comp1AoS(999999, 29029), Comp2(999999, 29029)));
         let _key = commands.spawn((Comp1(999999, 29029), Comp2AoS(999999, 29029)));
@@ -134,28 +125,9 @@ fn test_system2(
 }
 
 #[inline(never)]
-fn test_soa(
-    mut query_soa: Query<
-        (&mut Comp1, &mut Comp2), //, With<Pos4>
-    >,
-) {
-    let start1 = std::time::Instant::now();
+fn test_soa(mut query_soa: Query<(&mut Comp1, &mut Comp2)>) {
     for (comp1, comp2) in query_soa.iter() {
-        comp1.0 /= 21;
-        comp1.1 /= 437;
-        comp2.0 /= 21;
-        comp2.1 /= 437;
-
-        comp1.0 /= 392049;
-        comp1.1 /= 392049;
-        comp2.0 /= 392049;
-        comp2.1 /= 392049;
-
-        comp1.0 *= comp2.1;
-        comp1.1 *= comp2.0;
-        comp2.0 += comp1.1;
-        comp2.1 += comp1.0;
-
+        do_some_work((comp1, comp2));
         /*
         println!(
             "soa iter: {i}; enitity key: {:?}; comp1: {}",
@@ -167,23 +139,8 @@ fn test_soa(
 
 #[inline(never)]
 fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
-    let start2 = std::time::Instant::now();
     for (comp1, comp2) in query_aos.iter() {
-        comp1.0 /= 21;
-        comp1.1 /= 437;
-        comp2.0 /= 21;
-        comp2.1 /= 437;
-
-        comp1.0 /= 392049;
-        comp1.1 /= 392049;
-        comp2.0 /= 392049;
-        comp2.1 /= 392049;
-
-        comp1.0 *= comp2.1;
-        comp1.1 *= comp2.0;
-        comp2.0 += comp1.1;
-        comp2.1 += comp1.0;
-
+        do_some_work_aos((comp1, comp2));
         /*
         println!(
             "aos iter: {i}; enitity key: {:?}; comp1: {}",
@@ -196,6 +153,7 @@ fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
 fn test_system3() {}
 
 const CAPACITY: usize = 100_000;
+const ITERATIONS: usize = 60;
 
 fn init_es_insert(es: &mut World) {
     let start1 = std::time::Instant::now();
@@ -300,16 +258,18 @@ fn test_table_query_iter() {
     let num1: i32 = 2324;
     let num2: usize = 2324;
 
-    world.add_systems(test_system20);
-    world.add_systems((test_system1).before((test_aos, test_soa)));
-    world.add_systems((test_aos, test_soa));
+    //world.add_systems(test_system20);
+    //world.add_systems((test_system1).before((test_aos, test_soa)));
+    world.add_systems((test_aos, test_soa).after((test_system21, test_system1)));
+    //world.add_systems(test_aos);
+    //world.add_systems(test_soa);
 
+    /*
     world.add_systems(test_system15.after(test_system14));
     world.add_systems(test_system3.after(test_system2));
 
     world.add_systems(test_system15.before(test_system18));
 
-    /*
     world.add_systems(
         (
             test_system14,
@@ -322,8 +282,7 @@ fn test_table_query_iter() {
             .chain(),
     );
     */
-
-    world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
+    //world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
 
     world.add_resource(num1);
     world.add_resource(num2);
@@ -333,12 +292,16 @@ fn test_table_query_iter() {
     world.init_systems();
 
     let start = Instant::now();
-    for _ in 0..60 {
+    for _ in 0..ITERATIONS {
         world.run();
     }
     let end = start.elapsed();
-    println!("total run duration: {} nanos; {} millis; {} secs", 
-        end.as_nanos(), end.as_millis(), end.as_secs());
+    println!(
+        "total run duration: {} nanos; {} millis; {} secs",
+        end.as_nanos(),
+        end.as_millis(),
+        end.as_secs()
+    );
 }
 
 fn main() {
@@ -363,12 +326,16 @@ fn normal_loop_test() {
     }
 
     let start = Instant::now();
-    for _ in 0..60 {
+    for _ in 0..ITERATIONS {
         normal_loop(&mut ents, &mut ents2);
     }
     let end = start.elapsed();
-    println!("normal loop aos total run duration: {} nanos; {} millis; {} secs", 
-        end.as_nanos(), end.as_millis(), end.as_secs());
+    println!(
+        "normal loop aos total run duration: {} nanos; {} millis; {} secs",
+        end.as_nanos(),
+        end.as_millis(),
+        end.as_secs()
+    );
 }
 
 #[inline(never)]
@@ -378,7 +345,7 @@ fn normal_loop_test_soa() {
     let mut ents3 = Vec::with_capacity(CAPACITY);
     let mut ents4 = Vec::with_capacity(CAPACITY);
     for i in 0..CAPACITY {
-        ents1.push(Comp1(i, 34)); 
+        ents1.push(Comp1(i, 34));
         ents2.push(Comp2(i, 34));
         ents3.push(Comp1(i, 34));
         ents4.push(Comp2(i, 34));
@@ -386,54 +353,31 @@ fn normal_loop_test_soa() {
     let mut ents1 = (ents1, ents2);
     let mut ents2 = (ents3, ents4);
     let start = Instant::now();
-    for _ in 0..60 {
+    for _ in 0..ITERATIONS {
         normal_loop_soa(&mut ents1, &mut ents2);
     }
     let end = start.elapsed();
-    println!("normal loop soa total run duration: {} nanos; {} millis; {} secs", 
-        end.as_nanos(), end.as_millis(), end.as_secs());
+    println!(
+        "normal loop soa total run duration: {} nanos; {} millis; {} secs",
+        end.as_nanos(),
+        end.as_millis(),
+        end.as_secs()
+    );
 }
 
 #[inline(never)]
 fn normal_loop_soa(ents: &mut (Vec<Comp1>, Vec<Comp2>), ents2: &mut (Vec<Comp1>, Vec<Comp2>)) {
-    let start3 = std::time::Instant::now();
     let (c1, c2) = ents;
     let (mut c1, mut c2) = (c1.iter_mut(), c2.iter_mut());
     while let (Some(c1), Some(c2)) = (c1.next(), c2.next()) {
         let c = (c1, c2);
-        c.0.0 /= 21;
-        c.0.1 /= 437;
-        c.1.0 /= 21;
-        c.1.1 /= 437;
-
-        c.0.0 /= 392049;
-        c.0.1 /= 392049;
-        c.1.0 /= 392049;
-        c.1.1 /= 392049;
-
-        c.0.0 *= c.1.1;
-        c.0.1 *= c.1.0;
-        c.1.0 += c.0.1;
-        c.1.1 += c.0.0;
+        do_some_work(c);
     }
-    let (c1, c2) = ents;
+    let (c1, c2) = ents2;
     let (mut c1, mut c2) = (c1.iter_mut(), c2.iter_mut());
     while let (Some(c1), Some(c2)) = (c1.next(), c2.next()) {
         let c = (c1, c2);
-        c.0.0 /= 21;
-        c.0.1 /= 437;
-        c.1.0 /= 21;
-        c.1.1 /= 437;
-
-        c.0.0 /= 392049;
-        c.0.1 /= 392049;
-        c.1.0 /= 392049;
-        c.1.1 /= 392049;
-
-        c.0.0 *= c.1.1;
-        c.0.1 *= c.1.0;
-        c.1.0 += c.0.1;
-        c.1.1 += c.0.0;
+        do_some_work(c);
     }
 }
 
@@ -441,36 +385,10 @@ fn normal_loop_soa(ents: &mut (Vec<Comp1>, Vec<Comp2>), ents2: &mut (Vec<Comp1>,
 fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4, Comp2, Pos2)>) {
     let start3 = std::time::Instant::now();
     for c in ents.iter_mut() {
-        c.0.0 /= 21;
-        c.0.1 /= 437;
-        c.1.0 /= 21;
-        c.1.1 /= 437;
-
-        c.0.0 /= 392049;
-        c.0.1 /= 392049;
-        c.1.0 /= 392049;
-        c.1.1 /= 392049;
-
-        c.0.0 *= c.1.1;
-        c.0.1 *= c.1.0;
-        c.1.0 += c.0.1;
-        c.1.1 += c.0.0;
+        do_some_work((&mut c.0, &mut c.1));
     }
     for c in ents2.iter_mut() {
-        c.1.0 /= 21;
-        c.1.1 /= 437;
-        c.3.0 /= 21;
-        c.3.1 /= 437;
-
-        c.1.0 /= 392049;
-        c.1.1 /= 392049;
-        c.3.0 /= 392049;
-        c.3.1 /= 392049;
-
-        c.1.0 *= c.3.1;
-        c.1.1 *= c.3.0;
-        c.3.0 += c.1.1;
-        c.3.1 += c.1.0;
+        do_some_work((&mut c.1, &mut c.3));
     }
     let e3 = start3.elapsed();
     let sum: usize = ents
@@ -485,4 +403,45 @@ fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4
         e3.as_micros(),
         e3.as_nanos()
     );*/
+}
+fn do_some_work_aos(c: (&mut Comp1AoS, &mut Comp2AoS)) {
+    c.0.0 /= 21;
+    c.0.1 /= 437;
+    c.1.0 /= 21;
+    c.1.1 /= 437;
+
+    c.0.0 /= 392049;
+    c.0.1 /= 392049;
+    c.1.0 /= 392049;
+    c.1.1 /= 392049;
+
+    c.0.0 *= c.1.1;
+    c.0.1 *= c.1.0;
+    c.1.0 += c.0.1;
+    c.1.1 += c.0.0;
+}
+fn do_some_work(mut c: (&mut Comp1, &mut Comp2)) {
+    do_some_work1(&mut c);
+    do_some_work2(&mut c);
+    do_some_work3(&mut c);
+}
+fn do_some_work1(c: &mut (&mut Comp1, &mut Comp2)) {
+    c.0.0 /= 21;
+    c.0.1 /= 437;
+    c.1.0 /= 21;
+    c.1.1 /= 437;
+}
+
+fn do_some_work2(c: &mut (&mut Comp1, &mut Comp2)) {
+    c.0.0 /= 392049;
+    c.0.1 /= 392049;
+    c.1.0 /= 392049;
+    c.1.1 /= 392049;
+}
+
+fn do_some_work3(c: &mut (&mut Comp1, &mut Comp2)) {
+    c.0.0 *= c.1.1;
+    c.0.1 *= c.1.0;
+    c.1.0 += c.0.1;
+    c.1.1 += c.0.0;
 }

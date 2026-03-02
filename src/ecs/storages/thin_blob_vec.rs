@@ -222,9 +222,7 @@ impl ThinBlobVec {
                     let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i].ptr_offset);
                     let layout_size = comp_info.layout.size();
                     // do not copy zero sized types to different location
-                    if true
-                    //layout_size > 0
-                    {
+                    if layout_size > 0 {
                         let value_ptr_src = value_ptr.ptr.add(value_ptrs_offset);
                         std::ptr::copy(value_ptr_src.as_ptr(), dst_comp_ptr, layout_size);
                     }
@@ -249,6 +247,7 @@ impl ThinBlobVec {
         new_cap
     }
 
+    #[allow(unused)]
     pub(crate) unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
         if layout.size() != 0 {
             unsafe { self.data_ptr.add(index * layout.size()) }
@@ -257,41 +256,44 @@ impl ThinBlobVec {
         }
     }
 
-    #[allow(unused)]
-    pub(crate) unsafe fn get_typed<T>(&self, index: usize) -> &T {
-        unsafe {
-            &*self
-                .get_ptr_untyped(index, Layout::new::<T>())
-                .cast()
-                .as_ptr()
+    pub(crate) unsafe fn get_ptr_typed<T>(&self, index: usize) -> NonNull<T> {
+        use std::mem::size_of;
+        if size_of::<T>() != 0 {
+            unsafe { self.data_ptr.add(index * size_of::<T>()).cast() }
+        } else {
+            self.data_ptr.cast()
         }
     }
 
+    #[allow(unused)]
+    pub(crate) unsafe fn get_typed<T>(&self, index: usize) -> &T {
+        unsafe { self.get_ptr_typed(index).as_ref() }
+    }
+
     pub(crate) unsafe fn get_typed_lifetime<'vec, T>(&self, index: usize) -> &'vec T {
-        unsafe {
-            &*self
-                .get_ptr_untyped(index, Layout::new::<T>())
-                .cast()
-                .as_ptr()
-        }
+        unsafe { self.get_ptr_typed(index).as_ref() }
     }
 
     #[allow(unused)]
     pub(crate) unsafe fn get_mut_typed<T>(&mut self, index: usize) -> &mut T {
-        unsafe {
-            &mut *self
-                .get_ptr_untyped(index, Layout::new::<T>())
-                .cast()
-                .as_ptr()
-        }
+        unsafe { self.get_ptr_typed(index).as_mut() }
     }
 
     pub(crate) unsafe fn get_mut_typed_lifetime<'vec, T>(&mut self, index: usize) -> &'vec mut T {
-        unsafe {
-            &mut *self
-                .get_ptr_untyped(index, Layout::new::<T>())
-                .cast()
-                .as_ptr()
+        unsafe { self.get_ptr_typed(index).as_mut() }
+    }
+
+    pub(crate) unsafe fn get_inner_ptr_typed<T>(&self, index: usize, offset: usize) -> NonNull<T> {
+        use std::mem::size_of;
+        if size_of::<T>() != 0 {
+            unsafe {
+                self.data_ptr
+                    .add(index * self.elem_layout.size())
+                    .cast()
+                    .byte_offset(offset as isize)
+            }
+        } else {
+            self.data_ptr.cast()
         }
     }
 
@@ -300,13 +302,7 @@ impl ThinBlobVec {
         index: usize,
         offset: usize,
     ) -> &'vec mut T {
-        unsafe {
-            &mut *self
-                .get_ptr_untyped(index, self.elem_layout)
-                .cast::<T>()
-                .byte_offset(offset as isize)
-                .as_ptr()
-        }
+        unsafe { self.get_inner_ptr_typed(index, offset).as_mut() }
     }
 
     pub(crate) unsafe fn get_inner_typed_lifetime<'vec, T>(
@@ -314,13 +310,7 @@ impl ThinBlobVec {
         index: usize,
         offset: usize,
     ) -> &'vec T {
-        unsafe {
-            &*self
-                .get_ptr_untyped(index, self.elem_layout)
-                .cast::<T>()
-                .byte_offset(offset as isize)
-                .as_ptr()
-        }
+        unsafe { self.get_inner_ptr_typed(index, offset).as_ref() }
     }
 
     #[allow(unused)]

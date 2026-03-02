@@ -7,7 +7,7 @@ use crate::{
         entity::Entities,
         system::{SystemId, SystemParamId},
     },
-    utils::tuple_types::TupleTypesExt,
+    utils::{spin_lock::SpinLock, tuple_types::TupleTypesExt},
 };
 
 use super::{entity::EntityKey, system::SystemParam, world::WorldData};
@@ -17,20 +17,22 @@ type CommandQueueCell = Box<UnsafeCell<CommandQueue>>;
 type CommandQueueVec = Vec<CommandQueueCell>;
 
 pub(crate) struct CommandQueuesStorage {
-    pub(crate) command_queues_unused: Mutex<CommandQueueVec>,
-    pub(crate) command_queues_inuse: Mutex<CommandQueueVec>,
+    pub(crate) command_queues_unused: SpinLock<CommandQueueVec>,
+    pub(crate) command_queues_inuse: SpinLock<CommandQueueVec>,
 }
 
 impl CommandQueuesStorage {
     pub(crate) fn new() -> Self {
         Self {
-            command_queues_unused: Mutex::new(Vec::new()),
-            command_queues_inuse: Mutex::new(Vec::new()),
+            command_queues_unused: SpinLock::new(Vec::new()),
+            command_queues_inuse: SpinLock::new(Vec::new()),
         }
     }
 
     pub(crate) fn get_unused(&self) -> CommandQueueCell {
-        if let Some(mut queue) = self.command_queues_unused.lock().unwrap().pop() {
+        if let Some(mut queue) = self.command_queues_unused.lock()
+            //.unwrap()
+            .pop() {
             queue.get_mut().clear();
             queue
         } else {
@@ -41,8 +43,18 @@ impl CommandQueuesStorage {
     pub(crate) fn put_inuse(&self) -> *mut CommandQueue {
         let unused_queue = self.get_unused();
         let command_queue_ptr = unused_queue.get();
-        self.command_queues_inuse.lock().unwrap().push(unused_queue);
+        self.command_queues_inuse.lock()
+            //.unwrap()
+            .push(unused_queue);
         command_queue_ptr
+    }
+
+    pub(crate) fn get_command_queue_unused_mut(&mut self) -> &mut CommandQueueVec{
+        self.command_queues_unused.get_mut()
+    }
+
+    pub(crate) fn get_command_queue_inuse_mut(&mut self) -> &mut CommandQueueVec{
+        self.command_queues_inuse.get_mut()
     }
 }
 

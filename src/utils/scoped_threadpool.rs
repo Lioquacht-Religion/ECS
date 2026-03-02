@@ -1,11 +1,14 @@
 // scoped_threadpool.rs
 
 use std::{
-    marker::PhantomData, sync::{atomic::{AtomicUsize, Ordering}, mpsc::Sender, Arc, Mutex}, thread::JoinHandle
+    marker::PhantomData, sync::{
+        atomic::{AtomicUsize, Ordering}, mpsc::Sender, Arc, Mutex
+    }, thread::JoinHandle
 };
+
 type ExecFunc = Box<dyn FnOnce() + Send + Sync + 'static>;
 
-struct Task{
+struct Task {
     data: Arc<ScopeData>,
     exec_func: ExecFunc,
 }
@@ -15,45 +18,49 @@ pub struct ScopedThreadPool {
     threads: Vec<JoinHandle<()>>,
 }
 
-struct ScopeData{
+struct ScopeData {
     num_running_threads: AtomicUsize,
 }
 
-pub struct Scope<'scope, 'env: 'scope>{
+pub struct Scope<'scope, 'env: 'scope> {
     pool: &'scope mut ScopedThreadPool,
     data: Arc<ScopeData>,
-    _scope_marker : PhantomData<&'scope mut &'scope ()>,
-    _env_marker : PhantomData<&'env mut &'env ()>,
+    _scope_marker: PhantomData<&'scope mut &'scope ()>,
+    _env_marker: PhantomData<&'env mut &'env ()>,
 }
 
-impl ScopeData{
-    fn new() -> Self{
-        Self { num_running_threads: AtomicUsize::new(0) }
+impl ScopeData {
+    fn new() -> Self {
+        Self {
+            num_running_threads: AtomicUsize::new(0),
+        }
     }
 }
 
-impl<'scope, 'env> Scope<'scope, 'env>{
-    fn new(pool: &'scope mut ScopedThreadPool) -> Self{
-        Self { 
+impl<'scope, 'env> Scope<'scope, 'env> {
+    fn new(pool: &'scope mut ScopedThreadPool) -> Self {
+        Self {
             pool,
             data: ScopeData::new().into(),
-            _scope_marker: PhantomData::default(), 
-            _env_marker: PhantomData::default() 
+            _scope_marker: PhantomData::default(),
+            _env_marker: PhantomData::default(),
         }
     }
 
     pub fn spawn<F: FnOnce() + Send + Sync + 'scope>(&mut self, exec_func: F){
-        self.data.num_running_threads.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        //SAFETY: TODO wait for all tasks submitted in scope to be 
-        let exec_func = unsafe { 
+        self.data
+            .num_running_threads
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        //SAFETY: wait for all tasks submitted in the scope to be finished
+        let exec_func = unsafe {
             std::mem::transmute::<
-                Box<dyn FnOnce() + Send + Sync + 'scope>, 
-                Box<dyn FnOnce() + Send + Sync + 'static>
-            >(Box::new(exec_func)) 
+                Box<dyn FnOnce() + Send + Sync + 'scope>,
+                Box<dyn FnOnce() + Send + Sync + 'static>,
+            >(Box::new(exec_func))
         };
         let task = Task {
             data: self.data.clone(),
-            exec_func
+            exec_func,
         };
         self.pool.execute(task);
     }
@@ -70,15 +77,11 @@ impl ScopedThreadPool {
                 loop {
                     let task = sc.lock().unwrap().recv();
                     match task {
-                        Ok(Task{
-                            data, 
-                            exec_func
-                        }) => {
+                        Ok(Task { data, exec_func }) => {
                             exec_func();
                             if data.num_running_threads.load(Ordering::Relaxed) > 0 {
                                 data.num_running_threads.fetch_sub(1, Ordering::Relaxed);
-                            }
-                            else{
+                            } else {
                                 panic!("Should not be zero, if there is still a thread active.")
                             }
                         }
@@ -95,15 +98,16 @@ impl ScopedThreadPool {
     }
 
     pub fn scope<'env, F, T>(&mut self, f: F) -> T
-        where 
-            F : for<'scope> FnOnce(&'scope mut  Scope<'scope, 'env>) -> T
+    where
+        F: for<'scope> FnOnce(&'scope mut Scope<'scope, 'env>) -> T,
     {
-        //SAFETY: TODO wait for all tasks submitted in scope to be 
         let mut scope = Scope::new(self);
         let scope_data = scope.data.clone();
         let result = f(&mut scope);
+        //SAFETY: wait for all tasks submitted in scope to be finished
         loop {
-            let cur_num_running_tasks = scope_data.num_running_threads
+            let cur_num_running_tasks = scope_data
+                .num_running_threads
                 .load(std::sync::atomic::Ordering::Relaxed);
             if cur_num_running_tasks == 0 {
                 break;
@@ -131,7 +135,7 @@ impl Drop for ScopedThreadPool {
 }
 
 #[cfg(test)]
-mod test{
+mod test {
     use std::time::Duration;
 
     use crate::utils::scoped_threadpool::ScopedThreadPool;
@@ -141,7 +145,7 @@ mod test{
     struct Person(String, String, usize);
 
     #[test]
-    fn test_scoped_threadpool(){
+    fn test_scoped_threadpool() {
         let mut pool = ScopedThreadPool::new(4);
         let mut pers1 = Person("bob".into(), "bab".into(), 10);
         let mut pers3 = Person("baba".into(), "bab".into(), 15);
@@ -149,7 +153,7 @@ mod test{
         for i in 0..1 {
             println!("########## -- loop {i} -- ###########");
             //pool.scope(|scope|{
-            pool.scope(|scope|{
+            pool.scope(|scope| {
                 let pers4 = &pers4;
                 let pers2 = &mut pers1;
                 let pers3 = &mut pers3;
@@ -169,7 +173,7 @@ mod test{
                     }
                     dbg!(pers3);
                     dbg!(pers4);
-                }); 
+                });
                 scope.spawn(|| {
                     std::thread::sleep(Duration::from_millis(20));
                     for _i in 0..30 {

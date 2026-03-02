@@ -1,3 +1,5 @@
 /target
 /tmp
 flamegraph.svg
+perf.data
+perf.data.old

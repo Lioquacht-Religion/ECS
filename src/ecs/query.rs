@@ -91,6 +91,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
     }
 
     #[inline(never)]
+    #[cold]
     unsafe fn get_arch_query_iter(
         &self,
         arch_id: ArchetypeId,
@@ -125,6 +126,19 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> QueryIter<'w, 's, T, F> {
             cur_arch_index: 0,
         }
     }
+    /*
+     * TODO: extract into its own function and mark as cold?
+        fn set_next_archetype(&mut self) -> Option<T>{
+                self.cur_arch_index += 1;
+                if self.cur_arch_index >= self.query.state.arch_ids.len() {
+                    return None;
+                }
+
+                let next_arch_id = self.query.state.arch_ids[self.cur_arch_index];
+                self.cur_arch_query =
+                    Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
+        }
+    */
 }
 
 impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F> {
@@ -138,11 +152,11 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
                         self.cur_arch_index += 1;
                         if self.cur_arch_index >= self.query.state.arch_ids.len() {
                             return None;
+                        } else {
+                            let next_arch_id = self.query.state.arch_ids[self.cur_arch_index];
+                            self.cur_arch_query =
+                                Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
                         }
-
-                        let next_arch_id = self.query.state.arch_ids[self.cur_arch_index];
-                        self.cur_arch_query =
-                            Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
                     }
                 }
             } else {

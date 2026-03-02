@@ -8,4 +8,6 @@ edition = "2024"
 debug = true
 opt-level = 3
 
+[profile.dev]
+
 [dependencies]
