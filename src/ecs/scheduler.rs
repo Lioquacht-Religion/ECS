@@ -190,11 +190,16 @@ impl ParallelScheduler {
         schedule
     }
 
+    /// Finding conflicting systems:
+    /// - find excl and shared res/comps sets for every system
+    /// - per system find all to res or comps connected systems
+    /// - check if other systems access same res/comps mutably
+    /// or one mut and the other immutable
+    /// - create set of conflicting systems for one system
     fn find_conflicting_systems(
         graph: &mut EcsDependencyGraph,
         system_id: SystemId,
     ) -> HashSet<SystemId> {
-        //TODO:
         let system_row_id = graph.insert_system(system_id) as usize;
         let system_node = &graph.systems[system_row_id];
         let sys_res: &HashMap<u32, EcsEdge> = &system_node.resource_edges;
@@ -202,18 +207,8 @@ impl ParallelScheduler {
         let sys_comps: &HashMap<u32, EcsEdge> = &system_node.component_edges;
         let (comp_excl, comp_shared) = Self::create_excl_shared_sets(sys_comps);
 
-        dbg!(&comp_excl);
-        dbg!(&comp_shared);
-
-        // Finding conflicting systems:
-        // - find excl and shared res/comps sets for every system
-        // - per system find all to res or comps connected systems
-        // - check if other systems access same res/comps mutably
-        // or one mut and the other immutable
-        // - create set of conflicting systems for one system
-
         let mut conn_sys_ids: HashSet<SystemId> = HashSet::new();
-        // find systems connected through component
+        // find systems connected through components in query
         for (comp_id, _edge) in sys_comps.iter() {
             for (sys_id, _edge) in graph.components[*comp_id as usize].system_edges.iter() {
                 conn_sys_ids.insert(sys_id.into());
@@ -336,6 +331,18 @@ impl Scheduler for ParallelScheduler {
             world_data.get_mut().execute_commands();
         }
     }
+}
+
+fn find_conflicts_in_systems_params(graph: &EcsDependencyGraph, systems: &Systems, system_id: SystemId) -> Result<(), String>{
+    //TODO: 
+    // conflicts between resource params can be found during conneting of multiple params of same resource type
+    // edges to a system inside of dependency graph
+    let system_row_id = graph.system_keys.get(&system_id).expect("System should exist in graph at this point.");
+    let system_node = &graph.systems[*system_row_id as usize];
+    //system_node.//resource_edges.
+
+    // find conflicts between components in query params: multiple of same component
+    Ok(())
 }
 
 fn build_constraint_based_schedule(systems: &Systems) -> Vec<HashSet<SystemId>> {

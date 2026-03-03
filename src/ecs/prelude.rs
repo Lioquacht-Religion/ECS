@@ -9,6 +9,6 @@ pub use crate::ecs::{
         query_filter::{Or, With, Without},
     },
     storages::entity_storage::EntityStorage,
-    system::{Res, builder::IntoSystemConfig},
+    system::{Res, ResMut, builder::IntoSystemConfig},
     world::World,
 };

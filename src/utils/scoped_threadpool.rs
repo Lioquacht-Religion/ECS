@@ -2,7 +2,7 @@
 
 use std::{
     marker::PhantomData, sync::{
-        atomic::{AtomicUsize, Ordering}, mpsc::Sender, Arc, Mutex
+        atomic::{AtomicUsize, Ordering}, mpsc::{Receiver, Sender}, Arc, Mutex
     }, thread::JoinHandle
 };
 
@@ -66,6 +66,22 @@ impl<'scope, 'env> Scope<'scope, 'env> {
     }
 }
 
+struct UnwindGuard<'a>(&'a AtomicUsize);
+
+impl<'a> Drop for UnwindGuard<'a>{
+    fn drop(&mut self) {
+        /*
+        if self.0.load(Ordering::Acquire) > 0 {
+            self.0.fetch_sub(1, Ordering::Release);
+        } else {
+            panic!("Should not be zero, if there is still a thread active.")
+        }
+        */
+        //TODO: should we panic here?
+        panic!("panic occurred in worker thread.")
+    }
+}
+
 impl ScopedThreadPool {
     pub fn new(thread_count: usize) -> Self {
         let mut threads = Vec::with_capacity(thread_count);
@@ -74,16 +90,19 @@ impl ScopedThreadPool {
         for _i in 0..thread_count {
             let sc = Arc::clone(&sc);
             let thread = std::thread::spawn(move || {
+                //TODO: handle panics without having the thread and thus the entire scope be stuck
                 loop {
                     let task = sc.lock().unwrap().recv();
                     match task {
                         Ok(Task { data, exec_func }) => {
+                            let guard = UnwindGuard(&data.num_running_threads);
                             exec_func();
-                            if data.num_running_threads.load(Ordering::Relaxed) > 0 {
-                                data.num_running_threads.fetch_sub(1, Ordering::Relaxed);
+                            if data.num_running_threads.load(Ordering::Acquire) > 0 {
+                                data.num_running_threads.fetch_sub(1, Ordering::Release);
                             } else {
                                 panic!("Should not be zero, if there is still a thread active.")
                             }
+                            std::mem::forget(guard);
                         }
                         Err(_) => break,
                     }
