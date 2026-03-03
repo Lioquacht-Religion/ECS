@@ -70,13 +70,11 @@ struct UnwindGuard<'a>(&'a AtomicUsize);
 
 impl<'a> Drop for UnwindGuard<'a>{
     fn drop(&mut self) {
-        /*
         if self.0.load(Ordering::Acquire) > 0 {
             self.0.fetch_sub(1, Ordering::Release);
         } else {
             panic!("Should not be zero, if there is still a thread active.")
         }
-        */
         //TODO: should we panic here?
         panic!("panic occurred in worker thread.")
     }
