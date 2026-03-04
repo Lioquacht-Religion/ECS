@@ -3,7 +3,7 @@
 use std::{
     marker::PhantomData,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering}, mpsc::{Receiver, Sender}, Arc, Mutex
+        atomic::{AtomicBool, AtomicUsize, Ordering}, mpmc::{self, Receiver, Sender}, Arc, Mutex
     },
     thread::{JoinHandle, Thread},
 };
@@ -107,36 +107,39 @@ impl<'a> Drop for UnwindGuard<'a> {
 impl ScopedThreadPool {
     pub fn new(thread_count: usize) -> Self {
         let mut threads = Vec::with_capacity(thread_count);
-        let (mp, sc) = std::sync::mpsc::channel::<Task>();
-        let sc = Arc::new(Mutex::new(sc));
+        let (mp, mc) = mpmc::channel::<Task>();
         for _i in 0..thread_count {
-            let sc = Arc::clone(&sc);
+            let mc = mc.clone();
             let thread = std::thread::spawn(move || {
-                //TODO: handle panics without having the thread and thus the entire scope be stuck
-                loop {
-                    let task = sc.lock().unwrap().recv();
-                    match task {
-                        Ok(Task { data, exec_func }) => {
-                            let guard = UnwindGuard::new(&data.num_running_threads, &data.poison, &data.pool_thread);
-                            exec_func();
-                            if data.num_running_threads.load(Ordering::Acquire) > 0 {
-                                data.num_running_threads.fetch_sub(1, Ordering::Release);
-                            } else {
-                                panic!("Should not be zero, if there is still a thread active.")
-                            }
-                            // notify pool executor thread that a task has finished
-                            data.pool_thread.lock().unwrap().unpark();
-                            std::mem::forget(guard);
-                        }
-                        Err(_) => break,
-                    }
-                }
+                Self::worker_loop(mc);
             });
             threads.push(thread);
         }
         Self {
             threads,
             sender: Some(mp),
+        }
+    }
+
+    fn worker_loop(receiver: Receiver<Task>){
+        loop {
+            let task = receiver.recv();
+            match task {
+                Ok(Task { data, exec_func }) => {
+                    // handles panics without having the thread and thus the entire scope, be stuck
+                    let guard = UnwindGuard::new(&data.num_running_threads, &data.poison, &data.pool_thread);
+                    exec_func();
+                    if data.num_running_threads.load(Ordering::Acquire) > 0 {
+                        data.num_running_threads.fetch_sub(1, Ordering::Release);
+                    } else {
+                        panic!("Should not be zero, if there is still a thread active.")
+                    }
+                    // notify pool executor thread that a task has finished
+                    data.pool_thread.lock().unwrap().unpark();
+                    std::mem::forget(guard);
+                }
+                Err(_) => break,
+            }
         }
     }
 

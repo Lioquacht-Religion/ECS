@@ -107,8 +107,8 @@ fn test_system2(
         (&mut Comp1AoS, &mut Comp2AoS), //, Or<(With<Pos4AoS>, With<Comp1AoS>)>
     >,
 ) {
-    let el1 = test_soa(query_soa);
-    let el2 = test_aos(query_aos);
+    test_soa(query_soa);
+    test_aos(query_aos);
 
     /*
     println!(
@@ -126,31 +126,21 @@ fn test_system2(
 
 #[inline(never)]
 fn test_soa(mut query_soa: Query<(&mut Comp1, &mut Comp2)>) {
+    let start = Instant::now();
     for (comp1, comp2) in query_soa.iter() {
         do_some_work((comp1, comp2));
-        /*
-        println!(
-            "soa iter: {i}; enitity key: {:?}; comp1: {}",
-            entity, comp1.0
-        );
-        */
     }
+    println!("soa iter: {} nanos", start.elapsed().as_nanos());
 }
 
 #[inline(never)]
 fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
+    let start = Instant::now();
     for (comp1, comp2) in query_aos.iter() {
         do_some_work_aos((comp1, comp2));
-        /*
-        println!(
-            "aos iter: {i}; enitity key: {:?}; comp1: {}",
-            entity, comp1.0
-        );
-        */
     }
+    println!("aos iter: {} nanos", start.elapsed().as_nanos());
 }
-
-fn test_system3() {}
 
 const CAPACITY: usize = 100_000;
 const ITERATIONS: usize = 60;
