@@ -1,9 +1,11 @@
 // scoped_threadpool.rs
 
 use std::{
-    marker::PhantomData, sync::{
-        atomic::{AtomicUsize, Ordering}, mpsc::{Receiver, Sender}, Arc, Mutex
-    }, thread::JoinHandle
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering}, mpsc::{Receiver, Sender}, Arc, Mutex
+    },
+    thread::{JoinHandle, Thread},
 };
 
 type ExecFunc = Box<dyn FnOnce() + Send + Sync + 'static>;
@@ -19,7 +21,9 @@ pub struct ScopedThreadPool {
 }
 
 struct ScopeData {
+    pool_thread: Mutex<Thread>,
     num_running_threads: AtomicUsize,
+    poison: AtomicBool,
 }
 
 pub struct Scope<'scope, 'env: 'scope> {
@@ -30,24 +34,26 @@ pub struct Scope<'scope, 'env: 'scope> {
 }
 
 impl ScopeData {
-    fn new() -> Self {
+    fn new(pool_thread: Thread) -> Self {
         Self {
+            pool_thread: Mutex::new(pool_thread),
             num_running_threads: AtomicUsize::new(0),
+            poison: AtomicBool::new(false),
         }
     }
 }
 
 impl<'scope, 'env> Scope<'scope, 'env> {
-    fn new(pool: &'scope mut ScopedThreadPool) -> Self {
+    fn new(pool: &'scope mut ScopedThreadPool, pool_thread: Thread) -> Self {
         Self {
             pool,
-            data: ScopeData::new().into(),
+            data: ScopeData::new(pool_thread).into(),
             _scope_marker: PhantomData::default(),
             _env_marker: PhantomData::default(),
         }
     }
 
-    pub fn spawn<F: FnOnce() + Send + Sync + 'scope>(&mut self, exec_func: F){
+    pub fn spawn<F: FnOnce() + Send + Sync + 'scope>(&mut self, exec_func: F) {
         self.data
             .num_running_threads
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -66,17 +72,35 @@ impl<'scope, 'env> Scope<'scope, 'env> {
     }
 }
 
-struct UnwindGuard<'a>(&'a AtomicUsize);
+struct UnwindGuard<'a> {
+    num_running_threads: &'a AtomicUsize,
+    poison: &'a AtomicBool,
+    pool_thread: &'a Mutex<Thread>,
+}
 
-impl<'a> Drop for UnwindGuard<'a>{
-    fn drop(&mut self) {
-        if self.0.load(Ordering::Acquire) > 0 {
-            self.0.fetch_sub(1, Ordering::Release);
-        } else {
-            panic!("Should not be zero, if there is still a thread active.")
+impl<'a> UnwindGuard<'a> {
+    fn new(num_running_threads: &'a AtomicUsize, poison: &'a AtomicBool, pool_thread: &'a Mutex<Thread>) -> Self {
+        Self {
+            num_running_threads,
+            poison,
+            pool_thread,
         }
-        //TODO: should we panic here?
-        panic!("panic occurred in worker thread.")
+    }
+}
+
+impl<'a> Drop for UnwindGuard<'a> {
+    fn drop(&mut self) {
+        if self.num_running_threads.load(Ordering::Acquire) > 0 {
+            self.num_running_threads.fetch_sub(1, Ordering::Release);
+        } else {
+            // should not be zero, if there is still a thread active
+            // poison the pool, so that all threads finish execution
+            self.poison.store(true, Ordering::Release);
+        }
+        // thread unwinding has occured, because of a panic,
+        // the threadpool needs to be stopped from executing
+        self.poison.store(true, Ordering::Release);
+        self.pool_thread.lock().unwrap().unpark();
     }
 }
 
@@ -93,13 +117,15 @@ impl ScopedThreadPool {
                     let task = sc.lock().unwrap().recv();
                     match task {
                         Ok(Task { data, exec_func }) => {
-                            let guard = UnwindGuard(&data.num_running_threads);
+                            let guard = UnwindGuard::new(&data.num_running_threads, &data.poison, &data.pool_thread);
                             exec_func();
                             if data.num_running_threads.load(Ordering::Acquire) > 0 {
                                 data.num_running_threads.fetch_sub(1, Ordering::Release);
                             } else {
                                 panic!("Should not be zero, if there is still a thread active.")
                             }
+                            // notify pool executor thread that a task has finished
+                            data.pool_thread.lock().unwrap().unpark();
                             std::mem::forget(guard);
                         }
                         Err(_) => break,
@@ -118,18 +144,26 @@ impl ScopedThreadPool {
     where
         F: for<'scope> FnOnce(&'scope mut Scope<'scope, 'env>) -> T,
     {
-        let mut scope = Scope::new(self);
+        let pool_thread = std::thread::current();
+        let mut scope = Scope::new(self, pool_thread);
         let scope_data = scope.data.clone();
         let result = f(&mut scope);
         //SAFETY: wait for all tasks submitted in scope to be finished
         loop {
+            let poisoned = scope_data.poison.load(Ordering::Acquire);
+            if poisoned {
+                self.shutdown();
+                break;
+            }
             let cur_num_running_tasks = scope_data
                 .num_running_threads
-                .load(std::sync::atomic::Ordering::Relaxed);
+                .load(std::sync::atomic::Ordering::Acquire);
             if cur_num_running_tasks == 0 {
                 break;
             }
-            std::thread::yield_now();
+            // pool thread gets unparked by worker thread once it finishes executing its task
+            // or encountered a panic doing so 
+            std::thread::park();
         }
         result
     }
@@ -138,6 +172,13 @@ impl ScopedThreadPool {
         match self.sender.as_mut().unwrap().send(task) {
             Ok(_) => {}
             Err(_) => {}
+        }
+    }
+
+    fn shutdown(&mut self){
+        drop(self.sender.take());
+        while let Some(thread) = self.threads.pop() {
+            let _res = thread.join();
         }
     }
 }

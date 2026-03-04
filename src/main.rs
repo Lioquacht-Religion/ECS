@@ -248,7 +248,6 @@ fn test_system19() {}
 fn test_system20() {}
 
 fn test_system21() {
-    panic!("destroy scope thread pool")
 }
 fn test_system22() {}
 fn test_system23() {}

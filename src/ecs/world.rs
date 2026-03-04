@@ -274,15 +274,11 @@ impl WorldData {
     }
 
     pub(crate) fn execute_commands(&mut self) {
-        while let Some(mut cq) = self
-            .commands_queues.get_command_queue_inuse_mut()
-            .pop()
-        {
+        while let Some(mut cq) = self.commands_queues.get_command_queue_inuse_mut().pop() {
             while let Some(command) = cq.get_mut().pop() {
                 command.exec(self);
             }
-            self.commands_queues.get_command_queue_unused_mut()
-                .push(cq);
+            self.commands_queues.get_command_queue_unused_mut().push(cq);
         }
     }
 }

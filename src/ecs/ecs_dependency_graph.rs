@@ -154,7 +154,7 @@ impl EcsDependencyGraph {
         self.system_keys.insert(system_id, key);
         key
     }
-    ///NOTE: Do not insert the same resource id multiple times 
+    ///NOTE: Do not insert the same resource id multiple times
     /// into the resource edges of a system.
     /// A system can only contain one of each resource as a system param.
     /// Otherwise this method will panic.
@@ -174,12 +174,10 @@ impl EcsDependencyGraph {
         let res = &mut self.resources[resource_id];
         res.system_edges.insert(system_key, ecs_edge);
         let system_node = &mut self.systems[system_key as usize];
-        if let Some(_res_edge_key) = system_node.resource_edges.get(&resource_key){
+        if let Some(_res_edge_key) = system_node.resource_edges.get(&resource_key) {
             panic!("A system cannot have multiple params of the same resource type.")
         }
-        let _ = system_node
-            .resource_edges
-            .insert(resource_key, ecs_edge);
+        let _ = system_node.resource_edges.insert(resource_key, ecs_edge);
 
         (system_key, resource_key)
     }
@@ -275,7 +273,7 @@ impl Default for EcsDependencyGraph {
 }
 
 #[cfg(test)]
-mod test{
+mod test {
     use crate::ecs::prelude::*;
 
     #[allow(unused)]
@@ -285,57 +283,71 @@ mod test{
 
     #[allow(unused)]
     struct Comp1(usize);
-    impl Component for Comp1{}
+    impl Component for Comp1 {}
     #[allow(unused)]
     struct Comp2(String);
-    impl Component for Comp2{}
+    impl Component for Comp2 {}
     #[allow(unused)]
     struct Comp3(String);
-    impl Component for Comp3{}
+    impl Component for Comp3 {}
 
-    fn invalid_res_sys_params_system(_res1_1: Res<Res1>, _res2: ResMut<Res2>, _res1_2: Res<Res1>){
+    fn invalid_res_sys_params_system(_res1_1: Res<Res1>, _res2: ResMut<Res2>, _res1_2: Res<Res1>) {
         panic!("This should not be reached by system execution.")
     }
 
-    fn invalid_query_sys_params_system(_query1: Query<(&Comp1, &mut Comp2)>, _query2: Query<(&mut Comp1, &mut Comp3)>){
+    fn invalid_query_sys_params_system(
+        _query1: Query<(&Comp1, &mut Comp2)>,
+        _query2: Query<(&mut Comp1, &mut Comp3)>,
+    ) {
         panic!("This should not be reached by system execution.")
     }
 
-    fn invalid_query_mult_same_comp_type_sys_params_system(_query1: Query<(&Comp1, &mut Comp1)>){
+    fn invalid_query_mult_same_comp_type_sys_params_system(_query1: Query<(&Comp1, &mut Comp1)>) {
         panic!("This should not be reached by system execution.")
     }
 
-    fn init_world() -> World{
+    fn init_world() -> World {
         let mut world = World::new();
         world.add_resource(Res1(909));
         world.add_resource(Res2(String::from("Bob Bobster")));
-        world.add_entity((Comp1(324), Comp2("edw".to_string()), Comp3("ewwevcwre".to_string())));
-        world.add_entity((Comp1(324), Comp2("edw".to_string()), Comp3("ewwevcwre".to_string())));
+        world.add_entity((
+            Comp1(324),
+            Comp2("edw".to_string()),
+            Comp3("ewwevcwre".to_string()),
+        ));
+        world.add_entity((
+            Comp1(324),
+            Comp2("edw".to_string()),
+            Comp3("ewwevcwre".to_string()),
+        ));
         world
     }
 
     #[test]
     #[should_panic(expected = "A system cannot have multiple params of the same resource type.")]
-    fn test_multiple_same_resource_types_in_sysparams(){
+    fn test_multiple_same_resource_types_in_sysparams() {
         let mut world = init_world();
         world.add_systems(invalid_res_sys_params_system);
         world.init_and_run();
     }
 
     #[test]
-    #[should_panic(expected = "A system cannot have multiple query params containing the same component types.")]
-    fn test_multiple_same_components_types_in_query_sysparams(){
+    #[should_panic(
+        expected = "A system cannot have multiple query params containing the same component types."
+    )]
+    fn test_multiple_same_components_types_in_query_sysparams() {
         let mut world = init_world();
         world.add_systems(invalid_query_sys_params_system);
         world.init_and_run();
     }
 
     #[test]
-    #[should_panic(expected = "A single system query param cannot contain multiple of the same component types.")]
-    fn test_single_query_sysparam_cant_contain_multiple_of_same_comp_type(){
+    #[should_panic(
+        expected = "A single system query param cannot contain multiple of the same component types."
+    )]
+    fn test_single_query_sysparam_cant_contain_multiple_of_same_comp_type() {
         let mut world = init_world();
         world.add_systems(invalid_query_mult_same_comp_type_sys_params_system);
         world.init_and_run();
     }
-
 }

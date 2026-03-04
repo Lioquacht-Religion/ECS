@@ -333,11 +333,18 @@ impl Scheduler for ParallelScheduler {
     }
 }
 
-fn find_conflicts_in_systems_params(graph: &EcsDependencyGraph, systems: &Systems, system_id: SystemId) -> Result<(), String>{
-    //TODO: 
+fn find_conflicts_in_systems_params(
+    graph: &EcsDependencyGraph,
+    systems: &Systems,
+    system_id: SystemId,
+) -> Result<(), String> {
+    //TODO:
     // conflicts between resource params can be found during conneting of multiple params of same resource type
     // edges to a system inside of dependency graph
-    let system_row_id = graph.system_keys.get(&system_id).expect("System should exist in graph at this point.");
+    let system_row_id = graph
+        .system_keys
+        .get(&system_id)
+        .expect("System should exist in graph at this point.");
     let system_node = &graph.systems[*system_row_id as usize];
     //system_node.//resource_edges.
 

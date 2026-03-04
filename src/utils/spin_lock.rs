@@ -48,7 +48,7 @@ impl<T> SpinLock<T> {
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut T{
+    pub fn get_mut(&mut self) -> &mut T {
         self.data.get_mut()
     }
 
@@ -72,16 +72,15 @@ mod test {
 
         let lock_str = &lock_str;
         std::thread::scope(move |s| {
-            
-                s.spawn(move || {
-                    let mut name = lock_str.lock();
-                    name.push(1);
-                });
-                s.spawn(move || {
-                    let mut name = lock_str.lock();
-                    name.push(2);
-                    name.push(2);
-                });
+            s.spawn(move || {
+                let mut name = lock_str.lock();
+                name.push(1);
+            });
+            s.spawn(move || {
+                let mut name = lock_str.lock();
+                name.push(2);
+                name.push(2);
+            });
         });
 
         let v = lock_str.lock();

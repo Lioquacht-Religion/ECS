@@ -1,44 +1,50 @@
 // one_shot_channel.rs
 
-use std::{cell::UnsafeCell, marker::PhantomData, mem::MaybeUninit, sync::atomic::{AtomicBool, Ordering}, thread::{self, Thread}};
+use std::{
+    cell::UnsafeCell,
+    marker::PhantomData,
+    mem::MaybeUninit,
+    sync::atomic::{AtomicBool, Ordering},
+    thread::{self, Thread},
+};
 
 pub struct OneShotChannel<T> {
     data: UnsafeCell<MaybeUninit<T>>,
     ready: AtomicBool,
 }
 
-pub struct Sender<'a, T>{
+pub struct Sender<'a, T> {
     channel: &'a OneShotChannel<T>,
     receiver_thread: Thread,
 }
 
-unsafe impl<T: Send> Sync for Sender<'_, T>{
-}
-unsafe impl<T: Send> Send for Sender<'_, T>{
-}
+unsafe impl<T: Send> Sync for Sender<'_, T> {}
+unsafe impl<T: Send> Send for Sender<'_, T> {}
 
-pub struct Receiver<'a, T>{
+pub struct Receiver<'a, T> {
     channel: &'a OneShotChannel<T>,
-    _not_send_marker: PhantomData<*const ()>
+    _not_send_marker: PhantomData<*const ()>,
 }
 
-unsafe impl<T: Send> Sync for Receiver<'_, T>{
-}
+unsafe impl<T: Send> Sync for Receiver<'_, T> {}
 
-impl<T> OneShotChannel<T>{
-    pub const fn new() -> Self{
-        Self { data: UnsafeCell::new(MaybeUninit::uninit()), ready: AtomicBool::new(false) }
+impl<T> OneShotChannel<T> {
+    pub const fn new() -> Self {
+        Self {
+            data: UnsafeCell::new(MaybeUninit::uninit()),
+            ready: AtomicBool::new(false),
+        }
     }
-    pub fn split<'a>(&'a mut self) -> (Sender<'a, T>, Receiver<'a, T>){
+    pub fn split<'a>(&'a mut self) -> (Sender<'a, T>, Receiver<'a, T>) {
         *self = Self::new();
         (Sender::new(self), Receiver::new(self))
     }
 }
 
-impl<T> Drop for OneShotChannel<T>{
+impl<T> Drop for OneShotChannel<T> {
     fn drop(&mut self) {
-        if *self.ready.get_mut(){
-            unsafe{
+        if *self.ready.get_mut() {
+            unsafe {
                 //SAFETY: atomic bool ready was set to true by writing sender if initialized,
                 // or send to false if already received from receiver,
                 // so if ready is true, data is currently in an initialized state and needs to be dropped
@@ -50,17 +56,17 @@ impl<T> Drop for OneShotChannel<T>{
 
 impl<'a, T> Sender<'a, T> {
     fn new(channel: &'a OneShotChannel<T>) -> Self {
-        Self { 
+        Self {
             channel: channel,
             receiver_thread: thread::current(),
         }
     }
 
-    pub fn send(self, data: T){
-        unsafe{
+    pub fn send(self, data: T) {
+        unsafe {
             //SAFETY: consumes the sender, no further overwriting of data possible
             // only access to shared reference is reading receiver
-            (*self.channel.data.get()).write(data); 
+            (*self.channel.data.get()).write(data);
             self.channel.ready.store(true, Ordering::Release);
             self.receiver_thread.unpark();
         }
@@ -69,9 +75,9 @@ impl<'a, T> Sender<'a, T> {
 
 impl<'a, T> Receiver<'a, T> {
     fn new(channel: &'a OneShotChannel<T>) -> Self {
-        Self { 
+        Self {
             channel: channel,
-            _not_send_marker: PhantomData::default()
+            _not_send_marker: PhantomData::default(),
         }
     }
 
@@ -82,8 +88,7 @@ impl<'a, T> Receiver<'a, T> {
             if spin_count < 50 {
                 std::hint::spin_loop();
                 spin_count += 1;
-            }
-            else {
+            } else {
                 std::thread::park();
             }
         }
@@ -97,19 +102,18 @@ impl<'a, T> Receiver<'a, T> {
 }
 
 #[cfg(test)]
-mod test{
+mod test {
     use crate::utils::one_shot_channel::OneShotChannel;
 
     #[test]
     fn test_oneshot_channel() {
         let mut ch = OneShotChannel::new();
-        std::thread::scope(|scope|{
+        std::thread::scope(|scope| {
             let (s, r) = ch.split();
             scope.spawn(move || {
                 s.send(("blabla".to_string(), 34));
             });
             assert_eq!(r.receive(), ("blabla".to_string(), 34));
         });
-
     }
 }
