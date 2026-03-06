@@ -9,9 +9,9 @@ use std::{
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::{Entity, EntityKeyIterUnsafe},
+        entity::Entity
     },
-    utils::tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
+    utils::tuple_iters::TupleIterator,
 };
 
 use super::{
@@ -158,12 +158,14 @@ impl TableSoA {
         }
     }
 
+    /*
     #[allow(unused)]
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableSoA>>(
         &'a mut self,
     ) -> TableSoaTupleIter<TC::Construct<'a>> {
         unsafe { new_table_soa_iter::<TC>(self) }
     }
+    */
 
     /// #SAFETY:
     /// Component type T needs to be contained by the table,
@@ -182,6 +184,20 @@ impl TableSoA {
         }
     }
 
+    pub(crate) unsafe fn get_single_comp_iter_opt<'c, T: Component>(
+        &'c self,
+    ) -> Option<ThinBlobIterUnsafe<'c, T>> {
+        unsafe {
+            if let Some(col) = self.columns
+                .get(&TypeId::of::<T>()){
+                Some(col.tuple_iter())
+            }
+            else{
+                None
+            }
+        }
+    }
+
     /// #SAFETY:
     /// Component type T needs to be contained by the table,
     /// otherwise this function will panic.
@@ -196,6 +212,20 @@ impl TableSoA {
                     type_name::<T>()
                 ))
                 .tuple_iter_mut()
+        }
+    }
+
+    pub(crate) unsafe fn get_single_comp_iter_mut_opt<'c, T: Component>(
+        &'c mut self,
+    ) -> Option<ThinBlobIterMutUnsafe<'c, T>> {
+        unsafe {
+            if let Some(col) = self.columns
+                .get_mut(&TypeId::of::<T>()){
+                Some(col.tuple_iter_mut())
+            }
+            else{
+                None
+            }
         }
     }
 }
@@ -217,6 +247,7 @@ pub(crate) struct TableSoaTupleIter<T: TupleIterator> {
     index: usize,
 }
 
+/*
 #[allow(unused)]
 pub(crate) unsafe fn new_table_soa_iter<'table, TC: TupleIterConstructor<TableSoA>>(
     table: &'table mut TableSoA,
@@ -267,12 +298,12 @@ impl TupleConstructorSource for TableSoA {
         }
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
     use crate::ecs::component::StorageTypes;
     use crate::ecs::query::Query;
-    use crate::ecs::storages::entity_storage::EntityStorage;
     use crate::ecs::world::WorldData;
     use crate::ecs::{component::Component, system::Res, world::World};
 

@@ -260,6 +260,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
 pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     type QueryItem<'new>: QueryParam;
 
+    //TODO: maybe fuse this three function into one struct and add if queryparam is optional
     fn type_ids_rec(vec: &mut Vec<TypeId>);
     fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>);
     fn ref_kinds(vec: &mut Vec<RefKind>);
@@ -294,20 +295,45 @@ impl<T: Component> QueryParam for &mut T {
     }
 }
 
-//TODO:
-//impl<'p, P: QueryParam> QueryParam for Option<P> {}
+impl<'p, T: Component> QueryParam for Option<&T> 
+{
+    type QueryItem<'new> = Option<&'new T>;
+    fn ref_kinds(vec: &mut Vec<RefKind>) {
+        vec.push(RefKind::Shared);
+    }
+    fn type_ids_rec(vec: &mut Vec<TypeId>) {
+        vec.push(TypeId::of::<T>());
+    }
+    fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
+        vec.push(world_data.create_or_get_component::<T>());
+    }
+}
+
+impl<'p, T: Component> QueryParam for Option<&mut T> 
+{
+    type QueryItem<'new> = Option<&'new mut T>;
+    fn ref_kinds(vec: &mut Vec<RefKind>) {
+        vec.push(RefKind::Shared);
+    }
+    fn type_ids_rec(vec: &mut Vec<TypeId>) {
+        vec.push(TypeId::of::<T>());
+    }
+    fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
+        vec.push(world_data.create_or_get_component::<T>());
+    }
+}
 
 impl QueryParam for EntityKey {
     type QueryItem<'new> = EntityKey;
 
     fn type_ids_rec(_vec: &mut Vec<TypeId>) {
-        //TODO: do nothing here?
+        // do nothing here for entity keys
     }
     fn comp_ids_rec(_world_data: &mut WorldData, _vec: &mut Vec<ComponentId>) {
-        //TODO: do nothing here?
+        // do nothing here for entity keys
     }
     fn ref_kinds(_vec: &mut Vec<RefKind>) {
-        //TODO: do nothing here?
+        // do nothing here for entity keys
     }
 }
 
@@ -418,6 +444,25 @@ mod test {
         assert_eq!(query2.iter().count(), 2);
     }
 
+    //TODO: currently optional components are still mandatory, store extra information that they
+    //are, for filtering
+    fn test_system6(mut query1: Query<&Pos2>, mut query2: Query<(&Comp1, Option<&Pos1>)>) {
+        for (comp1, pos1) in query2.iter() {
+            println!("comp1: {}; {};", comp1.0, comp1.1);
+            if let Some(pos1) = pos1 {
+                println!("pos1: {}; {}",  pos1.0, pos1.1);
+            }
+            else {
+                println!("no pos1");
+            }
+        }
+        assert_eq!(query2.iter().count(), 4);
+        for p2 in query1.iter() {
+            println!("p2: {}", p2.0);
+        }
+        assert_eq!(query2.iter().count(), 2);
+    }
+
     #[test]
     fn queries_test1() {
         let mut world = World::new();
@@ -431,6 +476,7 @@ mod test {
         world.add_systems(test_system3);
         world.add_systems(test_system4);
         world.add_systems(test_system5);
+        world.add_systems(test_system6);
 
         world.add_entity((
             Comp2(56, 78),
@@ -444,6 +490,7 @@ mod test {
         world.add_entity(Comp1(12, 34));
         world.add_entity((Pos1(12, 34), Pos2(12, 43)));
         world.add_entity((Pos1(12, 34), Pos2(12, 43)));
+        world.add_entity((Pos1(12, 34), Comp1(12, 34)));
 
         world.init_and_run();
     }

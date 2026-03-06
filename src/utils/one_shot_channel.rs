@@ -82,13 +82,14 @@ impl<'a, T> Receiver<'a, T> {
     }
 
     pub fn receive(self) -> T {
-        //TODO: handle blocking better by parking/unparking thread
         let mut spin_count = 0;
         while !self.channel.ready.swap(false, Ordering::Acquire) {
             if spin_count < 50 {
                 std::hint::spin_loop();
                 spin_count += 1;
             } else {
+                // parking thread to not waste cpu cycles
+                // will be unparked by worker threads finishing their tasks
                 std::thread::park();
             }
         }

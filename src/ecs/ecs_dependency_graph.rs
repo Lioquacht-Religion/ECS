@@ -230,6 +230,10 @@ impl EcsDependencyGraph {
             //TODO add archetype edges to components?
         }
     }
+    ///NOTE: Do not insert the same component ids multiple times
+    /// into the componenent edges of a system.
+    /// A system can currently only contain one of each component as a system param.
+    /// Otherwise this method will panic.
     pub fn insert_system_components(
         &mut self,
         system_id: SystemId,
@@ -245,8 +249,11 @@ impl EcsDependencyGraph {
             };
             let comp: &mut ComponentNode = &mut self.components[comp_key as usize];
             comp.system_edges.insert(system_key, edge);
-            let _ = &mut self.systems[system_key as usize]
-                .component_edges
+            let system_node = &mut self.systems[system_key as usize];
+            if let Some(_comp_edge_key) = system_node.component_edges.get(&comp_key) {
+                panic!("A system cannot have multiple params of the same component type.")
+            }
+            let _ = system_node.component_edges
                 .insert(comp_key, edge);
         }
     }
@@ -320,7 +327,29 @@ mod test {
             Comp2("edw".to_string()),
             Comp3("ewwevcwre".to_string()),
         ));
+        world.add_entity((
+            Comp1(324),
+            Comp2("edw".to_string()),
+        ));
+        world.add_entity((
+            Comp1(324),
+            Comp3("ewwevcwre".to_string()),
+        ));
+        world.add_entity((
+            Comp1(324),
+            Comp3("ewwevcwre".to_string()),
+        ));
+
         world
+    }
+
+    fn test_query_same_component_sets_with_excluding_filters_system(
+        mut comp1_2_query: Query<(&mut Comp1, &Comp2), With<Comp3>>,
+        mut comp1_3_query: Query<(&mut Comp1, &Comp3), With<Comp2>>,
+    ) {
+        //TODO: this should be possible
+        assert_eq!(2, comp1_2_query.iter().count());
+        assert_eq!(2, comp1_3_query.iter().count());
     }
 
     #[test]
@@ -333,7 +362,7 @@ mod test {
 
     #[test]
     #[should_panic(
-        expected = "A system cannot have multiple query params containing the same component types."
+        expected = "A system cannot have multiple params of the same component type."
     )]
     fn test_multiple_same_components_types_in_query_sysparams() {
         let mut world = init_world();
@@ -343,11 +372,19 @@ mod test {
 
     #[test]
     #[should_panic(
-        expected = "A single system query param cannot contain multiple of the same component types."
+        expected = "A system cannot have multiple params of the same component type."
     )]
     fn test_single_query_sysparam_cant_contain_multiple_of_same_comp_type() {
         let mut world = init_world();
         world.add_systems(invalid_query_mult_same_comp_type_sys_params_system);
         world.init_and_run();
     }
+
+    #[test]
+    fn test_query_same_component_sets_with_excluding_filters() {
+        let mut world = init_world();
+        world.add_systems(test_query_same_component_sets_with_excluding_filters_system);
+        world.init_and_run();
+    }
+
 }

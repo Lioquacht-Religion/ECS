@@ -44,7 +44,6 @@ impl_ecs_id!(ComponentId);
 pub struct Archetype {
     #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
-    //pub(crate) comp_type_ids: Vec<TypeId>, TODO: is this needed?
     pub(crate) soa_comp_ids: SortedVec<ComponentId>,
     pub(crate) aos_comp_ids: SortedVec<ComponentId>,
 }
@@ -99,7 +98,7 @@ mod test {
     use crate::{
         ecs::{
             entity::EntityKey,
-            prelude::{StorageTypes, With},
+            prelude::{StorageTypes, With, Without},
             query::Query,
             world::{World, WorldData},
         },
@@ -192,8 +191,8 @@ mod test {
     }
 
     fn test_particle_count(
-        mut player_query: Query<(&mut Pos3, &Velocity), With<Player>>,
-        mut particle_query: Query<(&mut Pos3, &Velocity), With<Particle>>,
+        mut player_query: Query<(&mut Pos3, &Velocity), (With<Player>, Without<Particle>)>,
+        mut particle_query: Query<(&mut Pos3, &Velocity), (With<Particle>, Without<Player>)>,
     ) {
         assert_eq!(2, player_query.iter().count());
         for (p, v) in particle_query.iter() {

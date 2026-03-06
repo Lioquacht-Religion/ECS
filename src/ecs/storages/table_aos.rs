@@ -219,12 +219,14 @@ impl TableAoS {
         }
     }
 
+    /*
     #[allow(unused)]
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(
         &'a mut self,
     ) -> TableAosTupleIter<TC::Construct<'a>> {
         unsafe { new_table_aos_iter::<TC>(self) }
     }
+    */
 
     pub(crate) unsafe fn get_single_comp_iter<'c, T: Component>(
         &'c self,
@@ -253,6 +255,34 @@ impl TableAoS {
             ));
         let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
         unsafe { self.vec.tuple_inner_type_iter_mut(*offset) }
+    }
+
+    pub(crate) unsafe fn get_single_comp_iter_opt<'c, T: Component>(
+        &'c self,
+    ) -> Option<ThinBlobInnerTypeIterUnsafe<'c, T>> {
+        if let Some(index) = self
+            .type_meta_data_map
+            .get(&TypeId::of::<T>()) {
+            let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
+            Some(unsafe { self.vec.tuple_inner_type_iter(*offset) })
+        }
+        else{
+            None
+        }
+    }
+
+    pub(crate) unsafe fn get_single_comp_iter_mut_opt<'c, T: Component>(
+        &'c mut self,
+    ) -> Option<ThinBlobInnerTypeIterMutUnsafe<'c, T>> {
+        if let Some(index) = self
+            .type_meta_data_map
+            .get(&TypeId::of::<T>()) {
+            let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
+            Some(unsafe { self.vec.tuple_inner_type_iter_mut(*offset) })
+        }
+        else{
+            None
+        }
     }
 
     unsafe fn drop_entity_row(&mut self, index: usize) {
@@ -299,6 +329,7 @@ pub(crate) struct TableAosTupleIter<T: TupleIterator> {
     index: usize,
 }
 
+/*
 #[allow(unused)]
 pub(crate) unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAoS>>(
     table: &'table mut TableAoS,
@@ -311,6 +342,7 @@ pub(crate) unsafe fn new_table_aos_iter<'table, TC: TupleIterConstructor<TableAo
         }
     }
 }
+*/
 
 impl<T: TupleIterator> Iterator for TableAosTupleIter<T> {
     type Item = T::Item;
@@ -324,7 +356,7 @@ impl<T: TupleIterator> Iterator for TableAosTupleIter<T> {
         }
     }
 }
-
+/*
 impl TupleConstructorSource for TableAoS {
     type IterType<'c, T: Component> = ThinBlobInnerTypeIterUnsafe<'c, T>;
     type IterMutType<'c, T: Component> = ThinBlobInnerTypeIterMutUnsafe<'c, T>;
@@ -348,6 +380,7 @@ impl TupleConstructorSource for TableAoS {
         unsafe { self.vec.tuple_inner_type_iter_mut(offset) }
     }
 }
+*/
 
 #[cfg(test)]
 mod test {

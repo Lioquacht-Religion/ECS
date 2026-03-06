@@ -609,14 +609,6 @@ mod test {
         assert_eq!(4350 + 999999999, *prm2.value);
     }
 
-    fn test_system2() {}
-    fn test_system3() {}
-    fn test_system4() {}
-    fn test_system5() {}
-    fn test_system6() {}
-    fn test_system7() {}
-    fn test_system8() {}
-
     #[test]
     fn it_works() {
         let mut world = World::new();

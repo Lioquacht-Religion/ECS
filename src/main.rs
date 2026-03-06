@@ -100,6 +100,7 @@ fn test_system1(
 
 #[inline(never)]
 fn test_system2(
+    total_dur: ResMut<TotalDurSoa>,
     query_soa: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
@@ -107,7 +108,7 @@ fn test_system2(
         (&mut Comp1AoS, &mut Comp2AoS), //, Or<(With<Pos4AoS>, With<Comp1AoS>)>
     >,
 ) {
-    test_soa(query_soa);
+    test_soa(total_dur, query_soa);
     test_aos(query_aos);
 
     /*
@@ -124,13 +125,21 @@ fn test_system2(
     */
 }
 
+struct TotalDurSoa(Duration);
+
 #[inline(never)]
-fn test_soa(mut query_soa: Query<(&mut Comp1, &mut Comp2)>) {
+fn test_soa(mut total_dur: ResMut<TotalDurSoa>, mut query_soa: Query<(&mut Comp1, &mut Comp2)>) {
     let start = Instant::now();
     for (comp1, comp2) in query_soa.iter() {
         do_some_work((comp1, comp2));
     }
-    println!("soa iter: {} nanos", start.elapsed().as_nanos());
+    let el = start.elapsed();
+    let nanos = el.as_nanos();
+    total_dur.0 = total_dur.0 + el;
+    println!("soa iter: {} nanos", nanos);
+    let nanos = total_dur.0.as_nanos();
+    let millis = total_dur.0.as_millis();
+    println!("total soa iter: {} nanos {} millis", nanos, millis);
 }
 
 #[inline(never)]
@@ -277,6 +286,7 @@ fn test_table_query_iter() {
 
     world.add_resource(num1);
     world.add_resource(num2);
+    world.add_resource(TotalDurSoa(Duration::ZERO));
 
     init_es_insert(&mut world);
 

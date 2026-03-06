@@ -21,9 +21,12 @@ pub trait TupleConstructorSource: 'static {
     type IterMutType<'c, T: Component>: TupleIterator
     where
         Self: 'c;
+
     fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c>;
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T>;
     unsafe fn get_iter_mut<'c, T: Component>(&'c mut self) -> Self::IterMutType<'c, T>;
+    unsafe fn get_iter_opt<'c, T: Component>(&'c mut self) -> Option<Self::IterType<'c, T>>;
+    unsafe fn get_iter_mut_opt<'c, T: Component>(&'c mut self) -> Option<Self::IterMutType<'c, T>>;
 }
 
 pub trait TupleIterConstructor<S: TupleConstructorSource> {
