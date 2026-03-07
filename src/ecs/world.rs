@@ -8,7 +8,7 @@ use crate::{
         ecs_dependency_graph::EcsDependencyGraph,
         entity::{Entities, EntityKey},
         prelude::Component,
-        query::QueryParam,
+        query::{QueryParam, QueryParamMetaData},
         resource::ResourceId,
         scheduler::ParallelScheduler,
         storages::{cache::EntityStorageCache, table_storage::TableStorage},
@@ -193,9 +193,9 @@ impl WorldData {
 
     pub(crate) fn find_fitting_archetypes(
         &self,
-        query_comp_ids: &SortedVec<ComponentId>,
+        query_param_meta_data: &SortedVec<QueryParamMetaData>,
     ) -> Vec<ArchetypeId> {
-        self.entity_storage.find_fitting_archetypes(query_comp_ids)
+        self.entity_storage.find_fitting_archetypes(query_param_meta_data)
     }
 
     pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId {

@@ -100,7 +100,8 @@ fn test_system1(
 
 #[inline(never)]
 fn test_system2(
-    total_dur: ResMut<TotalDurSoa>,
+    total_dur_soa: ResMut<TotalDurSoa>,
+    total_dur_aos: ResMut<TotalDurAos>,
     query_soa: Query<
         (&mut Comp1, &mut Comp2), //, With<Pos4>
     >,
@@ -108,8 +109,8 @@ fn test_system2(
         (&mut Comp1AoS, &mut Comp2AoS), //, Or<(With<Pos4AoS>, With<Comp1AoS>)>
     >,
 ) {
-    test_soa(total_dur, query_soa);
-    test_aos(query_aos);
+    test_soa(total_dur_soa, query_soa);
+    test_aos(total_dur_aos, query_aos);
 
     /*
     println!(
@@ -126,6 +127,7 @@ fn test_system2(
 }
 
 struct TotalDurSoa(Duration);
+struct TotalDurAos(Duration);
 
 #[inline(never)]
 fn test_soa(mut total_dur: ResMut<TotalDurSoa>, mut query_soa: Query<(&mut Comp1, &mut Comp2)>) {
@@ -143,12 +145,19 @@ fn test_soa(mut total_dur: ResMut<TotalDurSoa>, mut query_soa: Query<(&mut Comp1
 }
 
 #[inline(never)]
-fn test_aos(mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
+fn test_aos(mut total_dur: ResMut<TotalDurAos>, mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
     let start = Instant::now();
     for (comp1, comp2) in query_aos.iter() {
         do_some_work_aos((comp1, comp2));
     }
-    println!("aos iter: {} nanos", start.elapsed().as_nanos());
+    let el = start.elapsed();
+    let nanos = el.as_nanos();
+    total_dur.0 = total_dur.0 + el;
+    println!("aos iter: {} nanos", nanos);
+    let nanos = total_dur.0.as_nanos();
+    let millis = total_dur.0.as_millis();
+    println!("total aos iter: {} nanos {} millis", nanos, millis);
+
 }
 
 const CAPACITY: usize = 100_000;
@@ -287,6 +296,7 @@ fn test_table_query_iter() {
     world.add_resource(num1);
     world.add_resource(num2);
     world.add_resource(TotalDurSoa(Duration::ZERO));
+    world.add_resource(TotalDurAos(Duration::ZERO));
 
     init_es_insert(&mut world);
 
@@ -405,22 +415,32 @@ fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4
         e3.as_nanos()
     );*/
 }
-fn do_some_work_aos(c: (&mut Comp1AoS, &mut Comp2AoS)) {
+fn do_some_work_aos(mut c: (&mut Comp1AoS, &mut Comp2AoS)) {
+    do_some_work12(&mut c);
+    do_some_work22(&mut c);
+    do_some_work32(&mut c);
+}
+fn do_some_work12(c: &mut (&mut Comp1AoS, &mut Comp2AoS)) {
     c.0.0 /= 21;
     c.0.1 /= 437;
     c.1.0 /= 21;
     c.1.1 /= 437;
+}
 
+fn do_some_work22(c: &mut (&mut Comp1AoS, &mut Comp2AoS)) {
     c.0.0 /= 392049;
     c.0.1 /= 392049;
     c.1.0 /= 392049;
     c.1.1 /= 392049;
+}
 
+fn do_some_work32(c: &mut (&mut Comp1AoS, &mut Comp2AoS)) {
     c.0.0 *= c.1.1;
     c.0.1 *= c.1.0;
     c.1.0 += c.0.1;
     c.1.1 += c.0.0;
 }
+
 fn do_some_work(mut c: (&mut Comp1, &mut Comp2)) {
     do_some_work1(&mut c);
     do_some_work2(&mut c);

@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use crate::{
     ecs::{
         component::{ArchetypeId, ComponentId},
-        query::RefKind,
+        query::{QueryParamMetaData, RefKind},
         resource::ResourceId,
         system::SystemId,
     },
-    utils::ecs_id::{EcsId, impl_ecs_id},
+    utils::ecs_id::{impl_ecs_id, EcsId},
 };
 
 pub enum EcsNode {
@@ -237,13 +237,12 @@ impl EcsDependencyGraph {
     pub fn insert_system_components(
         &mut self,
         system_id: SystemId,
-        comp_ids: &[ComponentId],
-        ref_kinds: &[RefKind],
+        meta_datas: &[QueryParamMetaData],
     ) {
         let system_key = self.insert_system(system_id);
-        for (i, cid) in comp_ids.iter().enumerate() {
-            let comp_key = self.insert_component(*cid);
-            let edge = match ref_kinds[i] {
+        for meta_data in meta_datas.iter() {
+            let comp_key = self.insert_component(meta_data.comp_id);
+            let edge = match meta_data.ref_kind {
                 RefKind::Exclusive => EcsEdge::Excl,
                 RefKind::Shared => EcsEdge::Shared,
             };

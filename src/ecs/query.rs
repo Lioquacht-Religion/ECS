@@ -1,6 +1,6 @@
 // query.rs
 
-use std::{any::TypeId, collections::HashSet, marker::PhantomData};
+use std::{any::TypeId, collections::HashSet, hash::Hash, marker::PhantomData};
 
 use crate::{
     all_tuples,
@@ -58,7 +58,7 @@ pub(crate) struct QueryStateKey {
     filter: Vec<FilterElem>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RefKind {
     Shared,
     Exclusive,
@@ -195,18 +195,18 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     ) {
         let mut comp_ids = world_data.get_cache_mut().compid_vec_cache.take_cached();
         P::comp_ids_rec(world_data, &mut comp_ids);
-        dbg!(&comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
-        let mut ref_kinds: Vec<RefKind> = Vec::with_capacity(comp_ids.get_vec().len());
-        P::ref_kinds(&mut ref_kinds);
-        dbg!(&ref_kinds);
+
+        let mut query_prm_meta_data= world_data.get_cache_mut().query_param_meta_data_vec_cache.take_cached();
+        P::meta_data(world_data, &mut query_prm_meta_data);
+        let query_prm_meta_data: SortedVec<QueryParamMetaData> = query_prm_meta_data.into();
 
         let mut filter = Vec::new();
         F::get_and_filters(world_data, &mut filter);
 
         let query_state_key = QueryStateKey { comp_ids, filter };
 
-        let arch_ids = world_data.find_fitting_archetypes(&query_state_key.comp_ids);
+        let arch_ids = world_data.find_fitting_archetypes(&query_prm_meta_data);
 
         // remove archetypes that do not match the filter
         let arch_ids: Vec<ArchetypeId> = arch_ids
@@ -237,8 +237,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         let depend_graph = &mut world_data.get_depend_graph_mut();
         depend_graph.insert_system_components(
             system_id,
-            &query_state_key.comp_ids.get_vec(),
-            &ref_kinds,
+            &query_prm_meta_data.get_vec()
         );
         depend_graph.insert_query_archetypes(next_query_id, &arch_ids);
         depend_graph.insert_system_query(system_id, next_query_id);
@@ -257,13 +256,37 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
     }
 }
 
+#[derive(Debug, Eq, PartialOrd)]
+pub struct QueryParamMetaData{
+    pub type_id: TypeId,
+    pub comp_id: ComponentId,
+    pub ref_kind: RefKind,
+    pub optional: bool,
+}
+impl Hash for QueryParamMetaData{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.comp_id.hash(state);
+    }
+}
+impl PartialEq for QueryParamMetaData{
+    fn eq(&self, other: &Self) -> bool {
+        self.comp_id.eq(&other.comp_id)
+    }
+}
+impl Ord for QueryParamMetaData{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.comp_id.cmp(&other.comp_id)
+    }
+}
+
 pub trait QueryParam: TupleIterConstructor<QueryDataType> {
     type QueryItem<'new>: QueryParam;
 
-    //TODO: maybe fuse this three function into one struct and add if queryparam is optional
     fn type_ids_rec(vec: &mut Vec<TypeId>);
     fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>);
     fn ref_kinds(vec: &mut Vec<RefKind>);
+    fn optional_param_rec(vec: &mut Vec<bool>);
+    fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>);
 }
 
 impl<T: Component> QueryParam for &T {
@@ -279,6 +302,15 @@ impl<T: Component> QueryParam for &T {
     fn ref_kinds(vec: &mut Vec<RefKind>) {
         vec.push(RefKind::Shared);
     }
+    fn optional_param_rec(vec: &mut Vec<bool>) {
+        vec.push(false);
+    }
+    fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
+        let comp_id = world_data.create_or_get_component::<T>();
+        vec.push(QueryParamMetaData { 
+            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Shared, optional: false 
+        });
+    }
 }
 impl<T: Component> QueryParam for &mut T {
     type QueryItem<'new> = &'new mut T;
@@ -292,6 +324,15 @@ impl<T: Component> QueryParam for &mut T {
     }
     fn ref_kinds(vec: &mut Vec<RefKind>) {
         vec.push(RefKind::Exclusive);
+    }
+    fn optional_param_rec(vec: &mut Vec<bool>) {
+        vec.push(false);
+    }
+    fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
+        let comp_id = world_data.create_or_get_component::<T>();
+        vec.push(QueryParamMetaData { 
+            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Exclusive, optional: false 
+        });
     }
 }
 
@@ -307,6 +348,16 @@ impl<'p, T: Component> QueryParam for Option<&T>
     fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
         vec.push(world_data.create_or_get_component::<T>());
     }
+    fn optional_param_rec(vec: &mut Vec<bool>) {
+        vec.push(true);
+    }
+    fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
+        let comp_id = world_data.create_or_get_component::<T>();
+        vec.push(QueryParamMetaData { 
+            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Shared, optional: true
+        });
+    }
+
 }
 
 impl<'p, T: Component> QueryParam for Option<&mut T> 
@@ -321,6 +372,15 @@ impl<'p, T: Component> QueryParam for Option<&mut T>
     fn comp_ids_rec(world_data: &mut WorldData, vec: &mut Vec<ComponentId>) {
         vec.push(world_data.create_or_get_component::<T>());
     }
+    fn optional_param_rec(vec: &mut Vec<bool>) {
+        vec.push(true);
+    }
+    fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
+        let comp_id = world_data.create_or_get_component::<T>();
+        vec.push(QueryParamMetaData { 
+            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Exclusive, optional: true
+        });
+    }
 }
 
 impl QueryParam for EntityKey {
@@ -333,6 +393,12 @@ impl QueryParam for EntityKey {
         // do nothing here for entity keys
     }
     fn ref_kinds(_vec: &mut Vec<RefKind>) {
+        // do nothing here for entity keys
+    }
+    fn optional_param_rec(_vec: &mut Vec<bool>) {
+        // do nothing here for entity keys
+    }
+    fn meta_data(_world_data: &mut WorldData, _vec: &mut Vec<QueryParamMetaData>) {
         // do nothing here for entity keys
     }
 }
@@ -352,6 +418,12 @@ macro_rules! impl_query_param_tuples {
                fn ref_kinds(vec: &mut Vec<RefKind>){
                    $($t::ref_kinds(vec);)*
                }
+               fn optional_param_rec(vec: &mut Vec<bool>) {
+                   $($t::optional_param_rec(vec);)*
+               }
+               fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
+                   $($t::meta_data(world_data, vec);)*
+               }
         }
     };
 }
@@ -369,7 +441,7 @@ mod test {
     use crate::ecs::{
         component::Component,
         query::query_filter::{Or, With, Without},
-        system::Res,
+        system::{Res, ResMut},
         world::World,
     };
 
@@ -444,9 +516,7 @@ mod test {
         assert_eq!(query2.iter().count(), 2);
     }
 
-    //TODO: currently optional components are still mandatory, store extra information that they
-    //are, for filtering
-    fn test_system6(mut query1: Query<&Pos2>, mut query2: Query<(&Comp1, Option<&Pos1>)>) {
+    fn test_system6(mut test_sys6_ran: ResMut<TestSystem6Ran>, mut query1: Query<&Pos2>, mut query2: Query<(&Comp1, Option<&Pos1>)>) {
         for (comp1, pos1) in query2.iter() {
             println!("comp1: {}; {};", comp1.0, comp1.1);
             if let Some(pos1) = pos1 {
@@ -456,12 +526,16 @@ mod test {
                 println!("no pos1");
             }
         }
-        assert_eq!(query2.iter().count(), 4);
+        assert_eq!(query2.iter().count(), 5);
         for p2 in query1.iter() {
             println!("p2: {}", p2.0);
         }
-        assert_eq!(query2.iter().count(), 2);
+        assert_eq!(query1.iter().count(), 2);
+        test_sys6_ran.0 = true;
     }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct TestSystem6Ran(bool);
 
     #[test]
     fn queries_test1() {
@@ -469,6 +543,7 @@ mod test {
         let num1: i32 = 2345678;
         let num2: usize = 33330000;
 
+        world.add_resource(TestSystem6Ran(false));
         world.add_resource(num1);
         world.add_resource(num2);
         world.add_systems(test_system1);
@@ -493,5 +568,7 @@ mod test {
         world.add_entity((Pos1(12, 34), Comp1(12, 34)));
 
         world.init_and_run();
+
+        assert_eq!(world.get_resource::<TestSystem6Ran>(), Some(&TestSystem6Ran(true)));
     }
 }

@@ -183,11 +183,3 @@ impl<E> Edge<E> {
         Self { value, node_key }
     }
 }
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test_graph1() {
-        unimplemented!()
-    }
-}

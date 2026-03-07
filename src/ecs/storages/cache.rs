@@ -2,7 +2,7 @@
 
 use std::ptr::NonNull;
 
-use crate::ecs::component::ComponentId;
+use crate::ecs::{component::ComponentId, query::QueryParamMetaData};
 
 use super::thin_blob_vec::CompElemPtr;
 
@@ -40,6 +40,7 @@ impl<T> Cachable for Vec<T> {
 
 pub(crate) struct EntityStorageCache {
     pub(crate) ptr_vec_cache: CollectionCache<Vec<NonNull<u8>>>,
+    pub(crate) query_param_meta_data_vec_cache: CollectionCache<Vec<QueryParamMetaData>>,
     pub(crate) compid_vec_cache: CollectionCache<Vec<ComponentId>>,
     pub(crate) compelemptr_vec_cache: CollectionCache<Vec<CompElemPtr>>,
 }
@@ -49,6 +50,7 @@ impl EntityStorageCache {
         Self {
             ptr_vec_cache: CollectionCache::new(),
             compid_vec_cache: CollectionCache::new(),
+            query_param_meta_data_vec_cache: CollectionCache::new(),
             compelemptr_vec_cache: CollectionCache::new(),
         }
     }

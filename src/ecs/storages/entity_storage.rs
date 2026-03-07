@@ -7,7 +7,7 @@ use crate::{
         component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
         ecs_dependency_graph::EcsDependencyGraph,
         entity::{Entities, Entity, EntityKey},
-        query::QueryParam,
+        query::{QueryParam, QueryParamMetaData},
     },
     utils::{sorted_vec::SortedVec, tuple_iters::TupleIterator, tuple_types::TupleTypesExt},
 };
@@ -42,18 +42,42 @@ impl EntityStorage {
 
     pub(crate) fn find_fitting_archetypes(
         &self,
-        query_comp_ids: &SortedVec<ComponentId>,
+        query_comp_ids: &SortedVec<QueryParamMetaData>,
     ) -> Vec<ArchetypeId> {
         self.compids_archid_map
             .iter()
             .filter_map(|(arch_cids, arch_id)| {
-                if query_comp_ids.is_subset_of(arch_cids) {
+                if Self::is_subset_of(query_comp_ids, arch_cids) {
                     Some(*arch_id)
                 } else {
                     None
                 }
             })
             .collect()
+    }
+
+    pub(crate) fn is_subset_of(possible_subset: &SortedVec<QueryParamMetaData>, wholeset: &SortedVec<ComponentId>) -> bool {
+        let not_optional_count = possible_subset.iter()
+            .filter(|qpmd| !qpmd.optional)
+            .count();
+        let subset_iter = possible_subset.iter();
+        let mut contains_count = 0;
+
+        if not_optional_count > wholeset.get_vec().len() {
+            return false;
+        }
+
+        for el in subset_iter.filter(|qpmd| !qpmd.optional) 
+        {
+            for el2 in wholeset.iter() {
+                if el.comp_id == *el2 {
+                    contains_count += 1;
+                    continue;
+                }
+            }
+        }
+
+        contains_count == not_optional_count
     }
 
     pub(crate) fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {
