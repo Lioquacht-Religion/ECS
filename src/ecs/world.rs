@@ -187,6 +187,14 @@ impl WorldData {
         self.entity_storage.remove_entity(entity_key);
     }
 
+    pub fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T) {
+        self.entity_storage.add_component_to_entity(entity_key, component);
+    }
+
+    pub fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey) {
+        todo!()
+    }
+
     pub(crate) fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
         self.entity_storage.create_or_get_component::<T>()
     }

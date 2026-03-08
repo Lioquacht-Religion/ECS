@@ -33,6 +33,7 @@ impl Ord for CompElemPtr {
     }
 }
 
+#[derive(Debug)]
 pub struct ThinBlobVec {
     pub data_ptr: NonNull<u8>,
     pub elem_layout: Layout,
@@ -69,7 +70,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub(crate) unsafe fn remove_and_replace_with_last(&mut self, len: usize, to: usize) {
+    pub(crate) unsafe fn drop_and_replace_with_last(&mut self, len: usize, to: usize) {
         assert!(to < len);
 
         unsafe {
@@ -82,6 +83,22 @@ impl ThinBlobVec {
             }
         }
     }
+
+    pub(crate) unsafe fn replace_with_last(&mut self, len: usize, to: usize) {
+        assert!(to < len);
+
+        unsafe {
+            let to_ptr = self.data_ptr.add(self.elem_layout.size() * to);
+            // if not 'to' - row id is not the last element,
+            // replace element at 'to' with currently last element
+            if to < len - 1 {
+                let from = self.data_ptr.add(self.elem_layout.size() * (len - 1));
+                std::ptr::copy(from.as_ptr(), to_ptr.as_ptr(), self.elem_layout.size());
+            }
+        }
+    }
+
+
 
     pub(crate) unsafe fn dealloc(&mut self, cap: usize, len: usize) {
         if cap == 0 || self.elem_layout.size() == 0 {
@@ -248,7 +265,7 @@ impl ThinBlobVec {
     }
 
     #[allow(unused)]
-    pub(crate) unsafe fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
+    pub(crate) fn get_ptr_untyped(&self, index: usize, layout: Layout) -> NonNull<u8> {
         if layout.size() != 0 {
             unsafe { self.data_ptr.add(index * layout.size()) }
         } else {
@@ -256,7 +273,7 @@ impl ThinBlobVec {
         }
     }
 
-    pub(crate) unsafe fn get_ptr_typed<T>(&self, index: usize) -> NonNull<T> {
+    pub(crate) fn get_ptr_typed<T>(&self, index: usize) -> NonNull<T> {
         use std::mem::size_of;
         if size_of::<T>() != 0 {
             unsafe { self.data_ptr.add(index * size_of::<T>()).cast() }

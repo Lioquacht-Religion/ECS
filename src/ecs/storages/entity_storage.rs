@@ -1,15 +1,12 @@
 // entity_storage.rs
 
-use std::any::TypeId;
+use std::{any::TypeId, collections::HashMap, hash::Hash};
 
 use crate::{
     ecs::{
-        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        ecs_dependency_graph::EcsDependencyGraph,
-        entity::{Entities, Entity, EntityKey},
-        query::{QueryParam, QueryParamMetaData},
+        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map}, ecs_dependency_graph::EcsDependencyGraph, entity::{Entities, Entity, EntityKey, TableRowId}, prelude::StorageTypes, query::{QueryParam, QueryParamMetaData}, storages::table_soa::TableSoA
     },
-    utils::{sorted_vec::SortedVec, tuple_iters::TupleIterator, tuple_types::TupleTypesExt},
+    utils::{ecs_id::EcsId, sorted_vec::SortedVec, tuple_iters::TupleIterator, tuple_types::TupleTypesExt},
 };
 
 use super::{cache::EntityStorageCache, table_storage::TableStorage};
@@ -84,7 +81,7 @@ impl EntityStorage {
         let archetype_id = self.create_or_get_archetype::<T>();
         let key = self.entities.insert(Entity {
             archetype_id,
-            row_id: 0,
+            row_id: TableRowId(0),
         });
 
         self.add_entity_inner(key, input, archetype_id)
@@ -126,7 +123,7 @@ impl EntityStorage {
             key,
             Entity {
                 archetype_id,
-                row_id: 0,
+                row_id: TableRowId(0),
             },
         );
 
@@ -185,7 +182,7 @@ impl EntityStorage {
         for i in row_id_start..row_id_end {
             let key = self.entities.insert(Entity {
                 archetype_id,
-                row_id: i as u32,
+                row_id: i.into(),
             });
             entity_keys.push(key);
         }
@@ -219,6 +216,46 @@ impl EntityStorage {
         }
     }
 
+    pub(crate) fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T){
+        if let Some(entity) = self.entities.get_mut(entity_key){
+            let entity = entity.clone();
+            let to_table_arch_id = if let Ok(to_table_arch_id) = 
+                self.create_or_get_archetype_adding_comp_to_entity::<T>(entity.archetype_id) {
+                to_table_arch_id
+            }
+            else{
+                //TODO should component be overwritten here?
+                return;
+            };
+            let (arch_id, row_id) = if let Ok((table_from, table_to)) 
+                = self.tables.split_mut2(&entity.archetype_id, &to_table_arch_id)
+            {
+                match T::STORAGE {
+                    StorageTypes::TableAoS => todo!(),
+                    StorageTypes::TableSoA => {
+                        //TODO: need to transfer aos and soa simultanously
+                        let row_id = TableSoA::transfer_entity_with_new_comp(
+                            &mut table_from.table_soa, &mut table_to.table_soa, &entity, component
+                        ); 
+                        (to_table_arch_id, row_id)
+                    },
+                    StorageTypes::SparseSet => todo!(),
+                }
+            }
+            else{
+                panic!("Tables for both from and to archetypes should exist at this point.")
+            };
+            // update row id and archetype id, because entity moved tables
+            let entity = self.entities.get_mut(entity_key).unwrap();
+            entity.row_id = row_id;
+            entity.archetype_id = arch_id;
+        }
+    }
+
+    pub(crate) fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey, component: T){
+
+    }
+
     pub(crate) fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
         let mut comp_ids: Vec<ComponentId> = self.cache.compid_vec_cache.take_cached();
         T::create_or_get_component(self, &mut comp_ids);
@@ -234,11 +271,47 @@ impl EntityStorage {
             panic!("INVALID: Same component contained multiple times inside of entity.");
         }
 
-        // TODO: should these vecs be taken from cache?
         let mut soa_comp_ids: Vec<ComponentId> = self.cache.compid_vec_cache.take_cached();
         let mut aos_comp_ids: Vec<ComponentId> = self.cache.compid_vec_cache.take_cached();
         T::get_comp_ids_by_storage(self, &mut soa_comp_ids, &mut aos_comp_ids);
 
+        self.create_archetype_inner(comp_ids, soa_comp_ids, aos_comp_ids)
+    }
+
+    pub(crate) fn create_or_get_archetype_adding_comp_to_entity<T: Component>(
+        &mut self, arch_id: ArchetypeId, 
+    ) -> Result<ArchetypeId, ()> {
+        let arch = &self.archetypes[arch_id.id_usize()];
+        let mut comp_ids = self.cache.compid_vec_cache.take_cached();
+        arch.aos_comp_ids.iter().chain(arch.soa_comp_ids.iter()).for_each(|cid| comp_ids.push(*cid));
+        let added_compid = self.create_or_get_component::<T>();
+        comp_ids.push(added_compid);
+        let comp_ids = comp_ids.into();
+
+        if let Some(archetype_id) = self.compids_archid_map.get(&comp_ids) {
+            self.cache.compid_vec_cache.insert(comp_ids.into());
+            return Ok(*archetype_id);
+        }
+
+        if let Some(_dup_compid) = comp_ids.check_duplicates() {
+            println!("INVALID: Same component contained multiple times inside of entity.");
+            return Err(());
+        }
+
+        let arch = &self.archetypes[arch_id.id_usize()];
+        let mut soa_compids : Vec<ComponentId> = arch.soa_comp_ids.clone().into();
+        let mut aos_compids : Vec<ComponentId> = arch.aos_comp_ids.clone().into();
+        match T::STORAGE{
+            StorageTypes::TableAoS => aos_compids.push(added_compid),
+            StorageTypes::TableSoA => soa_compids.push(added_compid),
+            StorageTypes::SparseSet => todo!(),
+        }
+        Ok(self.create_archetype_inner(comp_ids, soa_compids, aos_compids))
+    }
+
+
+
+    fn create_archetype_inner(&mut self, comp_ids: SortedVec<ComponentId>, soa_comp_ids: Vec<ComponentId>, aos_comp_ids: Vec<ComponentId>) -> ArchetypeId {
         let archetype_id = self.archetypes.len().into();
         let archetype = Archetype::new(archetype_id, soa_comp_ids.into(), aos_comp_ids.into());
         self.archetypes.push(archetype);
@@ -273,5 +346,82 @@ impl EntityStorage {
         let comp_id = ComponentId(comp_id);
         self.depend_graph.insert_component(comp_id);
         comp_id
+    }
+}
+
+#[derive(Debug)]
+enum SplitError<'map, V>{
+    SameKey(&'map mut V),
+    OnlyOneValue(&'map mut V),
+    NoValueFound
+}
+
+pub trait SplitMut<K: Eq, V>{
+    fn split_mut2(&mut self, key1: &K, key2: &K) -> Result<(&mut V, &mut V), SplitError<V>>;
+}
+
+impl<K: Eq + Hash, V> SplitMut<K, V> for HashMap<K, V>{
+    fn split_mut2(&mut self, key1: &K, key2: &K) -> Result<(&mut V, &mut V), SplitError<V>> {
+        if key1 == key2{
+            return match self.get_mut(key1) {
+                Some(val) => Err(SplitError::SameKey(val)),
+                None => Err(SplitError::NoValueFound),
+            };
+        }
+        let val1 = self.get_mut(key1).map(|v| v as *mut V);
+        let val2 = self.get_mut(key2).map(|v| v as *mut V);
+
+        match (val1, val2) {
+            (Some(val1), Some(val2)) => {
+                unsafe{Ok((&mut *val1, &mut *val2))}
+            }
+            (Some(val1), None) => unsafe{ Err(SplitError::OnlyOneValue(&mut *val1)) },
+            (None, Some(val2)) => unsafe{ Err(SplitError::OnlyOneValue(&mut *val2)) },
+            (None, None) => Err(SplitError::NoValueFound),
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod test {
+    use crate::ecs::prelude::*;
+
+    #[derive(Debug)]
+    struct Comp1(usize);
+    impl Component for Comp1{}
+
+    #[derive(Debug)]
+    struct Comp2(u8, String);
+    impl Component for Comp2{}
+
+    fn test_add_component_to_entity_system(mut commands: Commands, mut query: Query<(EntityKey, &mut Comp1), Without<Comp2>>){
+        if let Some((ek, c)) = query.iter().next(){
+            dbg!(ek);
+            dbg!(c);
+            commands.add_component(ek, Comp2(8, "bebew".into()));
+            commands.spawn(Comp2(7, "abw".to_string()));
+        }
+    }
+
+    fn test_add_component_to_entity_system2(mut commands: Commands, mut query: Query<(EntityKey, &mut Comp2), Without<Comp1>>){
+        for (ek, c) in query.iter(){
+            dbg!(ek);
+            dbg!(c);
+            //commands.add_component(ek, Comp1(7));
+        }
+    }
+
+    #[test]
+    fn test_add_component_to_entity(){
+        let mut world = World::new();
+        world.add_systems(test_add_component_to_entity_system.before(test_add_component_to_entity_system2));
+        for _i in 0..10 {
+            world.add_entity(Comp1(90));
+            world.add_entity(Comp2(7, "abw".to_string()));
+        }
+
+        world.init_and_run();
+        world.run();
+        panic!("fail")
     }
 }

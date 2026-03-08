@@ -5,7 +5,7 @@ use std::alloc::Layout;
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, StorageTypes},
-        entity::{Entity, EntityKey, EntityKeyIterUnsafe},
+        entity::{Entity, EntityKey, EntityKeyIterUnsafe, TableRowId},
         query::QueryParam,
         storages::thin_blob_vec::{
             ThinBlobInnerTypeIterMutUnsafe, ThinBlobInnerTypeIterUnsafe, ThinBlobIterMutUnsafe,
@@ -13,8 +13,7 @@ use crate::{
         },
     },
     utils::{
-        tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
-        tuple_types::TupleTypesExt,
+        ecs_id::EcsId, tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator}, tuple_types::TupleTypesExt
     },
 };
 
@@ -23,6 +22,7 @@ use super::{
     table_soa::TableSoA,
 };
 
+#[derive(Debug)]
 pub struct TableStorage {
     pub(crate) entities: Vec<EntityKey>,
     pub(crate) table_soa: TableSoA,
@@ -54,8 +54,8 @@ impl TableStorage {
         aos_comp_ids: &[ComponentId],
         cache: &mut EntityStorageCache,
         mut value: T,
-    ) -> u32 {
-        let row_id = self.len;
+    ) -> TableRowId {
+        let row_id = TableRowId(self.len);
 
         let mut soa_ptr_vec = cache.ptr_vec_cache.take_cached();
         let mut aos_ptr_vec = cache.ptr_vec_cache.take_cached();
@@ -147,11 +147,11 @@ impl TableStorage {
     /// of removed entity.
     /// The changes to this moved entity should be returned, e.g. entity key and new row id.
     /// WRONG: Returns a tuple of the new EntityKey and the entities new row id in the world.
-    pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, u32)> {
+    pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, TableRowId)> {
         // if row id cannot be contained in table,
         // its entity may have already been deleted
         // return early
-        if self.len <= entity.row_id {
+        if self.len <= entity.row_id.id() {
             dbg!("Row id of entity from despawn command is not contained in table.");
             return None;
         }
@@ -165,12 +165,12 @@ impl TableStorage {
         //TODO: what does the row id even mean anymore?
         //TODO: the removal of entities seems to be incorrectly implemented in general
         //TODO: swap and then remove, instead of just a normal remove
-        if entity.row_id == self.len {
+        if self.len == entity.row_id.id() {
             self.entities.pop();
             None
         } else {
-            self.entities.swap_remove(entity.row_id as usize);
-            if let Some(moved_entity_key) = self.entities.get(entity.row_id as usize) {
+            self.entities.swap_remove(entity.row_id.id_usize());
+            if let Some(moved_entity_key) = self.entities.get(entity.row_id.id_usize()) {
                 Some((*moved_entity_key, entity.row_id))
             } else {
                 None
@@ -185,7 +185,7 @@ impl TableStorage {
         unsafe {
             <_ as Iterator>::next(&mut new_table_storage_iter_with_index::<P>(
                 self,
-                entity.row_id as usize,
+                entity.row_id.id_usize(),
             ))
         }
     }

@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     ecs::component::Component,
-    utils::tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
+    utils::{ecs_id::{impl_ecs_id, EcsId}, tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator}},
 };
 
 use super::component::ArchetypeId;
@@ -36,9 +36,13 @@ impl EntityKey {
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+pub struct TableRowId(pub(crate) u32);
+impl_ecs_id!(TableRowId);
+
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub struct Entity {
     pub(crate) archetype_id: ArchetypeId,
-    pub(crate) row_id: u32,
+    pub(crate) row_id: TableRowId,
 }
 
 impl Component for EntityKey {}

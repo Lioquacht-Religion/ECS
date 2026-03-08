@@ -1,11 +1,10 @@
 // commands.rs
 
-use std::{cell::UnsafeCell, sync::Mutex};
+use std::{cell::UnsafeCell, marker::PhantomData};
 
 use crate::{
     ecs::{
-        entity::Entities,
-        system::{SystemId, SystemParamId},
+        entity::Entities, prelude::Component, system::{SystemId, SystemParamId}
     },
     utils::{spin_lock::SpinLock, tuple_types::TupleTypesExt},
 };
@@ -121,6 +120,28 @@ impl Command for DespawnCommand {
     }
 }
 
+pub(crate) struct ComponentAddCommand<T: Component>{
+    entity_key: EntityKey,
+    component: T,
+}
+
+impl<T: Component> Command for ComponentAddCommand<T>{
+    fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
+        world_data.add_component_to_entity(self.entity_key, self.component);
+    }
+}
+
+pub(crate) struct ComponentRemoveCommand<T: Component>{
+    entity_key: EntityKey,
+    _comp_to_remove_marker: PhantomData<T>,
+}
+
+impl<T: Component> Command for ComponentRemoveCommand<T>{
+    fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
+        world_data.remove_component_from_entity::<T>(self.entity_key);
+    }
+}
+
 impl<'w, 's> Commands<'w, 's> {
     pub(crate) fn new(
         entities: &'w Entities,
@@ -144,6 +165,12 @@ impl<'w, 's> Commands<'w, 's> {
     pub fn despawn(&mut self, entity_key: EntityKey) {
         self.command_queue
             .push(Box::new(DespawnCommand { entity_key }));
+    }
+
+    pub fn add_component<T: Component>(&mut self, entity_key: EntityKey, component: T) {
+        self.command_queue.push(Box::new(ComponentAddCommand {
+            entity_key, component
+        }));
     }
 }
 

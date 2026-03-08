@@ -9,9 +9,9 @@ use std::{
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::Entity
+        entity::{Entity, TableRowId}
     },
-    utils::tuple_iters::TupleIterator,
+    utils::{ecs_id::EcsId, tuple_iters::TupleIterator},
 };
 
 use super::{
@@ -19,6 +19,7 @@ use super::{
     thin_blob_vec::{ThinBlobIterMutUnsafe, ThinBlobIterUnsafe, ThinBlobVec},
 };
 
+#[derive(Debug)]
 pub(crate) struct TableSoA {
     #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
@@ -94,7 +95,7 @@ impl TableSoA {
     /// The order in which the components are stored in the table
     /// and in which they are supplied do not need to match.
     ///
-    /// ##After call needed actions
+    /// ##After call needed actions:
     /// Caller of this function
     /// should forget/leak batch insterted values of type T,
     /// so by these values owned allocations will not be dropped
@@ -139,6 +140,66 @@ impl TableSoA {
         }
     }
 
+    //TODO: add safety comments
+    pub(crate) fn transfer_entity_with_new_comp<T: Component>(from: &mut TableSoA, to: &mut TableSoA, entity: &Entity, component: T) -> TableRowId{
+        let from_iter = from.columns.iter_mut().filter(|(tid, _)| {
+            **tid != TypeId::of::<T>()
+        });
+        //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
+        //columns should have the same length
+        println!("before transfer");
+        unsafe{
+            Self::transfer_entity::<T>(from.len, from_iter, to, entity);
+        }
+        println!("after transfer");
+        let to_col_added_comp = to.columns.get_mut(&TypeId::of::<T>())
+            .expect("TableSoA to move entity to does not contain needed column to add the new component to.");
+        unsafe{
+            to_col_added_comp.push_typed(to.cap, to.len, component);
+        }
+        println!("after new comp add");
+        from.len -= 1;
+        let new_to_table_entity_row_id = to.len.into();
+        to.len += 1;
+        new_to_table_entity_row_id
+    }
+
+    pub(crate) fn remove_comp_and_transfer_entity<T: Component>(from: &mut TableSoA, to: &mut TableSoA, entity: &Entity) -> TableRowId{
+        // remove and drop component from from_table
+        let column_drop_comp_from = from.columns.get_mut(&TypeId::of::<T>())
+            .expect("Component to be removed from entity is not contained in AoS table.");
+        //SAFETY: table contains a columns for the to be removed component
+        unsafe{
+            column_drop_comp_from.drop_and_replace_with_last(from.len, entity.row_id.id_usize());
+        }
+        let from_iter = from.columns.iter_mut().filter(|(tid, _)| {
+            **tid != TypeId::of::<T>()
+        });
+        //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
+        //columns should have the same length
+        unsafe{
+            Self::transfer_entity::<T>(from.len, from_iter, to, entity);
+        }
+        from.len -= 1;
+        let new_to_table_entity_row_id = to.len.into();
+        to.len += 1;
+        new_to_table_entity_row_id
+    }
+
+    unsafe fn transfer_entity<'to, T: Component>(from_len: usize, from_iter: impl Iterator<Item = (&'to TypeId, &'to mut ThinBlobVec)>, to: &mut TableSoA, entity: &Entity){
+        for (type_id, from_col) in from_iter{
+            let to_col = to.columns.get_mut(type_id)
+                .expect("TableSoA to move entity to does not contain needed component column.");
+            let from_row_id = entity.row_id.id_usize();
+            let from_col_elem_ptr = from_col.get_ptr_untyped(from_row_id, from_col.elem_layout);
+            //SAFETY: from_len needs to be equal to the length of the columns in the from_iter
+            unsafe {
+                to_col.push_untyped(to.cap, to.len, from_col_elem_ptr);
+                from_col.replace_with_last(from_len, from_row_id);
+            }
+        }
+    }
+
     fn update_capacity(&mut self) {
         if self.cap == 0 {
             self.cap = 4;
@@ -148,10 +209,10 @@ impl TableSoA {
     }
 
     pub(crate) fn remove(&mut self, entity: &Entity) {
-        if self.len > entity.row_id as usize {
+        if self.len > entity.row_id.id_usize() {
             for (_tid, col) in self.columns.iter_mut() {
                 unsafe {
-                    col.remove_and_replace_with_last(self.len, entity.row_id as usize);
+                    col.drop_and_replace_with_last(self.len, entity.row_id.id_usize());
                 }
             }
             self.len -= 1;

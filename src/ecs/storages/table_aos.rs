@@ -9,11 +9,10 @@ use std::{
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::{Entity, EntityKeyIterUnsafe},
+        entity::Entity,
     },
     utils::{
-        sorted_vec::SortedVec,
-        tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
+        ecs_id::EcsId, sorted_vec::SortedVec, tuple_iters::TupleIterator
     },
 };
 
@@ -50,6 +49,7 @@ impl Ord for TypeMetaData {
     }
 }
 
+#[derive(Debug)]
 pub struct TableAoS {
     #[allow(unused)]
     pub(crate) archetype_id: ArchetypeId,
@@ -209,11 +209,12 @@ impl TableAoS {
     }
 
     pub(crate) fn remove(&mut self, entity: &Entity) {
-        if self.len > entity.row_id as usize {
+        let row_id = entity.row_id.id_usize();
+        if self.len > entity.row_id.id_usize() {
             unsafe {
-                self.drop_entity_row(entity.row_id as usize);
+                self.drop_entity_row(row_id);
                 self.vec
-                    .remove_and_replace_with_last(self.len, entity.row_id as usize);
+                    .drop_and_replace_with_last(self.len, row_id);
             }
             self.len -= 1;
         }
