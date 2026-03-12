@@ -147,19 +147,18 @@ impl TableSoA {
         });
         //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
         //columns should have the same length
-        println!("before transfer");
         unsafe{
-            Self::transfer_entity::<T>(from.len, from_iter, to, entity);
+            Self::transfer_entity(from.len, from_iter, to, entity);
         }
-        println!("after transfer");
         let to_col_added_comp = to.columns.get_mut(&TypeId::of::<T>())
             .expect("TableSoA to move entity to does not contain needed column to add the new component to.");
         unsafe{
             to_col_added_comp.push_typed(to.cap, to.len, component);
         }
-        println!("after new comp add");
+        from.update_capacity();
         from.len -= 1;
         let new_to_table_entity_row_id = to.len.into();
+        to.update_capacity();
         to.len += 1;
         new_to_table_entity_row_id
     }
@@ -178,7 +177,7 @@ impl TableSoA {
         //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
         //columns should have the same length
         unsafe{
-            Self::transfer_entity::<T>(from.len, from_iter, to, entity);
+            Self::transfer_entity(from.len, from_iter, to, entity);
         }
         from.len -= 1;
         let new_to_table_entity_row_id = to.len.into();
@@ -186,7 +185,7 @@ impl TableSoA {
         new_to_table_entity_row_id
     }
 
-    unsafe fn transfer_entity<'to, T: Component>(from_len: usize, from_iter: impl Iterator<Item = (&'to TypeId, &'to mut ThinBlobVec)>, to: &mut TableSoA, entity: &Entity){
+    unsafe fn transfer_entity<'to>(from_len: usize, from_iter: impl Iterator<Item = (&'to TypeId, &'to mut ThinBlobVec)>, to: &mut TableSoA, entity: &Entity){
         for (type_id, from_col) in from_iter{
             let to_col = to.columns.get_mut(type_id)
                 .expect("TableSoA to move entity to does not contain needed component column.");

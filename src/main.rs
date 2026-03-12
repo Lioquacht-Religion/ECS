@@ -76,7 +76,7 @@ fn test_system1(
     mut commands: Commands,
     prm: Res<i32>,
     prm2: Res<usize>,
-    mut query: Query<(EntityKey, &Comp1, &mut Comp2), Without<Pos4>>,
+    mut query: Query<(EntityKey, &Comp1, &mut Comp2), Without<Pos>>,
     mut query2: Query<(EntityKey, &Pos, &mut Pos4, &Pos2)>,
 ) {
     for (ek, comp1, comp2) in query.iter() {
@@ -84,7 +84,7 @@ fn test_system1(
         comp2.1 = *prm2 / 7137;
         commands.add_component(ek, Pos(4325));
         //commands.add_component(ek, Pos2(43453456, 435));
-        commands.add_component(ek, Comp1(4325, 33333));
+        //commands.add_component(ek, Comp1(4325, 33333));
     }
 
     for (ek, _pos, pos4, _pos3) in query2.iter() {

@@ -224,7 +224,7 @@ impl EntityStorage {
                 to_table_arch_id
             }
             else{
-                //TODO should component be overwritten here?
+                //TODO should component be overwritten here? should error be passed further?
                 return;
             };
             let (arch_id, row_id) = if let Ok((table_from, table_to)) 
@@ -253,7 +253,8 @@ impl EntityStorage {
     }
 
     pub(crate) fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey, component: T){
-
+        //TODO
+        todo!()
     }
 
     pub(crate) fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
@@ -406,8 +407,11 @@ pub mod test {
     fn test_add_component_to_entity_system2(mut commands: Commands, mut query: Query<(EntityKey, &mut Comp2), Without<Comp1>>){
         for (ek, c) in query.iter(){
             dbg!(ek);
-            dbg!(c);
-            //commands.add_component(ek, Comp1(7));
+            dbg!(&c);
+            commands.add_component(ek, Comp1(7));
+
+            assert!(&c.1 == "abw" || &c.1 == "bebew");
+            assert!(c.0 == 7 || c.0 == 8);
         }
     }
 
@@ -422,6 +426,5 @@ pub mod test {
 
         world.init_and_run();
         world.run();
-        panic!("fail")
     }
 }
