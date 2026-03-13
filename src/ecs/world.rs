@@ -188,11 +188,13 @@ impl WorldData {
     }
 
     pub fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T) {
+        //TODO: add hooks
         self.entity_storage.add_component_to_entity(entity_key, component);
     }
 
     pub fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey) {
-        todo!()
+        //TODO: add hooks
+        self.entity_storage.remove_component_from_entity::<T>(entity_key);
     }
 
     pub(crate) fn create_or_get_component<T: Component>(&mut self) -> ComponentId {

@@ -179,8 +179,10 @@ impl TableSoA {
         unsafe{
             Self::transfer_entity(from.len, from_iter, to, entity);
         }
+        from.update_capacity();
         from.len -= 1;
         let new_to_table_entity_row_id = to.len.into();
+        to.update_capacity();
         to.len += 1;
         new_to_table_entity_row_id
     }

@@ -172,6 +172,12 @@ impl<'w, 's> Commands<'w, 's> {
             entity_key, component
         }));
     }
+
+    pub fn remove_component<T: Component>(&mut self, entity_key: EntityKey) {
+        self.command_queue.push(Box::new(ComponentRemoveCommand::<T>{
+            entity_key, _comp_to_remove_marker: PhantomData::default()
+        }));
+    }
 }
 
 #[cfg(test)]

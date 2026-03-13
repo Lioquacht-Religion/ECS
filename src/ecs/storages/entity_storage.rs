@@ -219,12 +219,13 @@ impl EntityStorage {
     pub(crate) fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T){
         if let Some(entity) = self.entities.get_mut(entity_key){
             let entity = entity.clone();
+            //TODO: how to hanlde if entity already does not contain the to be removed component
             let to_table_arch_id = if let Ok(to_table_arch_id) = 
                 self.create_or_get_archetype_adding_comp_to_entity::<T>(entity.archetype_id) {
                 to_table_arch_id
             }
             else{
-                //TODO should component be overwritten here? should error be passed further?
+                //TODO should entity be overwritten here? should error be passed further?
                 return;
             };
             let (arch_id, row_id) = if let Ok((table_from, table_to)) 
@@ -252,9 +253,41 @@ impl EntityStorage {
         }
     }
 
-    pub(crate) fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey, component: T){
+    pub(crate) fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey){
         //TODO
-        todo!()
+        if let Some(entity) = self.entities.get_mut(entity_key){
+            let entity = entity.clone();
+            let to_table_arch_id = if let Ok(to_table_arch_id) = 
+                self.create_or_get_archetype_removing_comp_from_entity::<T>(entity.archetype_id) {
+                to_table_arch_id
+            }
+            else{
+                //TODO should component be overwritten here? should error be passed further?
+                return;
+            };
+            let (arch_id, row_id) = 
+                match self.tables.split_mut2(&entity.archetype_id, &to_table_arch_id) {
+                    Ok((table_from, table_to)) =>
+            {
+                match T::STORAGE {
+                    StorageTypes::TableAoS => todo!(),
+                    StorageTypes::TableSoA => {
+                        //TODO: need to transfer aos and soa simultanously
+                        let row_id = TableSoA::remove_comp_and_transfer_entity::<T>(
+                            &mut table_from.table_soa, &mut table_to.table_soa, &entity 
+                        ); 
+                        (to_table_arch_id, row_id)
+                    },
+                    StorageTypes::SparseSet => todo!(),
+                }
+            }  
+                    Err(e) => panic!("Tables for both from and to archetypes should exist at this point. error: {:?}", e),
+            };
+            // update row id and archetype id, because entity moved tables
+            let entity = self.entities.get_mut(entity_key).unwrap();
+            entity.row_id = row_id;
+            entity.archetype_id = arch_id;
+        }
     }
 
     pub(crate) fn create_or_get_archetype<T: TupleTypesExt>(&mut self) -> ArchetypeId {
@@ -310,7 +343,54 @@ impl EntityStorage {
         Ok(self.create_archetype_inner(comp_ids, soa_compids, aos_compids))
     }
 
+    pub(crate) fn create_or_get_archetype_removing_comp_from_entity<T: Component>(
+        &mut self, arch_id: ArchetypeId, 
+    ) -> Result<ArchetypeId, ()> {
+        // remove comp id from current entity comp ids to find preexisting fitting archetype
+        let remove_compid = self.create_or_get_component::<T>();
+        let arch = &self.archetypes[arch_id.id_usize()];
+        let mut comp_ids = self.cache.compid_vec_cache.take_cached();
+        arch.aos_comp_ids.iter().chain(arch.soa_comp_ids.iter())
+            .filter(|cid| **cid != remove_compid)
+            .for_each(|cid| comp_ids.push(*cid));
+        let comp_ids = comp_ids.into();
 
+        if let Some(archetype_id) = self.compids_archid_map.get(&comp_ids) {
+            self.cache.compid_vec_cache.insert(comp_ids.into());
+            return Ok(*archetype_id);
+        }
+
+        //TODO: when removing, handle case if all components of an entity have been removed
+        // -> remove entity entirely
+        if let Some(_dup_compid) = comp_ids.check_duplicates() {
+            println!("INVALID: Same component contained multiple times inside of entity.");
+            return Err(());
+        }
+
+        fn get_filtered(comp_ids: &SortedVec<ComponentId>, remove_compid: ComponentId) -> Vec<ComponentId> {
+                comp_ids.get_vec()
+                .iter().filter_map(|cid| if *cid != remove_compid {
+                    Some(*cid)
+                } else {
+                    None
+                }
+                ).collect()
+        }
+
+        let arch = &self.archetypes[arch_id.id_usize()];
+        let (soa_compids, aos_compids) : (Vec<ComponentId>, Vec<ComponentId>) = match T::STORAGE{
+            StorageTypes::TableAoS => (
+                arch.soa_comp_ids.clone().into(), 
+                get_filtered(&arch.aos_comp_ids, remove_compid),
+            ),
+            StorageTypes::TableSoA => (
+                get_filtered(&arch.soa_comp_ids, remove_compid),
+                arch.aos_comp_ids.clone().into()
+            ),
+            StorageTypes::SparseSet => todo!(),
+        };
+        Ok(self.create_archetype_inner(comp_ids, soa_compids, aos_compids))
+    }
 
     fn create_archetype_inner(&mut self, comp_ids: SortedVec<ComponentId>, soa_comp_ids: Vec<ComponentId>, aos_comp_ids: Vec<ComponentId>) -> ArchetypeId {
         let archetype_id = self.archetypes.len().into();
@@ -351,18 +431,18 @@ impl EntityStorage {
 }
 
 #[derive(Debug)]
-enum SplitError<'map, V>{
+pub enum SplitError<'map, V>{
     SameKey(&'map mut V),
     OnlyOneValue(&'map mut V),
     NoValueFound
 }
 
 pub trait SplitMut<K: Eq, V>{
-    fn split_mut2(&mut self, key1: &K, key2: &K) -> Result<(&mut V, &mut V), SplitError<V>>;
+    fn split_mut2<'a>(&'a mut self, key1: &K, key2: &K) -> Result<(&'a mut V, &'a mut V), SplitError<'a, V>>;
 }
 
 impl<K: Eq + Hash, V> SplitMut<K, V> for HashMap<K, V>{
-    fn split_mut2(&mut self, key1: &K, key2: &K) -> Result<(&mut V, &mut V), SplitError<V>> {
+    fn split_mut2<'a>(&'a mut self, key1: &K, key2: &K) -> Result<(&'a mut V, &'a mut V), SplitError<'a, V>> {
         if key1 == key2{
             return match self.get_mut(key1) {
                 Some(val) => Err(SplitError::SameKey(val)),
@@ -388,6 +468,7 @@ pub mod test {
     use crate::ecs::prelude::*;
 
     #[derive(Debug)]
+    #[allow(unused)]
     struct Comp1(usize);
     impl Component for Comp1{}
 
@@ -401,6 +482,7 @@ pub mod test {
             dbg!(c);
             commands.add_component(ek, Comp2(8, "bebew".into()));
             commands.spawn(Comp2(7, "abw".to_string()));
+            commands.remove_component::<Comp1>(ek);
         }
     }
 
@@ -409,6 +491,7 @@ pub mod test {
             dbg!(ek);
             dbg!(&c);
             commands.add_component(ek, Comp1(7));
+            commands.remove_component::<Comp2>(ek);
 
             assert!(&c.1 == "abw" || &c.1 == "bebew");
             assert!(c.0 == 7 || c.0 == 8);
