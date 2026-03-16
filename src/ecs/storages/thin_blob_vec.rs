@@ -98,8 +98,6 @@ impl ThinBlobVec {
         }
     }
 
-
-
     pub(crate) unsafe fn dealloc(&mut self, cap: usize, len: usize) {
         if cap == 0 || self.elem_layout.size() == 0 {
             return;

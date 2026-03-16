@@ -13,7 +13,9 @@ use crate::{
         },
     },
     utils::{
-        ecs_id::EcsId, tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator}, tuple_types::TupleTypesExt
+        ecs_id::EcsId,
+        tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
+        tuple_types::TupleTypesExt,
     },
 };
 
@@ -253,10 +255,8 @@ impl<'c, T: Component> TupleIterator for TableStorageIterUnsafe<'c, T> {
     type Item = &'c T;
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
-            TableStorageIterUnsafe::TableSoaIter(iter) 
-                => unsafe { iter.next(index) },
-            TableStorageIterUnsafe::TableAosIter(iter) 
-                => unsafe { iter.next(index) },
+            TableStorageIterUnsafe::TableSoaIter(iter) => unsafe { iter.next(index) },
+            TableStorageIterUnsafe::TableAosIter(iter) => unsafe { iter.next(index) },
         }
     }
 }
@@ -271,10 +271,8 @@ impl<'c, T: Component> TupleIterator for TableStorageIterMutUnsafe<'c, T> {
     #[inline(always)]
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
-            TableStorageIterMutUnsafe::TableSoaIterMut(iter) 
-                => unsafe { iter.next(index) },
-            TableStorageIterMutUnsafe::TableAosIterMut(iter) 
-                => unsafe { iter.next(index) },
+            TableStorageIterMutUnsafe::TableSoaIterMut(iter) => unsafe { iter.next(index) },
+            TableStorageIterMutUnsafe::TableAosIterMut(iter) => unsafe { iter.next(index) },
         }
     }
 }
@@ -284,10 +282,12 @@ impl<'c, T: Component> TupleIterator for Option<TableStorageIterMutUnsafe<'c, T>
     #[inline(always)]
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
-            Some(TableStorageIterMutUnsafe::TableSoaIterMut(iter)) 
-                => unsafe { Some(iter.next(index)) },
-            Some(TableStorageIterMutUnsafe::TableAosIterMut(iter)) 
-                => unsafe { Some(iter.next(index)) },
+            Some(TableStorageIterMutUnsafe::TableSoaIterMut(iter)) => unsafe {
+                Some(iter.next(index))
+            },
+            Some(TableStorageIterMutUnsafe::TableAosIterMut(iter)) => unsafe {
+                Some(iter.next(index))
+            },
             None => None,
         }
     }
@@ -298,22 +298,17 @@ impl<'c, T: Component> TupleIterator for Option<TableStorageIterUnsafe<'c, T>> {
     #[inline(always)]
     unsafe fn next(&mut self, index: usize) -> Self::Item {
         match self {
-            Some(TableStorageIterUnsafe::TableSoaIter(iter)) 
-                => unsafe { Some(iter.next(index)) },
-            Some(TableStorageIterUnsafe::TableAosIter(iter)) 
-                => unsafe { Some(iter.next(index)) },
+            Some(TableStorageIterUnsafe::TableSoaIter(iter)) => unsafe { Some(iter.next(index)) },
+            Some(TableStorageIterUnsafe::TableAosIter(iter)) => unsafe { Some(iter.next(index)) },
             None => None,
         }
     }
 }
 
-impl<T: Component> TupleIterConstructor<TableStorage> for Option<&T>
-{
+impl<T: Component> TupleIterConstructor<TableStorage> for Option<&T> {
     type Construct<'c> = Option<<TableStorage as TupleConstructorSource>::IterType<'c, T>>;
     unsafe fn construct<'s>(mut source: std::ptr::NonNull<TableStorage>) -> Self::Construct<'s> {
-        unsafe { 
-            source.as_mut().get_iter_opt()
-        }
+        unsafe { source.as_mut().get_iter_opt() }
     }
 }
 
@@ -355,34 +350,26 @@ impl TupleConstructorSource for TableStorage {
     unsafe fn get_iter_opt<'c, T: Component>(&'c mut self) -> Option<Self::IterType<'c, T>> {
         match T::STORAGE {
             StorageTypes::TableSoA => {
-                let iter = unsafe {
-                    self.table_soa.get_single_comp_iter_opt()?
-                };
+                let iter = unsafe { self.table_soa.get_single_comp_iter_opt()? };
                 Some(TableStorageIterUnsafe::TableSoaIter(iter))
             }
             StorageTypes::TableAoS => {
-                let iter = unsafe {
-                    self.table_aos.get_single_comp_iter_opt()?
-                };
+                let iter = unsafe { self.table_aos.get_single_comp_iter_opt()? };
                 Some(TableStorageIterUnsafe::TableAosIter(iter))
-            },
+            }
             StorageTypes::SparseSet => unimplemented!(),
         }
     }
     unsafe fn get_iter_mut_opt<'c, T: Component>(&'c mut self) -> Option<Self::IterMutType<'c, T>> {
         match T::STORAGE {
             StorageTypes::TableSoA => {
-                let iter = unsafe {
-                    self.table_soa.get_single_comp_iter_mut_opt()?
-                };
+                let iter = unsafe { self.table_soa.get_single_comp_iter_mut_opt()? };
                 Some(TableStorageIterMutUnsafe::TableSoaIterMut(iter))
             }
             StorageTypes::TableAoS => {
-                let iter = unsafe {
-                    self.table_aos.get_single_comp_iter_mut_opt()?
-                };
+                let iter = unsafe { self.table_aos.get_single_comp_iter_mut_opt()? };
                 Some(TableStorageIterMutUnsafe::TableAosIterMut(iter))
-            },
+            }
             StorageTypes::SparseSet => unimplemented!(),
         }
     }

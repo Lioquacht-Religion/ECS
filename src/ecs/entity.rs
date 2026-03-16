@@ -7,7 +7,10 @@ use std::{
 
 use crate::{
     ecs::component::Component,
-    utils::{ecs_id::{impl_ecs_id, EcsId}, tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator}},
+    utils::{
+        ecs_id::{EcsId, impl_ecs_id},
+        tuple_iters::{TupleConstructorSource, TupleIterConstructor, TupleIterator},
+    },
 };
 
 use super::component::ArchetypeId;

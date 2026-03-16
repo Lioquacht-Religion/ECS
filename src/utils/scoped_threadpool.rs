@@ -3,7 +3,9 @@
 use std::{
     marker::PhantomData,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering}, mpmc::{self, Receiver, Sender}, Arc, Mutex
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        mpmc::{self, Receiver, Sender},
     },
     thread::{JoinHandle, Thread},
 };
@@ -79,7 +81,11 @@ struct UnwindGuard<'a> {
 }
 
 impl<'a> UnwindGuard<'a> {
-    fn new(num_running_threads: &'a AtomicUsize, poison: &'a AtomicBool, pool_thread: &'a Mutex<Thread>) -> Self {
+    fn new(
+        num_running_threads: &'a AtomicUsize,
+        poison: &'a AtomicBool,
+        pool_thread: &'a Mutex<Thread>,
+    ) -> Self {
         Self {
             num_running_threads,
             poison,
@@ -121,13 +127,17 @@ impl ScopedThreadPool {
         }
     }
 
-    fn worker_loop(receiver: Receiver<Task>){
+    fn worker_loop(receiver: Receiver<Task>) {
         loop {
             let task = receiver.recv();
             match task {
                 Ok(Task { data, exec_func }) => {
                     // handles panics without having the thread and thus the entire scope, be stuck
-                    let guard = UnwindGuard::new(&data.num_running_threads, &data.poison, &data.pool_thread);
+                    let guard = UnwindGuard::new(
+                        &data.num_running_threads,
+                        &data.poison,
+                        &data.pool_thread,
+                    );
                     exec_func();
                     if data.num_running_threads.load(Ordering::Acquire) > 0 {
                         data.num_running_threads.fetch_sub(1, Ordering::Release);
@@ -165,7 +175,7 @@ impl ScopedThreadPool {
                 break;
             }
             // pool thread gets unparked by worker thread once it finishes executing its task
-            // or encountered a panic doing so 
+            // or encountered a panic doing so
             std::thread::park();
         }
         result
@@ -178,7 +188,7 @@ impl ScopedThreadPool {
         }
     }
 
-    fn shutdown(&mut self){
+    fn shutdown(&mut self) {
         drop(self.sender.take());
         while let Some(thread) = self.threads.pop() {
             let _res = thread.join();

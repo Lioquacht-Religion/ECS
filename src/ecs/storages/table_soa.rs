@@ -9,7 +9,7 @@ use std::{
 use crate::{
     ecs::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
-        entity::{Entity, TableRowId}
+        entity::{Entity, TableRowId},
     },
     utils::{ecs_id::EcsId, tuple_iters::TupleIterator},
 };
@@ -141,18 +141,24 @@ impl TableSoA {
     }
 
     //TODO: add safety comments
-    pub(crate) fn transfer_entity_with_new_comp<T: Component>(from: &mut TableSoA, to: &mut TableSoA, entity: &Entity, component: T) -> TableRowId{
-        let from_iter = from.columns.iter_mut().filter(|(tid, _)| {
-            **tid != TypeId::of::<T>()
-        });
+    pub(crate) fn transfer_entity_with_new_comp<T: Component>(
+        from: &mut TableSoA,
+        to: &mut TableSoA,
+        entity: &Entity,
+        component: T,
+    ) -> TableRowId {
+        let from_iter = from
+            .columns
+            .iter_mut()
+            .filter(|(tid, _)| **tid != TypeId::of::<T>());
         //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
         //columns should have the same length
-        unsafe{
+        unsafe {
             Self::transfer_entity(from.len, from_iter, to, entity);
         }
         let to_col_added_comp = to.columns.get_mut(&TypeId::of::<T>())
             .expect("TableSoA to move entity to does not contain needed column to add the new component to.");
-        unsafe{
+        unsafe {
             to_col_added_comp.push_typed(to.cap, to.len, component);
         }
         from.update_capacity();
@@ -163,20 +169,27 @@ impl TableSoA {
         new_to_table_entity_row_id
     }
 
-    pub(crate) fn remove_comp_and_transfer_entity<T: Component>(from: &mut TableSoA, to: &mut TableSoA, entity: &Entity) -> TableRowId{
+    pub(crate) fn remove_comp_and_transfer_entity<T: Component>(
+        from: &mut TableSoA,
+        to: &mut TableSoA,
+        entity: &Entity,
+    ) -> TableRowId {
         // remove and drop component from from_table
-        let column_drop_comp_from = from.columns.get_mut(&TypeId::of::<T>())
+        let column_drop_comp_from = from
+            .columns
+            .get_mut(&TypeId::of::<T>())
             .expect("Component to be removed from entity is not contained in AoS table.");
         //SAFETY: table contains a columns for the to be removed component
-        unsafe{
+        unsafe {
             column_drop_comp_from.drop_and_replace_with_last(from.len, entity.row_id.id_usize());
         }
-        let from_iter = from.columns.iter_mut().filter(|(tid, _)| {
-            **tid != TypeId::of::<T>()
-        });
+        let from_iter = from
+            .columns
+            .iter_mut()
+            .filter(|(tid, _)| **tid != TypeId::of::<T>());
         //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
         //columns should have the same length
-        unsafe{
+        unsafe {
             Self::transfer_entity(from.len, from_iter, to, entity);
         }
         from.update_capacity();
@@ -187,9 +200,16 @@ impl TableSoA {
         new_to_table_entity_row_id
     }
 
-    unsafe fn transfer_entity<'to>(from_len: usize, from_iter: impl Iterator<Item = (&'to TypeId, &'to mut ThinBlobVec)>, to: &mut TableSoA, entity: &Entity){
-        for (type_id, from_col) in from_iter{
-            let to_col = to.columns.get_mut(type_id)
+    unsafe fn transfer_entity<'to>(
+        from_len: usize,
+        from_iter: impl Iterator<Item = (&'to TypeId, &'to mut ThinBlobVec)>,
+        to: &mut TableSoA,
+        entity: &Entity,
+    ) {
+        for (type_id, from_col) in from_iter {
+            let to_col = to
+                .columns
+                .get_mut(type_id)
                 .expect("TableSoA to move entity to does not contain needed component column.");
             let from_row_id = entity.row_id.id_usize();
             let from_col_elem_ptr = from_col.get_ptr_untyped(from_row_id, from_col.elem_layout);
@@ -250,11 +270,9 @@ impl TableSoA {
         &'c self,
     ) -> Option<ThinBlobIterUnsafe<'c, T>> {
         unsafe {
-            if let Some(col) = self.columns
-                .get(&TypeId::of::<T>()){
+            if let Some(col) = self.columns.get(&TypeId::of::<T>()) {
                 Some(col.tuple_iter())
-            }
-            else{
+            } else {
                 None
             }
         }
@@ -281,11 +299,9 @@ impl TableSoA {
         &'c mut self,
     ) -> Option<ThinBlobIterMutUnsafe<'c, T>> {
         unsafe {
-            if let Some(col) = self.columns
-                .get_mut(&TypeId::of::<T>()){
+            if let Some(col) = self.columns.get_mut(&TypeId::of::<T>()) {
                 Some(col.tuple_iter_mut())
-            }
-            else{
+            } else {
                 None
             }
         }

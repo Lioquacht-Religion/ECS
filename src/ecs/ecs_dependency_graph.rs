@@ -9,7 +9,7 @@ use crate::{
         resource::ResourceId,
         system::SystemId,
     },
-    utils::ecs_id::{impl_ecs_id, EcsId},
+    utils::ecs_id::{EcsId, impl_ecs_id},
 };
 
 pub enum EcsNode {
@@ -252,8 +252,7 @@ impl EcsDependencyGraph {
             if let Some(_comp_edge_key) = system_node.component_edges.get(&comp_key) {
                 panic!("A system cannot have multiple params of the same component type.")
             }
-            let _ = system_node.component_edges
-                .insert(comp_key, edge);
+            let _ = system_node.component_edges.insert(comp_key, edge);
         }
     }
     pub fn insert_query_archetypes(&mut self, query_id: QueryId, archetype_ids: &[ArchetypeId]) {
@@ -326,18 +325,9 @@ mod test {
             Comp2("edw".to_string()),
             Comp3("ewwevcwre".to_string()),
         ));
-        world.add_entity((
-            Comp1(324),
-            Comp2("edw".to_string()),
-        ));
-        world.add_entity((
-            Comp1(324),
-            Comp3("ewwevcwre".to_string()),
-        ));
-        world.add_entity((
-            Comp1(324),
-            Comp3("ewwevcwre".to_string()),
-        ));
+        world.add_entity((Comp1(324), Comp2("edw".to_string())));
+        world.add_entity((Comp1(324), Comp3("ewwevcwre".to_string())));
+        world.add_entity((Comp1(324), Comp3("ewwevcwre".to_string())));
 
         world
     }
@@ -360,9 +350,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "A system cannot have multiple params of the same component type."
-    )]
+    #[should_panic(expected = "A system cannot have multiple params of the same component type.")]
     fn test_multiple_same_components_types_in_query_sysparams() {
         let mut world = init_world();
         world.add_systems(invalid_query_sys_params_system);
@@ -370,9 +358,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "A system cannot have multiple params of the same component type."
-    )]
+    #[should_panic(expected = "A system cannot have multiple params of the same component type.")]
     fn test_single_query_sysparam_cant_contain_multiple_of_same_comp_type() {
         let mut world = init_world();
         world.add_systems(invalid_query_mult_same_comp_type_sys_params_system);
@@ -385,5 +371,4 @@ mod test {
         world.add_systems(test_query_same_component_sets_with_excluding_filters_system);
         world.init_and_run();
     }
-
 }

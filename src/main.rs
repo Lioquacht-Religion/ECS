@@ -151,7 +151,10 @@ fn test_soa(mut total_dur: ResMut<TotalDurSoa>, mut query_soa: Query<(&mut Comp1
 }
 
 #[inline(never)]
-fn test_aos(mut total_dur: ResMut<TotalDurAos>, mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>) {
+fn test_aos(
+    mut total_dur: ResMut<TotalDurAos>,
+    mut query_aos: Query<(&mut Comp1AoS, &mut Comp2AoS)>,
+) {
     let start = Instant::now();
     for (comp1, comp2) in query_aos.iter() {
         do_some_work_aos((comp1, comp2));
@@ -163,7 +166,6 @@ fn test_aos(mut total_dur: ResMut<TotalDurAos>, mut query_aos: Query<(&mut Comp1
     let nanos = total_dur.0.as_nanos();
     let millis = total_dur.0.as_millis();
     println!("total aos iter: {} nanos {} millis", nanos, millis);
-
 }
 
 const CAPACITY: usize = 100;
@@ -261,8 +263,7 @@ fn test_system19() {}
 
 fn test_system20() {}
 
-fn test_system21() {
-}
+fn test_system21() {}
 fn test_system22() {}
 fn test_system23() {}
 fn test_system24() {}

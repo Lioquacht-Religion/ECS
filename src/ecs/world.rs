@@ -189,12 +189,14 @@ impl WorldData {
 
     pub fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T) {
         //TODO: add hooks
-        self.entity_storage.add_component_to_entity(entity_key, component);
+        self.entity_storage
+            .add_component_to_entity(entity_key, component);
     }
 
     pub fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey) {
         //TODO: add hooks
-        self.entity_storage.remove_component_from_entity::<T>(entity_key);
+        self.entity_storage
+            .remove_component_from_entity::<T>(entity_key);
     }
 
     pub(crate) fn create_or_get_component<T: Component>(&mut self) -> ComponentId {
@@ -205,7 +207,8 @@ impl WorldData {
         &self,
         query_param_meta_data: &SortedVec<QueryParamMetaData>,
     ) -> Vec<ArchetypeId> {
-        self.entity_storage.find_fitting_archetypes(query_param_meta_data)
+        self.entity_storage
+            .find_fitting_archetypes(query_param_meta_data)
     }
 
     pub fn add_resource<T: 'static>(&mut self, value: T) -> ResourceId {

@@ -11,9 +11,7 @@ use crate::{
         component::{ArchetypeId, Component, ComponentId, ComponentInfo, Map},
         entity::Entity,
     },
-    utils::{
-        ecs_id::EcsId, sorted_vec::SortedVec, tuple_iters::TupleIterator
-    },
+    utils::{ecs_id::EcsId, sorted_vec::SortedVec, tuple_iters::TupleIterator},
 };
 
 use super::{
@@ -213,8 +211,7 @@ impl TableAoS {
         if self.len > entity.row_id.id_usize() {
             unsafe {
                 self.drop_entity_row(row_id);
-                self.vec
-                    .drop_and_replace_with_last(self.len, row_id);
+                self.vec.drop_and_replace_with_last(self.len, row_id);
             }
             self.len -= 1;
         }
@@ -261,13 +258,10 @@ impl TableAoS {
     pub(crate) unsafe fn get_single_comp_iter_opt<'c, T: Component>(
         &'c self,
     ) -> Option<ThinBlobInnerTypeIterUnsafe<'c, T>> {
-        if let Some(index) = self
-            .type_meta_data_map
-            .get(&TypeId::of::<T>()) {
+        if let Some(index) = self.type_meta_data_map.get(&TypeId::of::<T>()) {
             let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
             Some(unsafe { self.vec.tuple_inner_type_iter(*offset) })
-        }
-        else{
+        } else {
             None
         }
     }
@@ -275,13 +269,10 @@ impl TableAoS {
     pub(crate) unsafe fn get_single_comp_iter_mut_opt<'c, T: Component>(
         &'c mut self,
     ) -> Option<ThinBlobInnerTypeIterMutUnsafe<'c, T>> {
-        if let Some(index) = self
-            .type_meta_data_map
-            .get(&TypeId::of::<T>()) {
+        if let Some(index) = self.type_meta_data_map.get(&TypeId::of::<T>()) {
             let offset = &self.type_meta_data.get_vec()[*index].ptr_offset;
             Some(unsafe { self.vec.tuple_inner_type_iter_mut(*offset) })
-        }
-        else{
+        } else {
             None
         }
     }

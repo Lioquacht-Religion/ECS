@@ -197,7 +197,10 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         P::comp_ids_rec(world_data, &mut comp_ids);
         let comp_ids: SortedVec<ComponentId> = comp_ids.into();
 
-        let mut query_prm_meta_data= world_data.get_cache_mut().query_param_meta_data_vec_cache.take_cached();
+        let mut query_prm_meta_data = world_data
+            .get_cache_mut()
+            .query_param_meta_data_vec_cache
+            .take_cached();
         P::meta_data(world_data, &mut query_prm_meta_data);
         let query_prm_meta_data: SortedVec<QueryParamMetaData> = query_prm_meta_data.into();
 
@@ -235,10 +238,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         // systems <- add queries <- add components and filtered archetypes
 
         let depend_graph = &mut world_data.get_depend_graph_mut();
-        depend_graph.insert_system_components(
-            system_id,
-            &query_prm_meta_data.get_vec()
-        );
+        depend_graph.insert_system_components(system_id, &query_prm_meta_data.get_vec());
         depend_graph.insert_query_archetypes(next_query_id, &arch_ids);
         depend_graph.insert_system_query(system_id, next_query_id);
 
@@ -257,23 +257,23 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
 }
 
 #[derive(Debug, Eq, PartialOrd)]
-pub struct QueryParamMetaData{
+pub struct QueryParamMetaData {
     pub type_id: TypeId,
     pub comp_id: ComponentId,
     pub ref_kind: RefKind,
     pub optional: bool,
 }
-impl Hash for QueryParamMetaData{
+impl Hash for QueryParamMetaData {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.comp_id.hash(state);
     }
 }
-impl PartialEq for QueryParamMetaData{
+impl PartialEq for QueryParamMetaData {
     fn eq(&self, other: &Self) -> bool {
         self.comp_id.eq(&other.comp_id)
     }
 }
-impl Ord for QueryParamMetaData{
+impl Ord for QueryParamMetaData {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.comp_id.cmp(&other.comp_id)
     }
@@ -307,8 +307,11 @@ impl<T: Component> QueryParam for &T {
     }
     fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
         let comp_id = world_data.create_or_get_component::<T>();
-        vec.push(QueryParamMetaData { 
-            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Shared, optional: false 
+        vec.push(QueryParamMetaData {
+            type_id: TypeId::of::<T>(),
+            comp_id,
+            ref_kind: RefKind::Shared,
+            optional: false,
         });
     }
 }
@@ -330,14 +333,16 @@ impl<T: Component> QueryParam for &mut T {
     }
     fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
         let comp_id = world_data.create_or_get_component::<T>();
-        vec.push(QueryParamMetaData { 
-            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Exclusive, optional: false 
+        vec.push(QueryParamMetaData {
+            type_id: TypeId::of::<T>(),
+            comp_id,
+            ref_kind: RefKind::Exclusive,
+            optional: false,
         });
     }
 }
 
-impl<'p, T: Component> QueryParam for Option<&T> 
-{
+impl<'p, T: Component> QueryParam for Option<&T> {
     type QueryItem<'new> = Option<&'new T>;
     fn ref_kinds(vec: &mut Vec<RefKind>) {
         vec.push(RefKind::Shared);
@@ -353,15 +358,16 @@ impl<'p, T: Component> QueryParam for Option<&T>
     }
     fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
         let comp_id = world_data.create_or_get_component::<T>();
-        vec.push(QueryParamMetaData { 
-            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Shared, optional: true
+        vec.push(QueryParamMetaData {
+            type_id: TypeId::of::<T>(),
+            comp_id,
+            ref_kind: RefKind::Shared,
+            optional: true,
         });
     }
-
 }
 
-impl<'p, T: Component> QueryParam for Option<&mut T> 
-{
+impl<'p, T: Component> QueryParam for Option<&mut T> {
     type QueryItem<'new> = Option<&'new mut T>;
     fn ref_kinds(vec: &mut Vec<RefKind>) {
         vec.push(RefKind::Shared);
@@ -377,8 +383,11 @@ impl<'p, T: Component> QueryParam for Option<&mut T>
     }
     fn meta_data(world_data: &mut WorldData, vec: &mut Vec<QueryParamMetaData>) {
         let comp_id = world_data.create_or_get_component::<T>();
-        vec.push(QueryParamMetaData { 
-            type_id: TypeId::of::<T>(), comp_id, ref_kind: RefKind::Exclusive, optional: true
+        vec.push(QueryParamMetaData {
+            type_id: TypeId::of::<T>(),
+            comp_id,
+            ref_kind: RefKind::Exclusive,
+            optional: true,
         });
     }
 }
@@ -516,13 +525,16 @@ mod test {
         assert_eq!(query2.iter().count(), 2);
     }
 
-    fn test_system6(mut test_sys6_ran: ResMut<TestSystem6Ran>, mut query1: Query<&Pos2>, mut query2: Query<(&Comp1, Option<&Pos1>)>) {
+    fn test_system6(
+        mut test_sys6_ran: ResMut<TestSystem6Ran>,
+        mut query1: Query<&Pos2>,
+        mut query2: Query<(&Comp1, Option<&Pos1>)>,
+    ) {
         for (comp1, pos1) in query2.iter() {
             println!("comp1: {}; {};", comp1.0, comp1.1);
             if let Some(pos1) = pos1 {
-                println!("pos1: {}; {}",  pos1.0, pos1.1);
-            }
-            else {
+                println!("pos1: {}; {}", pos1.0, pos1.1);
+            } else {
                 println!("no pos1");
             }
         }
@@ -569,6 +581,9 @@ mod test {
 
         world.init_and_run();
 
-        assert_eq!(world.get_resource::<TestSystem6Ran>(), Some(&TestSystem6Ran(true)));
+        assert_eq!(
+            world.get_resource::<TestSystem6Ran>(),
+            Some(&TestSystem6Ran(true))
+        );
     }
 }

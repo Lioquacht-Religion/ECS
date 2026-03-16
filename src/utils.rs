@@ -5,6 +5,7 @@ pub mod gen_vec;
 pub mod graph;
 pub mod het_stack;
 pub mod sorted_vec;
+pub mod split_mut;
 pub mod typeid_map;
 
 pub mod one_shot_channel;
