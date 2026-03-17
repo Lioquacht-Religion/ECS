@@ -4,7 +4,7 @@ use std::any::TypeId;
 
 use crate::{
     ecs::{
-        component::{self, Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
+        component::{Archetype, ArchetypeId, Component, ComponentId, ComponentInfo, Map},
         ecs_dependency_graph::EcsDependencyGraph,
         entity::{Entities, Entity, EntityKey, TableRowId},
         prelude::StorageTypes,
@@ -12,7 +12,10 @@ use crate::{
         storages::table_soa::TableSoA,
     },
     utils::{
-        ecs_id::EcsId, sorted_vec::SortedVec, split_mut::{SplitError, SplitMut}, tuple_iters::TupleIterator,
+        ecs_id::EcsId,
+        sorted_vec::SortedVec,
+        split_mut::{SplitError, SplitMut},
+        tuple_iters::TupleIterator,
         tuple_types::TupleTypesExt,
     },
 };
@@ -240,14 +243,18 @@ impl EntityStorage {
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
             //TODO: how to hanlde if entity already does not contain the to be removed component
-            let to_table_arch_id = match self.create_or_get_archetype_adding_comp_to_entity::<T>(entity.archetype_id) {
+            let to_table_arch_id = match self
+                .create_or_get_archetype_adding_comp_to_entity::<T>(entity.archetype_id)
+            {
                 Ok(arch_id) => arch_id,
                 // same archetype found, component was already removed from entity
                 Err(EntStoreErr::SameArch) => return Err(EntStoreErr::SameArch),
                 // entity does not contain any components anymore and should be removed
                 Err(EntStoreErr::EmptyArch) => todo!(),
                 // should not happen here, implementation error
-                Err(EntStoreErr::MultSameKindComp) => panic!("INVALID: Multiple of the same kind of component should not occur in one archetype."),
+                Err(EntStoreErr::MultSameKindComp) => panic!(
+                    "INVALID: Multiple of the same kind of component should not occur in one archetype."
+                ),
                 Err(EntStoreErr::EntityNotFound) => panic!("INVALID: Should be checked before."),
             };
 
@@ -255,61 +262,92 @@ impl EntityStorage {
                 .tables
                 .split_mut2(&entity.archetype_id, &to_table_arch_id)
             {
-                Self::call_transfer_ent_w_new_comp_for_tables(entity, component, table_from, table_to)
+                Self::call_transfer_ent_w_new_comp_for_tables(
+                    entity_key, entity, component, table_from, table_to,
+                )
             } else {
                 panic!("Tables for both from and to archetypes should exist at this point.")
             };
+            // update row id and archetype id, if replacement entity was needed to fill gap
+            if let Some((entity_key, row_id)) = row_id.1{
+                let entity = self.entities.get_mut(entity_key).unwrap();
+                entity.row_id = row_id;
+            }
             // update row id and archetype id, because entity moved tables
             let entity = self.entities.get_mut(entity_key).unwrap();
-            entity.row_id = row_id;
+            entity.row_id = row_id.0;
             entity.archetype_id = to_table_arch_id;
+            
             return Ok(*entity);
         }
         Err(EntStoreErr::EntityNotFound)
     }
 
-    fn call_transfer_ent_w_new_comp_for_tables<T: Component>(entity: Entity, component: T, table_from: &mut TableStorage, table_to: &mut TableStorage,) -> TableRowId{
-                match T::STORAGE {
-                    StorageTypes::TableAoS => todo!(),
-                    StorageTypes::TableSoA => {
-                        //TODO: need to transfer aos and soa simultanously
-                        let row_id = TableSoA::transfer_entity_with_new_comp(
-                            &mut table_from.table_soa,
-                            &mut table_to.table_soa,
-                            &entity,
-                            component,
-                        );
-                        row_id
-                    }
-                    StorageTypes::SparseSet => todo!(),
-                }
+    fn call_transfer_ent_w_new_comp_for_tables<T: Component>(
+        entity_key: EntityKey,
+        entity: Entity,
+        component: T,
+        table_from: &mut TableStorage,
+        table_to: &mut TableStorage,
+    ) -> (TableRowId, Option<(EntityKey, TableRowId)>) {
+        let new_to_row_id = match T::STORAGE {
+            StorageTypes::TableAoS => todo!(),
+            StorageTypes::TableSoA => {
+                //TODO: need to transfer aos and soa simultanously
+                let row_id = TableSoA::transfer_entity_with_new_comp(
+                    &mut table_from.table_soa,
+                    &mut table_to.table_soa,
+                    &entity,
+                    component,
+                );
+                row_id
+            }
+            StorageTypes::SparseSet => todo!(),
+        };
+        //TODO: need to update row id of replace entity of transfered entity
+        //TODO: -> this is horribly annoying, I should just the table entities vector length,
+        //instead of having an extra field
+        let replaced_entity_info = table_from.remove_replace_with_last_entity_key(entity);
+        table_to.entities.push(entity_key);
+        table_from.len -= 1;
+        table_to.len += 1;
+        (new_to_row_id, replaced_entity_info)
     }
 
-    pub(crate) fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey) -> Result<Entity, EntStoreErr>{
+    pub(crate) fn remove_component_from_entity<T: Component>(
+        &mut self,
+        entity_key: EntityKey,
+    ) -> Result<Entity, EntStoreErr> {
         //TODO: entity should be removed if it does not contain any components anymore
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
 
-            let to_table_arch_id = match self.create_or_get_archetype_removing_comp_from_entity::<T>(entity.archetype_id) {
+            let to_table_arch_id = match self
+                .create_or_get_archetype_removing_comp_from_entity::<T>(entity.archetype_id)
+            {
                 Ok(arch_id) => arch_id,
                 // same archetype found, component was already removed from entity
                 Err(EntStoreErr::SameArch) => return Err(EntStoreErr::SameArch),
-                // entity does not contain any components anymore 
+                // entity does not contain any components anymore
                 // TODO: do nothing here or should the entity be removed
                 Err(EntStoreErr::EmptyArch) => return Err(EntStoreErr::EmptyArch),
                 // should not happen here, implementation error
-                Err(EntStoreErr::MultSameKindComp) => panic!("INVALID: Multiple of the same kind of component should not occur in one archetype."),
+                Err(EntStoreErr::MultSameKindComp) => panic!(
+                    "INVALID: Multiple of the same kind of component should not occur in one archetype."
+                ),
                 Err(EntStoreErr::EntityNotFound) => panic!("INVALID: Should be checked before."),
             };
             let row_id = match self
                 .tables
                 .split_mut2(&entity.archetype_id, &to_table_arch_id)
             {
-                Ok((table_from, table_to)) => 
-                    Self::call_remove_component_for_tables::<T>(entity, table_from, table_to),
+                Ok((table_from, table_to)) => {
+                    Self::call_remove_component_for_tables::<T>(entity, table_from, table_to)
+                }
                 Err(SplitError::SameKey(_table)) => return Err(EntStoreErr::SameArch),
-                Err(SplitError::OnlyOneValue(_)) | Err(SplitError::NoValueFound) => panic!(
-                    "Tables for both from and to archetypes should exist at this point."),
+                Err(SplitError::OnlyOneValue(_)) | Err(SplitError::NoValueFound) => {
+                    panic!("Tables for both from and to archetypes should exist at this point.")
+                }
             };
             // update row id and archetype id, because entity moved tables
             let entity = self.entities.get_mut(entity_key).unwrap();
@@ -526,39 +564,100 @@ pub mod test {
     struct Comp2(u8, String);
     impl Component for Comp2 {}
 
-    fn test_add_component_to_entity_system(
+    struct IterCount(usize);
+
+    fn test_add_comp_to_entity_system1(
         mut commands: Commands,
+        iter_count: Res<IterCount>,
         mut query: Query<(EntityKey, &mut Comp1), Without<Comp2>>,
+        mut query2: Query<(EntityKey, &mut Comp2)>,
     ) {
-        if let Some((ek, c)) = query.iter().next() {
-            dbg!(ek);
-            dbg!(c);
-            commands.add_component(ek, Comp2(8, "bebew".into()));
-            commands.spawn(Comp2(7, "abw".to_string()));
+        if iter_count.0 == 0 {
+            for (ek, c) in query.iter() {
+                dbg!(ek);
+                dbg!(&c);
+                assert_eq!(90, c.0);
+                //adding Comp2 to entitites with Comp1 but without Comp2
+                commands.add_component(ek, Comp2(8, "bebew".into()));
+            }
+            assert_eq!(10, query.iter().count());
+            assert_eq!(10, query2.iter().count());
+        } else if iter_count.0 == 1 {
+            // all entities with comp1 should now also have comp2
+            // query should return zero results
+            for (ek, c) in query.iter() {
+                dbg!(ek);
+                dbg!(&c);
+            }
+            commands.spawn(Comp1(90));
+            //TODO:
+            assert_eq!(0, query.iter().count());
+            assert_eq!(10, query2.iter().count());
+        } else if iter_count.0 == 2 {
+            let ek = commands.spawn((Comp2(7, "abw".to_string()), Comp1(90)));
             commands.remove_component::<Comp1>(ek);
+
+            for (ek, c) in query.iter() {
+                assert_eq!(7, c.0);
+                commands.remove_component::<Comp1>(ek);
+            }
         }
     }
 
     fn test_add_component_to_entity_system2(
         mut commands: Commands,
+        iter_count: Res<IterCount>,
         mut query: Query<(EntityKey, &mut Comp2), Without<Comp1>>,
+        mut query2: Query<(EntityKey, &mut Comp1)>,
     ) {
-        for (ek, c) in query.iter() {
-            dbg!(ek);
-            dbg!(&c);
-            commands.add_component(ek, Comp1(7));
-            commands.remove_component::<Comp2>(ek);
-
-            assert!(&c.1 == "abw" || &c.1 == "bebew");
-            assert!(c.0 == 7 || c.0 == 8);
+        if iter_count.0 == 0 {
+            for (ek, c) in query.iter() {
+                dbg!(ek);
+                dbg!(&c);
+                assert!(&c.1 == "abw" || &c.1 == "bebew");
+                assert!(c.0 == 7 || c.0 == 8);
+            }
+            assert_eq!(10, query.iter().count());
+            //TODO: for this to be valid, the matching archetypes for query2 need to be updated
+            // system one created a new archetype by adding a new component to a existing entity
+            assert_eq!(10, query2.iter().count());
+        } else if iter_count.0 == 1 {
+            for (ek, c) in query.iter() {
+                dbg!(ek);
+                dbg!(&c);
+            }
+            assert_eq!(10, query.iter().count());
+            assert_eq!(11, query2.iter().count());
+            for (ek, c) in query2.iter() {
+                assert_eq!(90, c.0);
+                // overwrite all comp1 90 values with 7
+                commands.add_component(ek, Comp1(7));
+            }
+        } else if iter_count.0 == 2 {
+            for (ek, c) in query.iter() {
+                dbg!(ek);
+                dbg!(&c);
+            }
+            assert_eq!(10, query.iter().count());
+            for (ek, c) in query.iter() {
+                dbg!(ek);
+                dbg!(&c);
+                assert_eq!(7, c.0);
+            }
+            assert_eq!(11, query2.iter().count());
         }
     }
 
     #[test]
     fn test_add_component_to_entity() {
         let mut world = World::new();
+        world.add_resource(IterCount(0));
         world.add_systems(
-            test_add_component_to_entity_system.before(test_add_component_to_entity_system2),
+            (
+                test_add_comp_to_entity_system1,
+                test_add_component_to_entity_system2,
+            )
+                .chain(),
         );
         for _i in 0..10 {
             world.add_entity(Comp1(90));
@@ -566,6 +665,34 @@ pub mod test {
         }
 
         world.init_and_run();
+        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
         world.run();
+        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
+        world.run();
+        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
     }
+
+    /*
+    #[test]
+    fn test_remove_component_from_entity() {
+        let mut world = World::new();
+        world.add_resource(IterCount(0));
+        world.add_systems(
+            test_add_comp_to_entity_system1
+            .before(test_add_component_to_entity_system2),
+        );
+        for _i in 0..10 {
+            world.add_entity(Comp1(90));
+            world.add_entity(Comp2(7, "abw".to_string()));
+        }
+
+        world.init_and_run();
+        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
+        world.run();
+        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
+        world.run();
+        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
+
+    }
+    */
 }

@@ -167,6 +167,13 @@ impl TableStorage {
         //TODO: what does the row id even mean anymore?
         //TODO: the removal of entities seems to be incorrectly implemented in general
         //TODO: swap and then remove, instead of just a normal remove
+        self.remove_replace_with_last_entity_key(entity)
+    }
+
+    pub(crate) fn remove_replace_with_last_entity_key(
+        &mut self,
+        entity: Entity,
+    ) -> Option<(EntityKey, TableRowId)> {
         if self.len == entity.row_id.id() {
             self.entities.pop();
             None

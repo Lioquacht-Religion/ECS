@@ -161,11 +161,12 @@ impl TableSoA {
         unsafe {
             to_col_added_comp.push_typed(to.cap, to.len, component);
         }
-        from.update_capacity();
         from.len -= 1;
+        println!("from len: {}", from.len);
         let new_to_table_entity_row_id = to.len.into();
         to.update_capacity();
         to.len += 1;
+        println!("to len: {}", to.len);
         new_to_table_entity_row_id
     }
 
@@ -192,11 +193,12 @@ impl TableSoA {
         unsafe {
             Self::transfer_entity(from.len, from_iter, to, entity);
         }
-        from.update_capacity();
         from.len -= 1;
+        println!("from len: {}", from.len);
         let new_to_table_entity_row_id = to.len.into();
         to.update_capacity();
         to.len += 1;
+        println!("to len: {}", to.len);
         new_to_table_entity_row_id
     }
 
@@ -216,7 +218,7 @@ impl TableSoA {
             //SAFETY: from_len needs to be equal to the length of the columns in the from_iter
             unsafe {
                 to_col.push_untyped(to.cap, to.len, from_col_elem_ptr);
-                from_col.replace_with_last(from_len, from_row_id);
+                from_col.dont_drop_replace_with_last(from_len, from_row_id);
             }
         }
     }

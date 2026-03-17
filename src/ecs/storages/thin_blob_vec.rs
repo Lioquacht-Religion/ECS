@@ -75,7 +75,7 @@ impl ThinBlobVec {
 
         unsafe {
             let to_ptr = self.call_drop_on_elem(to);
-            // if not 'to' - row id is not the last element,
+            // if 'to' - row id is not the last element,
             // replace now dropped element at 'to' with currently last element
             if to < len - 1 {
                 let from = self.data_ptr.add(self.elem_layout.size() * (len - 1));
@@ -84,12 +84,12 @@ impl ThinBlobVec {
         }
     }
 
-    pub(crate) unsafe fn replace_with_last(&mut self, len: usize, to: usize) {
+    pub(crate) unsafe fn dont_drop_replace_with_last(&mut self, len: usize, to: usize) {
         assert!(to < len);
 
         unsafe {
             let to_ptr = self.data_ptr.add(self.elem_layout.size() * to);
-            // if not 'to' - row id is not the last element,
+            // if 'to' - row id is not the last element,
             // replace element at 'to' with currently last element
             if to < len - 1 {
                 let from = self.data_ptr.add(self.elem_layout.size() * (len - 1));
