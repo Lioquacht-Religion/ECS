@@ -41,7 +41,6 @@ pub struct World {
 pub struct WorldData {
     pub(crate) resources: AnyMap,
     entity_storage: EntityStorage,
-    pub(crate) query_data: Vec<QueryState>,
     pub(crate) commands_queues: CommandQueuesStorage,
 }
 
@@ -160,9 +159,16 @@ impl WorldData {
         WorldData {
             resources: AnyMap::new(),
             entity_storage: EntityStorage::new(),
-            query_data: Vec::new(),
             commands_queues: CommandQueuesStorage::new(),
         }
+    }
+
+    pub(crate) fn get_query_data(&self) -> &[QueryState]{
+        &self.entity_storage.query_data
+    }
+
+    pub(crate) fn get_query_data_mut(&mut self) -> &mut Vec<QueryState>{
+        &mut self.entity_storage.query_data
     }
 
     pub fn add_entity<T: TupleTypesExt>(&mut self, input: T) -> EntityKey {

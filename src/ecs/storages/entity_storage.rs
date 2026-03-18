@@ -8,7 +8,7 @@ use crate::{
         ecs_dependency_graph::EcsDependencyGraph,
         entity::{Entities, Entity, EntityKey, TableRowId},
         prelude::StorageTypes,
-        query::{QueryParam, QueryParamMetaData},
+        query::{QueryParam, QueryParamMetaData, QueryState},
         storages::table_soa::TableSoA,
     },
     utils::{
@@ -27,6 +27,7 @@ pub struct EntityStorage {
     pub(crate) components: Vec<ComponentInfo>,
     pub(crate) archetypes: Vec<Archetype>,
     pub(crate) tables: Map<ArchetypeId, TableStorage>,
+    pub(crate) query_data: Vec<QueryState>,
     //mapping data
     pub(crate) typeid_compid_map: Map<TypeId, ComponentId>,
     pub(crate) compids_archid_map: Map<SortedVec<ComponentId>, ArchetypeId>,
@@ -49,6 +50,7 @@ impl EntityStorage {
             components: Vec::new(),
             archetypes: Vec::new(),
             tables: Map::new(),
+            query_data: Vec::new(),
             typeid_compid_map: Map::new(),
             compids_archid_map: Map::new(),
             depend_graph: EcsDependencyGraph::new(),
@@ -519,8 +521,9 @@ impl EntityStorage {
         self.archetypes.push(archetype);
         self.tables
             .insert(archetype_id, TableStorage::new(archetype_id, self));
+        // update queries for relevant archetypes
+        self.depend_graph.insert_archetype_components(&mut self.query_data, archetype_id, &comp_ids.get_vec());
         self.compids_archid_map.insert(comp_ids, archetype_id);
-        self.depend_graph.insert_archetype(archetype_id);
 
         archetype_id
     }
@@ -592,7 +595,7 @@ pub mod test {
             commands.spawn(Comp1(90));
             //TODO:
             assert_eq!(0, query.iter().count());
-            assert_eq!(10, query2.iter().count());
+            assert_eq!(20, query2.iter().count());
         } else if iter_count.0 == 2 {
             let ek = commands.spawn((Comp2(7, "abw".to_string()), Comp1(90)));
             commands.remove_component::<Comp1>(ek);

@@ -44,12 +44,8 @@ pub(crate) struct QueryState {
     //TODO: are these unused fields needed for new features
     #[allow(unused)]
     comp_ids: SortedVec<ComponentId>,
-    #[allow(unused)]
-    optional_comp_ids: SortedVec<ComponentId>,
-    #[allow(unused)]
-    arch_ids: Vec<ArchetypeId>,
-    #[allow(unused)]
-    filter: Vec<FilterElem>,
+    pub(crate) arch_ids: Vec<ArchetypeId>,
+    pub(crate) filter: Vec<FilterElem>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -176,7 +172,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         let world_data_mut = unsafe { world_data.as_mut().unwrap() };
         let sys_prm_id = &system_param_ids[*system_param_index];
         if let SystemParamId::Query(qid) = sys_prm_id {
-            let qs = &world_data_mut.query_data[qid.id_usize()];
+            let qs = &world_data_mut.get_query_data_mut()[qid.id_usize()];
             *system_param_index += 1;
             //TODO: wrap WorldData reference in some temporary unsafe access type that is Sync and
             //Send
@@ -231,7 +227,7 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
             .cloned()
             .collect();
 
-        let next_query_id = world_data.query_data.len().into();
+        let next_query_id = world_data.get_query_data().len().into();
         system_param_ids.push(SystemParamId::Query(next_query_id));
 
         // adding system dependencies to graph
@@ -247,12 +243,11 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         let query_data = QueryState {
             //TODO: remove comp_ids/filter ? already used as key, remove cloning
             comp_ids: comp_ids,
-            optional_comp_ids: SortedVec::new(),
             arch_ids,
             filter: filter,
         };
 
-        world_data.query_data.push(query_data);
+        world_data.get_query_data_mut().push(query_data);
     }
 }
 

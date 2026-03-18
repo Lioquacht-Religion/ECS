@@ -276,7 +276,8 @@ fn test_table_query_iter() {
 
     //world.add_systems(test_system20);
     //world.add_systems((test_system1).before((test_aos, test_soa)));
-    world.add_systems((test_aos, test_soa).after((test_system21, test_system1)));
+    //world.add_systems((test_aos, test_soa).after((test_system21, test_system1)));
+    world.add_systems((test_aos, test_soa).after(test_system21));
     //world.add_systems(test_aos);
     //world.add_systems(test_soa);
 

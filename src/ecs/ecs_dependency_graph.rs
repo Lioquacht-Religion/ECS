@@ -1,15 +1,15 @@
 // ecs_dependeny_graph.rs
 
-use std::collections::HashMap;
+use std::{collections::{HashMap, HashSet}, iter};
 
 use crate::{
     ecs::{
         component::{ArchetypeId, ComponentId},
-        query::{QueryParamMetaData, RefKind},
+        query::{query_filter, QueryParamMetaData, QueryState, RefKind},
         resource::ResourceId,
         system::SystemId,
     },
-    utils::ecs_id::{EcsId, impl_ecs_id},
+    utils::ecs_id::{impl_ecs_id, EcsId},
 };
 
 pub enum EcsNode {
@@ -217,8 +217,10 @@ impl EcsDependencyGraph {
         self.query_keys.insert(query_id, key);
         key
     }
-    pub fn insert_archetype_components(
+
+    pub(crate) fn insert_archetype_components(
         &mut self,
+        query_stati: &mut Vec<QueryState>,
         archetype_id: ArchetypeId,
         comp_ids: &[ComponentId],
     ) {
@@ -229,7 +231,47 @@ impl EcsDependencyGraph {
             arch.component_edges.insert(comp_key, EcsEdge::None);
             //TODO add archetype edges to components?
         }
+
+        // update archetypes of query nodes
+        let arch: &mut ArchetypeNode = &mut self.archetypes[arch_key as usize];
+        let mut query_ids : HashSet<QueryId> = HashSet::new();
+        arch.component_edges.iter().for_each(|(c_row_id, _edge)|{
+            self.components[*c_row_id as usize].system_edges.iter()
+                .for_each(|(s_row_id, _edge)|{
+                    self.systems[*s_row_id as usize].query_edges.iter()
+                        .map(|(q_row_id, _edge)|{
+                            self.queries[*q_row_id as usize].query_id.clone()
+                        })
+                    .for_each(|qid| {
+                        query_ids.insert(qid);
+                    });
+                })
+        });
+        let arch_comp_ids : HashSet<ComponentId> = comp_ids.iter().map(|cid| *cid).collect();
+        let arch_comp_row_ids: HashSet<u32> = query_ids.iter().map(|qid|{
+            *self.query_keys.get(qid).unwrap()
+        }).collect();
+        for qid in query_ids.iter(){
+            let qnode = &mut self.queries[qid.id_usize()];
+            let query_comp_row_ids : HashSet<u32> = qnode.component_edges
+                .keys().map(|c_row_id|{ *c_row_id }).collect();
+            //TODO: need to take optional query params into account
+            if query_comp_row_ids.is_subset(&arch_comp_row_ids) {
+                let query_state = &mut query_stati[qid.id_usize()];
+                let not_filtered_out = query_filter::comp_ids_compatible_with_filter(
+                    &arch_comp_ids,
+                    &query_state.filter,
+                );
+                // need to take query filters into account
+                if not_filtered_out {
+                    println!("not filtered out");
+                    query_state.arch_ids.push(archetype_id);
+                    qnode.archetype_edges.insert(arch_key, EcsEdge::None);
+                }
+            }
+        }
     }
+
     ///NOTE: Do not insert the same component ids multiple times
     /// into the componenent edges of a system.
     /// A system can currently only contain one of each component as a system param.
