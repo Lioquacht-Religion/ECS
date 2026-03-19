@@ -1,8 +1,4 @@
 // tuple_types.rs
-//TODO:
-// - add get_tuple_length function
-// - use length function to initialize vec with capacity
-// - add wrapper functions which create their own vecs
 
 use std::{alloc::Layout, any::TypeId, ptr::NonNull};
 

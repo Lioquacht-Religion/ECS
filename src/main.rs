@@ -82,9 +82,9 @@ fn test_system1(
     for (ek, comp1, comp2) in query.iter() {
         comp2.0 = comp1.1 / 3245345 * prm.abs() as usize;
         comp2.1 = *prm2 / 7137;
-        commands.add_component(ek, Pos(4325));
-        //commands.add_component(ek, Pos2(43453456, 435));
-        //commands.add_component(ek, Comp1(4325, 33333));
+        commands.add_component(ek, Pos(4325), true);
+        commands.add_component(ek, Pos2(43453456, 435), true);
+        commands.add_component(ek, Comp1(4325, 33333), true);
     }
 
     for (ek, _pos, pos4, _pos3) in query2.iter() {
@@ -97,8 +97,8 @@ fn test_system1(
         let _key = commands.spawn((Comp1(999999, 29029), Comp2AoS(999999, 29029)));
         let _key = commands.spawn(Comp1(999999, 29029));
 
-        //commands.add_component(ek, Pos(4325));
-        //commands.add_component(ek, Pos2(43453456, 435));
+        commands.add_component(ek, Pos(4325), true);
+        commands.add_component(ek, Pos2(43453456, 435), true);
 
         commands.despawn(ek);
     }
@@ -117,19 +117,6 @@ fn test_system2(
 ) {
     test_soa(total_dur_soa, query_soa);
     test_aos(total_dur_aos, query_aos);
-
-    /*
-    println!(
-        "soa time: {} nanos; {} micros",
-        el1.as_nanos(),
-        el1.as_micros()
-    );
-    println!(
-        "aos time: {} nanos; {}, micros",
-        el2.as_nanos(),
-        el2.as_micros()
-    );
-    */
 }
 
 struct TotalDurSoa(Duration);
@@ -274,16 +261,15 @@ fn test_table_query_iter() {
     let num1: i32 = 2324;
     let num2: usize = 2324;
 
-    //world.add_systems(test_system20);
-    //world.add_systems((test_system1).before((test_aos, test_soa)));
-    //world.add_systems((test_aos, test_soa).after((test_system21, test_system1)));
-    world.add_systems((test_aos, test_soa).after(test_system21));
-    //world.add_systems(test_aos);
-    //world.add_systems(test_soa);
+    world.add_systems((test_aos, test_soa).after((test_system21, test_system1)));
+    //world.add_systems((test_aos, test_soa).after(test_system21));
+    world.add_systems(test_system20);
+    world.add_systems((test_system1).before((test_aos, test_soa)));
+    world.add_systems(test_aos);
+    world.add_systems(test_soa);
 
-    /*
     world.add_systems(test_system15.after(test_system14));
-    world.add_systems(test_system3.after(test_system2));
+    world.add_systems(test_system1.after(test_system2));
 
     world.add_systems(test_system15.before(test_system18));
 
@@ -298,8 +284,7 @@ fn test_table_query_iter() {
         )
             .chain(),
     );
-    */
-    //world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
+    world.add_systems((test_system21, test_system22, test_system23, test_system24).chain());
 
     world.add_resource(num1);
     world.add_resource(num2);
@@ -402,26 +387,12 @@ fn normal_loop_soa(ents: &mut (Vec<Comp1>, Vec<Comp2>), ents2: &mut (Vec<Comp1>,
 
 #[inline(never)]
 fn normal_loop(ents: &mut Vec<(Comp1, Comp2)>, ents2: &mut Vec<(Pos, Comp1, Pos4, Comp2, Pos2)>) {
-    let start3 = std::time::Instant::now();
     for c in ents.iter_mut() {
         do_some_work((&mut c.0, &mut c.1));
     }
     for c in ents2.iter_mut() {
         do_some_work((&mut c.1, &mut c.3));
     }
-    let e3 = start3.elapsed();
-    let sum: usize = ents
-        .iter()
-        .fold(0, |a, e| a + e.0.0 + e.0.1 + e.1.0 + e.1.1)
-        + ents2
-            .iter()
-            .fold(0, |a, e| a + e.1.0 + e.1.1 + e.3.0 + e.3.1);
-    /*println!("normal loop aos sum : {sum}");
-    println!(
-        "normal loop time aos: {} micros; {} nanos",
-        e3.as_micros(),
-        e3.as_nanos()
-    );*/
 }
 fn do_some_work_aos(mut c: (&mut Comp1AoS, &mut Comp2AoS)) {
     do_some_work12(&mut c);

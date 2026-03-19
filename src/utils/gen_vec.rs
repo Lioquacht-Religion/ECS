@@ -254,6 +254,7 @@ impl<T> GenVec<T> {
 mod tests {
     use crate::utils::gen_vec::GenVec;
 
+    #[allow(unused)]
     struct Pos(i32, i32);
 
     #[test]

@@ -241,25 +241,61 @@ impl EntityStorage {
         &mut self,
         entity_key: EntityKey,
         component: T,
+        overwrite: bool
     ) -> Result<Entity, EntStoreErr> {
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
-            //TODO: how to hanlde if entity already does not contain the to be removed component
+            //TODO: how to handle if entity already does not contain the to be removed component
             let to_table_arch_id = match self
                 .create_or_get_archetype_adding_comp_to_entity::<T>(entity.archetype_id)
             {
                 Ok(arch_id) => arch_id,
                 // same archetype found, component was already removed from entity
-                Err(EntStoreErr::SameArch) => return Err(EntStoreErr::SameArch),
-                // entity does not contain any components anymore and should be removed
-                Err(EntStoreErr::EmptyArch) => todo!(),
+                Err(EntStoreErr::SameArch) => {
+                    println!("IGNORED: Current archetype of entity already contains component.");
+                    return Err(EntStoreErr::SameArch) 
+                },
+                // entity does not contain any components anymore and should be removed, should not
+                // be possible when adding components
+                Err(EntStoreErr::EmptyArch) => panic!("IMPLEMENTATION ERROR: Entity should not become empty when adding component."),
                 // should not happen here, implementation error
-                Err(EntStoreErr::MultSameKindComp) => panic!(
-                    "INVALID: Multiple of the same kind of component should not occur in one archetype."
-                ),
-                Err(EntStoreErr::EntityNotFound) => panic!("INVALID: Should be checked before."),
+                Err(EntStoreErr::MultSameKindComp) => {
+                    if overwrite{
+                        // overwritten with old component with new data
+                        self.replace_component_of_entity(entity, component);
+                        return Err(EntStoreErr::MultSameKindComp);
+                    }
+                    else{
+                        println!("IGNORED: Current archetype of entity already contains component.");
+                        return Err(EntStoreErr::MultSameKindComp);
+                    }
+                },
+                Err(EntStoreErr::EntityNotFound) => panic!("IMPLEMENTATION ERROR: Should be checked already."),
             };
 
+            return Ok(self.transfer_ent_w_new_comp(entity, to_table_arch_id, entity_key, component));
+        }
+        Err(EntStoreErr::EntityNotFound)
+    }
+
+    fn replace_component_of_entity<T: Component>(&mut self, entity: Entity, mut component: T){
+        let table_arch_id = entity.archetype_id;
+        let table = self.tables.get_mut(&table_arch_id).expect("Table should exist at this point.");
+        match T::STORAGE {
+            StorageTypes::TableAoS => todo!(),
+            StorageTypes::TableSoA => {
+                let col = table.table_soa.columns.get_mut(&TypeId::of::<T>()).expect("Component is not contained by table.");
+                //TODO: call on remove hook here, before replacing component
+                //if let Some(on_remove) = T::on_remove(){}
+                let cur_component = unsafe{ col.get_mut_typed::<T>(entity.row_id.id_usize()) };
+                std::mem::swap(cur_component, &mut component);
+                // moved out component will be dropped here
+            },
+            StorageTypes::SparseSet => todo!(),
+        }
+    }
+
+    fn transfer_ent_w_new_comp<T: Component>(&mut self, entity: Entity, to_table_arch_id: ArchetypeId, entity_key: EntityKey, component: T) -> Entity{
             let row_id = if let Ok((table_from, table_to)) = self
                 .tables
                 .split_mut2(&entity.archetype_id, &to_table_arch_id)
@@ -280,9 +316,7 @@ impl EntityStorage {
             entity.row_id = row_id.0;
             entity.archetype_id = to_table_arch_id;
             
-            return Ok(*entity);
-        }
-        Err(EntStoreErr::EntityNotFound)
+            *entity
     }
 
     fn call_transfer_ent_w_new_comp_for_tables<T: Component>(
@@ -581,7 +615,7 @@ pub mod test {
                 dbg!(&c);
                 assert_eq!(90, c.0);
                 //adding Comp2 to entitites with Comp1 but without Comp2
-                commands.add_component(ek, Comp2(8, "bebew".into()));
+                commands.add_component(ek, Comp2(8, "bebew".into()), true);
             }
             assert_eq!(10, query.iter().count());
             assert_eq!(10, query2.iter().count());
@@ -593,7 +627,6 @@ pub mod test {
                 dbg!(&c);
             }
             commands.spawn(Comp1(90));
-            //TODO:
             assert_eq!(0, query.iter().count());
             assert_eq!(20, query2.iter().count());
         } else if iter_count.0 == 2 {
@@ -601,7 +634,7 @@ pub mod test {
             commands.remove_component::<Comp1>(ek);
 
             for (ek, c) in query.iter() {
-                assert_eq!(7, c.0);
+                assert!(7 == c.0 || 90 == c.0);
                 commands.remove_component::<Comp1>(ek);
             }
         }
@@ -621,7 +654,7 @@ pub mod test {
                 assert!(c.0 == 7 || c.0 == 8);
             }
             assert_eq!(10, query.iter().count());
-            //TODO: for this to be valid, the matching archetypes for query2 need to be updated
+            // for this to be valid, the matching archetypes for query2 need to be updated
             // system one created a new archetype by adding a new component to a existing entity
             assert_eq!(10, query2.iter().count());
         } else if iter_count.0 == 1 {
@@ -634,7 +667,7 @@ pub mod test {
             for (ek, c) in query2.iter() {
                 assert_eq!(90, c.0);
                 // overwrite all comp1 90 values with 7
-                commands.add_component(ek, Comp1(7));
+                commands.add_component(ek, Comp1(7), true);
             }
         } else if iter_count.0 == 2 {
             for (ek, c) in query.iter() {
@@ -642,9 +675,10 @@ pub mod test {
                 dbg!(&c);
             }
             assert_eq!(10, query.iter().count());
-            for (ek, c) in query.iter() {
+            for (ek, c) in query2.iter() {
                 dbg!(ek);
                 dbg!(&c);
+                // comp1 90 values should have been overwritten with 7 by now
                 assert_eq!(7, c.0);
             }
             assert_eq!(11, query2.iter().count());

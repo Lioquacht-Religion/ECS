@@ -62,13 +62,15 @@ impl AnyMap {
 
 #[cfg(test)]
 mod test {
+    use crate::utils::{any_map::AnyMap, gen_vec::{GenVec, Key}};
+
 
     #[derive(Debug, PartialEq, Eq)]
+    #[allow(unused)]
     struct Pos(i32, i32);
 
     #[test]
     fn test_1() {
-        /*
         let mut map = AnyMap::new();
         let num: i32 = 0;
         let pos1: Pos = Pos(232, 3453);
@@ -96,6 +98,5 @@ mod test {
         map.insert(tuple_1);
 
         assert_eq!(map.get(), Some(&(Pos(234, 567), 4.678)));
-        */
     }
 }

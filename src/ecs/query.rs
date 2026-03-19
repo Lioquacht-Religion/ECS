@@ -1,14 +1,11 @@
 // query.rs
 
-use std::{any::TypeId, collections::HashSet, hash::Hash, marker::PhantomData};
+use std::{any::TypeId, collections::{hash_set, HashSet}, hash::Hash, marker::PhantomData};
 
 use crate::{
     all_tuples,
     ecs::{
-        entity::EntityKey,
-        query::query_filter::{FilterElem, QueryFilter},
-        storages::table_storage::TableStorageTupleIter,
-        system::{SystemId, SystemParamId},
+        ecs_dependency_graph::QueryId, entity::EntityKey, query::query_filter::{FilterElem, QueryFilter}, storages::table_storage::TableStorageTupleIter, system::{SystemId, SystemParamId}
     },
     utils::{
         ecs_id::EcsId,
@@ -41,10 +38,8 @@ unsafe impl<'w, 's, P: QueryParam, F: QueryFilter> Sync for Query<'w, 's, P, F> 
 
 #[derive(Debug)]
 pub(crate) struct QueryState {
-    //TODO: are these unused fields needed for new features
-    #[allow(unused)]
-    comp_ids: SortedVec<ComponentId>,
-    pub(crate) arch_ids: Vec<ArchetypeId>,
+    pub(crate) query_param_meta_data: SortedVec<QueryParamMetaData>,
+    pub(crate) arch_ids: HashSet<ArchetypeId>,
     pub(crate) filter: Vec<FilterElem>,
 }
 
@@ -105,21 +100,22 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> Query<'w, 's, P, F> {
 pub struct QueryIter<'w, 's, T: QueryParam, F: QueryFilter> {
     query: &'w Query<'w, 's, T, F>,
     cur_arch_query: Option<TableStorageTupleIter<T::Construct<'w>>>,
-    cur_arch_index: usize,
+    cur_arch_index: hash_set::Iter<'s, ArchetypeId>,
 }
 
 impl<'w, 's, T: QueryParam, F: QueryFilter> QueryIter<'w, 's, T, F> {
     pub fn new(query: &'w Query<'w, 's, T, F>) -> Self {
         let mut arch_query = None;
+        let mut arch_ids_iter = query.state.arch_ids.iter();
         if query.state.arch_ids.len() > 0 {
-            let arch_id = query.state.arch_ids[0];
-            arch_query = Some(unsafe { query.get_arch_query_iter(arch_id) });
+            let arch_id = arch_ids_iter.next().unwrap();
+            arch_query = Some(unsafe { query.get_arch_query_iter(*arch_id) });
         }
 
         Self {
             query,
             cur_arch_query: arch_query,
-            cur_arch_index: 0,
+            cur_arch_index: arch_ids_iter,
         }
     }
     /*
@@ -145,13 +141,12 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
                 match <_ as Iterator>::next(cur_query) {
                     Some(elem) => return Some(elem),
                     None => {
-                        self.cur_arch_index += 1;
-                        if self.cur_arch_index >= self.query.state.arch_ids.len() {
-                            return None;
-                        } else {
-                            let next_arch_id = self.query.state.arch_ids[self.cur_arch_index];
+                        if let Some(next_arch_id) = self.cur_arch_index.next(){
                             self.cur_arch_query =
-                                Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
+                                Some(unsafe { self.query.get_arch_query_iter(*next_arch_id) });
+                        }
+                        else{
+                            return None;
                         }
                     }
                 }
@@ -218,11 +213,11 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
                         .chain(arch.aos_comp_ids.iter())
                         .map(|cid| *cid),
                 );
-                let res = query_filter::comp_ids_compatible_with_filter(
+                let not_filtered_out = query_filter::comp_ids_compatible_with_filter(
                     &comp_ids_set,
                     &query_state_key.filter,
                 );
-                res
+                not_filtered_out
             })
             .cloned()
             .collect();
@@ -238,12 +233,12 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         depend_graph.insert_query_archetypes(next_query_id, &arch_ids);
         depend_graph.insert_system_query(system_id, next_query_id);
 
-        let QueryStateKey { comp_ids, filter } = query_state_key;
+        let QueryStateKey { comp_ids: _comp_ids, filter } = query_state_key;
 
+        let arch_ids : HashSet<ArchetypeId> = arch_ids.iter().map(|aid| aid.clone()).collect();
         let query_data = QueryState {
-            //TODO: remove comp_ids/filter ? already used as key, remove cloning
-            comp_ids: comp_ids,
-            arch_ids,
+            query_param_meta_data: query_prm_meta_data,
+            arch_ids: arch_ids,
             filter: filter,
         };
 

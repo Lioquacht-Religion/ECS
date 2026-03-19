@@ -354,7 +354,6 @@ impl TupleConstructorSource for TableSoA {
     type IterType<'c, T: Component> = ThinBlobIterUnsafe<'c, T>;
     type IterMutType<'c, T: Component> = ThinBlobIterMutUnsafe<'c, T>;
     fn get_entity_key_iter<'c>(&'c mut self) -> EntityKeyIterUnsafe<'c> {
-        //TODO:?
         todo!()
     }
     unsafe fn get_iter<'c, T: Component>(&'c mut self) -> Self::IterType<'c, T> {
@@ -383,16 +382,19 @@ mod tests {
     use crate::ecs::world::WorldData;
     use crate::ecs::{component::Component, system::Res, world::World};
 
+    #[allow(unused)]
     struct Pos(i32);
     impl Component for Pos {
         const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
     }
 
+    #[allow(unused)]
     struct Pos2(i32, i64);
     impl Component for Pos2 {
         const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
     }
 
+    #[allow(unused)]
     struct Pos3(i32, i32, i32);
     impl Component for Pos3 {
         const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
@@ -403,11 +405,13 @@ mod tests {
         const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
     }
 
+    #[allow(unused)]
     struct Comp1(usize, usize);
     impl Component for Comp1 {
         const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;
     }
 
+    #[allow(unused)]
     struct Comp2(usize, usize);
     impl Component for Comp2 {
         const STORAGE: crate::ecs::component::StorageTypes = StorageTypes::TableSoA;

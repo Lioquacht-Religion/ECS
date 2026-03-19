@@ -14,7 +14,6 @@ use crate::{
     ecs::{
         ecs_dependency_graph::{EcsEdge, QueryId},
         resource::ResourceId,
-        world::SharedWorldData,
     },
     utils::ecs_id::{EcsId, impl_ecs_id},
 };

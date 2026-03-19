@@ -193,10 +193,10 @@ impl WorldData {
         self.entity_storage.remove_entity(entity_key);
     }
 
-    pub fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T) {
+    pub fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T, overwrite: bool) {
         //TODO: add hooks
         self.entity_storage
-            .add_component_to_entity(entity_key, component);
+            .add_component_to_entity(entity_key, component, overwrite);
     }
 
     pub fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey) {

@@ -142,13 +142,10 @@ impl TableStorage {
         Some((row_id_start, row_id_end))
     }
 
-    /// TODO: changes are finished, update description
     /// Removes supplied entity with all its components from table.
-    /// TODO: this description is wrong, one entity gets removed
-    /// and another may need to be moved in the table to fill the empty spot
-    /// of removed entity.
-    /// The changes to this moved entity should be returned, e.g. entity key and new row id.
-    /// WRONG: Returns a tuple of the new EntityKey and the entities new row id in the world.
+    /// One entity gets removed and another may need to be moved in the table 
+    /// to fill the empty spot of removed entity.
+    /// Returns a tuple of the EntityKey and the entities new row id in the table.
     pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, TableRowId)> {
         // if row id cannot be contained in table,
         // its entity may have already been deleted
@@ -163,10 +160,6 @@ impl TableStorage {
 
         self.len -= 1;
 
-        //TODO: does the row id need to be updated?
-        //TODO: what does the row id even mean anymore?
-        //TODO: the removal of entities seems to be incorrectly implemented in general
-        //TODO: swap and then remove, instead of just a normal remove
         self.remove_replace_with_last_entity_key(entity)
     }
 

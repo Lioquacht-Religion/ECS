@@ -125,11 +125,12 @@ impl Command for DespawnCommand {
 pub(crate) struct ComponentAddCommand<T: Component> {
     entity_key: EntityKey,
     component: T,
+    overwrite: bool
 }
 
 impl<T: Component> Command for ComponentAddCommand<T> {
     fn exec(self: Box<Self>, world_data: &mut WorldData) -> () {
-        world_data.add_component_to_entity(self.entity_key, self.component);
+        world_data.add_component_to_entity(self.entity_key, self.component, self.overwrite);
     }
 }
 
@@ -169,10 +170,11 @@ impl<'w, 's> Commands<'w, 's> {
             .push(Box::new(DespawnCommand { entity_key }));
     }
 
-    pub fn add_component<T: Component>(&mut self, entity_key: EntityKey, component: T) {
+    pub fn add_component<T: Component>(&mut self, entity_key: EntityKey, component: T, overwrite: bool) {
         self.command_queue.push(Box::new(ComponentAddCommand {
             entity_key,
             component,
+            overwrite
         }));
     }
 

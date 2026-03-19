@@ -106,8 +106,6 @@ impl TableAoS {
                 type_meta_data: meta_data.into(),
             };
         }
-        //TODO: rethink how to handle this situation, probably put table into option outside
-        //panic!("Completely empty Archetype not allowed!")
         Self {
             archetype_id,
             vec: ThinBlobVec::new(Layout::new::<()>(), None),
