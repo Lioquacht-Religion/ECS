@@ -341,7 +341,7 @@ impl EntityStorage {
             StorageTypes::SparseSet => todo!(),
         };
         //TODO: need to update row id of replace entity of transfered entity
-        //TODO: -> this is horribly annoying, I should just the table entities vector length,
+        //TODO: -> this is horribly annoying, I should just use the table entities vector length,
         //instead of having an extra field
         let replaced_entity_info = table_from.remove_replace_with_last_entity_key(entity);
         table_to.entities.push(entity_key);
@@ -354,7 +354,7 @@ impl EntityStorage {
         &mut self,
         entity_key: EntityKey,
     ) -> Result<Entity, EntStoreErr> {
-        //TODO: entity should be removed if it does not contain any components anymore
+        //TODO: entity should be removed if it does not contain any components anymore?
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
 
@@ -592,14 +592,18 @@ impl EntityStorage {
 pub mod test {
     use crate::ecs::prelude::*;
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq)]
     #[allow(unused)]
     struct Comp1(usize);
     impl Component for Comp1 {}
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq)]
     struct Comp2(u8, String);
     impl Component for Comp2 {}
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct Comp3(u8);
+    impl Component for Comp3 {}
 
     struct IterCount(usize);
 
@@ -709,27 +713,87 @@ pub mod test {
         world.get_resource_mut::<IterCount>().unwrap().0 += 1;
     }
 
-    /*
+    struct ToRemove();
+    impl Component for ToRemove{}
+
+    struct DoubleRemoveEk(Option<EntityKey>);
+
+    fn test_remove_comps_until_empty(
+        mut commands : Commands, 
+        mut double_rem_ek : ResMut<DoubleRemoveEk>, 
+        mut query : Query<(EntityKey, &Comp1, &Comp2), With<ToRemove>>
+    ){
+        assert_eq!(1, query.iter().count());
+        for (ek, c1, c2) in query.iter(){
+            assert_eq!(&Comp1(90), c1);
+            assert_eq!(&Comp2(7, String::from("abw")), c2);
+            double_rem_ek.0.replace(ek);
+            commands.remove_component::<Comp1>(ek);
+            commands.remove_component::<Comp2>(ek);
+            commands.remove_component::<ToRemove>(ek);
+        }
+    }
+
+    fn test_if_comps_removed(
+        mut commands : Commands, 
+        double_rem_ek: Res<DoubleRemoveEk>, 
+        mut query : Query<(&Comp1, &Comp2), With<ToRemove>>
+    ){
+        for (c1, c2) in query.iter(){
+            assert_eq!(&Comp1(90), c1);
+            assert_eq!(&Comp2(7, String::from("abw")), c2);
+        }
+        assert_eq!(0, query.iter().count());
+        let ek = double_rem_ek.0.expect("Should exist by now.");
+
+        commands.remove_component::<Comp1>(ek);
+        commands.remove_component::<Comp2>(ek);
+        commands.remove_component::<ToRemove>(ek);
+    }
+
+    fn test_readd_comps_to_empty_entity(
+        mut commands : Commands, 
+        double_rem_ek: Res<DoubleRemoveEk>, 
+    ){
+        let ek = double_rem_ek.0.expect("Should exist by now.");
+        commands.add_component(ek, Comp1(90), true);
+        commands.add_component(ek,Comp2(7, "abw".to_string()), true);
+        commands.add_component(ek, ToRemove(), true);
+        commands.add_component(ek, Comp3(250), true);
+    }
+
+    fn test_if_comps_readded(
+        mut query : Query<(&Comp1, &Comp2, &Comp3), With<ToRemove>>
+    ){
+        assert_eq!(1, query.iter().count());
+        for (c1, c2, c3) in query.iter(){
+            assert_eq!(&Comp1(90), c1);
+            assert_eq!(&Comp2(7, String::from("abw")), c2);
+            assert_eq!(&Comp3(250), c3);
+        }
+
+    }
+
     #[test]
     fn test_remove_component_from_entity() {
         let mut world = World::new();
-        world.add_resource(IterCount(0));
         world.add_systems(
-            test_add_comp_to_entity_system1
-            .before(test_add_component_to_entity_system2),
+            (
+                test_remove_comps_until_empty, 
+                test_if_comps_removed,
+                test_readd_comps_to_empty_entity,
+                test_if_comps_readded
+            ).chain()
         );
+        world.add_entity(
+            (Comp1(90), Comp2(7, "abw".to_string()), ToRemove())
+        );
+        world.add_resource(DoubleRemoveEk(None));
         for _i in 0..10 {
             world.add_entity(Comp1(90));
             world.add_entity(Comp2(7, "abw".to_string()));
         }
 
         world.init_and_run();
-        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
-        world.run();
-        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
-        world.run();
-        world.get_resource_mut::<IterCount>().unwrap().0 += 1;
-
     }
-    */
 }
