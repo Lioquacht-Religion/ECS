@@ -108,7 +108,7 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> QueryIter<'w, 's, T, F> {
         let mut arch_query = None;
         let mut arch_ids_iter = query.state.arch_ids.iter();
         if query.state.arch_ids.len() > 0 {
-            let arch_id = arch_ids_iter.next().unwrap();
+            let arch_id = <_ as Iterator>::next(&mut arch_ids_iter).unwrap();
             arch_query = Some(unsafe { query.get_arch_query_iter(*arch_id) });
         }
 
@@ -117,20 +117,7 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> QueryIter<'w, 's, T, F> {
             cur_arch_query: arch_query,
             cur_arch_index: arch_ids_iter,
         }
-    }
-    /*
-     * TODO: extract into its own function and mark as cold?
-        fn set_next_archetype(&mut self) -> Option<T>{
-                self.cur_arch_index += 1;
-                if self.cur_arch_index >= self.query.state.arch_ids.len() {
-                    return None;
-                }
-
-                let next_arch_id = self.query.state.arch_ids[self.cur_arch_index];
-                self.cur_arch_query =
-                    Some(unsafe { self.query.get_arch_query_iter(next_arch_id) });
-        }
-    */
+    } 
 }
 
 impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F> {
@@ -141,7 +128,7 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
                 match <_ as Iterator>::next(cur_query) {
                     Some(elem) => return Some(elem),
                     None => {
-                        if let Some(next_arch_id) = self.cur_arch_index.next(){
+                        if let Some(next_arch_id) = <_ as Iterator>::next(&mut self.cur_arch_index){
                             self.cur_arch_query =
                                 Some(unsafe { self.query.get_arch_query_iter(*next_arch_id) });
                         }

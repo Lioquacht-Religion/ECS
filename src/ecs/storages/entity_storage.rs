@@ -197,7 +197,7 @@ impl EntityStorage {
             .get_mut(&archetype_id)
             .expect("ERROR: table does not contain archetype id!");
 
-        let row_id_start = table.len as usize;
+        let row_id_start = table.entities.len() as usize;
         let row_id_end = row_id_start + input.len();
         let mut entity_keys = Vec::with_capacity(input.len());
         for i in row_id_start..row_id_end {
@@ -245,7 +245,6 @@ impl EntityStorage {
     ) -> Result<Entity, EntStoreErr> {
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
-            //TODO: how to handle if entity already does not contain the to be removed component
             let to_table_arch_id = match self
                 .create_or_get_archetype_adding_comp_to_entity::<T>(entity.archetype_id)
             {
@@ -340,13 +339,9 @@ impl EntityStorage {
             }
             StorageTypes::SparseSet => todo!(),
         };
-        //TODO: need to update row id of replace entity of transfered entity
-        //TODO: -> this is horribly annoying, I should just use the table entities vector length,
-        //instead of having an extra field
+        // need to update row id of replace entity of transfered entity
         let replaced_entity_info = table_from.remove_replace_with_last_entity_key(entity);
         table_to.entities.push(entity_key);
-        table_from.len -= 1;
-        table_to.len += 1;
         (new_to_row_id, replaced_entity_info)
     }
 
@@ -354,7 +349,6 @@ impl EntityStorage {
         &mut self,
         entity_key: EntityKey,
     ) -> Result<Entity, EntStoreErr> {
-        //TODO: entity should be removed if it does not contain any components anymore?
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
 
@@ -365,31 +359,43 @@ impl EntityStorage {
                 // same archetype found, component was already removed from entity
                 Err(EntStoreErr::SameArch) => return Err(EntStoreErr::SameArch),
                 // entity does not contain any components anymore
-                // TODO: do nothing here or should the entity be removed
-                Err(EntStoreErr::EmptyArch) => return Err(EntStoreErr::EmptyArch),
+                // and entity should be removed
+                Err(EntStoreErr::EmptyArch) => {
+                    println!("Entity does not contain any components anymore and will be removed.");
+                    self.remove_entity(entity_key);
+                    return Err(EntStoreErr::EmptyArch)
+                },
                 // should not happen here, implementation error
                 Err(EntStoreErr::MultSameKindComp) => panic!(
                     "INVALID: Multiple of the same kind of component should not occur in one archetype."
                 ),
                 Err(EntStoreErr::EntityNotFound) => panic!("INVALID: Should be checked before."),
             };
-            let row_id = match self
+            return match self
                 .tables
                 .split_mut2(&entity.archetype_id, &to_table_arch_id)
             {
                 Ok((table_from, table_to)) => {
-                    Self::call_remove_component_for_tables::<T>(entity, table_from, table_to)
+                    let row_id = Self::call_remove_component_for_tables::<T>(entity, table_from, table_to);
+                    // update row id and archetype id, if replacement entity was needed to fill gap
+                    if let Some((entity_key, row_id)) = table_from.remove_replace_with_last_entity_key(entity){
+                        let entity = self.entities.get_mut(entity_key).unwrap();
+                        entity.row_id = row_id;
+                    }
+                    table_to.entities.push(entity_key);
+
+                    // update row id and archetype id, because entity moved tables
+                    let entity = self.entities.get_mut(entity_key).unwrap();
+                    entity.row_id = row_id;
+                    entity.archetype_id = to_table_arch_id;
+
+                    Ok(*entity)
                 }
-                Err(SplitError::SameKey(_table)) => return Err(EntStoreErr::SameArch),
+                Err(SplitError::SameKey(_table)) => Err(EntStoreErr::SameArch),
                 Err(SplitError::OnlyOneValue(_)) | Err(SplitError::NoValueFound) => {
                     panic!("Tables for both from and to archetypes should exist at this point.")
                 }
             };
-            // update row id and archetype id, because entity moved tables
-            let entity = self.entities.get_mut(entity_key).unwrap();
-            entity.row_id = row_id;
-            entity.archetype_id = to_table_arch_id;
-            return Ok(*entity);
         }
         Err(EntStoreErr::EntityNotFound)
     }
@@ -493,9 +499,6 @@ impl EntityStorage {
             self.cache.compid_vec_cache.insert(comp_ids.into());
             return Ok(*archetype_id);
         }
-
-        //TODO: when removing, handle case if all components of an entity have been removed
-        // -> remove entity entirely
 
         // validation
         Self::archetype_comp_ids_validation(&comp_ids)?;
@@ -739,11 +742,11 @@ pub mod test {
         double_rem_ek: Res<DoubleRemoveEk>, 
         mut query : Query<(&Comp1, &Comp2), With<ToRemove>>
     ){
+        assert_eq!(0, query.iter().count());
         for (c1, c2) in query.iter(){
             assert_eq!(&Comp1(90), c1);
             assert_eq!(&Comp2(7, String::from("abw")), c2);
         }
-        assert_eq!(0, query.iter().count());
         let ek = double_rem_ek.0.expect("Should exist by now.");
 
         commands.remove_component::<Comp1>(ek);
@@ -753,13 +756,8 @@ pub mod test {
 
     fn test_readd_comps_to_empty_entity(
         mut commands : Commands, 
-        double_rem_ek: Res<DoubleRemoveEk>, 
     ){
-        let ek = double_rem_ek.0.expect("Should exist by now.");
-        commands.add_component(ek, Comp1(90), true);
-        commands.add_component(ek,Comp2(7, "abw".to_string()), true);
-        commands.add_component(ek, ToRemove(), true);
-        commands.add_component(ek, Comp3(250), true);
+        commands.spawn((Comp1(90), Comp2(7, "abw".to_string()), ToRemove(), Comp3(250)));
     }
 
     fn test_if_comps_readded(
@@ -771,7 +769,6 @@ pub mod test {
             assert_eq!(&Comp2(7, String::from("abw")), c2);
             assert_eq!(&Comp3(250), c3);
         }
-
     }
 
     #[test]

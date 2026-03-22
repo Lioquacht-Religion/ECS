@@ -29,7 +29,7 @@ pub struct TableStorage {
     pub(crate) entities: Vec<EntityKey>,
     pub(crate) table_soa: TableSoA,
     pub(crate) table_aos: TableAoS,
-    pub(crate) len: u32,
+    //pub(crate) len: u32,
 }
 
 impl TableStorage {
@@ -38,7 +38,7 @@ impl TableStorage {
             entities: Vec::new(),
             table_soa: TableSoA::new(archetype_id, entity_storage),
             table_aos: TableAoS::new(archetype_id, entity_storage),
-            len: 0,
+            //len: 0,
         }
     }
 
@@ -57,7 +57,7 @@ impl TableStorage {
         cache: &mut EntityStorageCache,
         mut value: T,
     ) -> TableRowId {
-        let row_id = TableRowId(self.len);
+        let row_id = self.entities.len().into();
 
         let mut soa_ptr_vec = cache.ptr_vec_cache.take_cached();
         let mut aos_ptr_vec = cache.ptr_vec_cache.take_cached();
@@ -76,7 +76,6 @@ impl TableStorage {
         cache.ptr_vec_cache.insert(aos_ptr_vec);
 
         self.entities.push(entity);
-        self.len += 1;
         row_id
     }
 
@@ -129,11 +128,8 @@ impl TableStorage {
         cache.ptr_vec_cache.insert(soa_ptr_vec);
         cache.ptr_vec_cache.insert(aos_ptr_vec);
 
-        let row_id_start = self.len as u32;
+        let row_id_start = self.entities.len() as u32;
         let row_id_end = row_id_start + values.len() as u32;
-
-        let value_len: u32 = values.len().try_into().expect("Max u32 value reached!");
-        self.len += value_len;
 
         while let Some(val) = values.pop() {
             std::mem::forget(val);
@@ -150,15 +146,16 @@ impl TableStorage {
         // if row id cannot be contained in table,
         // its entity may have already been deleted
         // return early
-        if self.len <= entity.row_id.id() {
-            dbg!("Row id of entity from despawn command is not contained in table.");
+        if self.entities.len() <= entity.row_id.id_usize() {
+            println!(
+                "Row id of entity from despawn command is not contained in table with length {}. {:?}",
+                self.entities.len(), entity
+            );
             return None;
         }
 
         self.table_soa.remove(&entity);
         self.table_aos.remove(&entity);
-
-        self.len -= 1;
 
         self.remove_replace_with_last_entity_key(entity)
     }
@@ -167,7 +164,7 @@ impl TableStorage {
         &mut self,
         entity: Entity,
     ) -> Option<(EntityKey, TableRowId)> {
-        if self.len == entity.row_id.id() {
+        if self.entities.len() == entity.row_id.id_usize() {
             self.entities.pop();
             None
         } else {
@@ -211,7 +208,7 @@ pub(crate) unsafe fn new_table_storage_iter<'table, TC: TupleIterConstructor<Tab
     unsafe {
         TableStorageTupleIter {
             tuple_iters: TC::construct(table.into()),
-            len: table.len as usize,
+            len: table.entities.len(),
             index: 0,
         }
     }
@@ -227,7 +224,7 @@ pub(crate) unsafe fn new_table_storage_iter_with_index<
     unsafe {
         TableStorageTupleIter {
             tuple_iters: TC::construct(table.into()),
-            len: table.len as usize,
+            len: table.entities.len(),
             index: index,
         }
     }

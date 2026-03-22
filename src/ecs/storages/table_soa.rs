@@ -193,8 +193,8 @@ impl TableSoA {
         }
         from.len -= 1;
         let new_to_table_entity_row_id = to.len.into();
-        to.update_capacity();
         to.len += 1;
+        to.update_capacity();
         new_to_table_entity_row_id
     }
 

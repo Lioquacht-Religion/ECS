@@ -249,7 +249,6 @@ impl EcsDependencyGraph {
             let qnode = &mut self.queries[qid.id_usize()];
             let query_comp_row_ids : HashSet<u32> = qnode.component_edges
                 .keys().map(|c_row_id|{ *c_row_id }).collect();
-            //TODO: need to take optional query params into account
             let query_state = &mut query_stati[qid.id_usize()];
 
             if EntityStorage::is_subset_of(
