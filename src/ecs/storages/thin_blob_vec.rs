@@ -4,7 +4,7 @@ use std::{alloc::Layout, marker::PhantomData, ptr::NonNull};
 
 use crate::{
     ecs::component::{Component, ComponentId, ComponentInfo},
-    utils::tuple_iters::TupleIterator,
+    utils::{ecs_id::EcsId, tuple_iters::TupleIterator},
 };
 
 use super::table_aos::TypeMetaData;
@@ -233,7 +233,7 @@ impl ThinBlobVec {
                 let entry_ptr: *mut u8 = self.data_ptr.as_ptr().add(base_offset).cast();
 
                 for (i, value_ptr) in value_ptrs.iter().enumerate() {
-                    let comp_info = &comp_infos[value_ptr.comp_id.0 as usize];
+                    let comp_info = &comp_infos[value_ptr.comp_id.id_usize()];
                     let dst_comp_ptr: *mut u8 = entry_ptr.add(comp_offsets[i].ptr_offset);
                     let layout_size = comp_info.layout.size();
                     // do not copy zero sized types to different location

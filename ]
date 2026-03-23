@@ -215,59 +215,52 @@ impl TableAoS {
         }
     }
 
-    pub(crate) unsafe fn transfer_entity_with_new_comp<T: Component>(
-        component_infos: &[ComponentInfo],
-        cache: &mut EntityStorageCache,
+    pub(crate) fn transfer_entity_with_new_comp<T: Component>(
         from: &mut TableAoS,
         to: &mut TableAoS,
         entity: &Entity,
-        mut component: T,
-        comp_id: ComponentId,
+        component: T,
     ) -> TableRowId {
-        // transfers entities components to different archetype table
-        let mut from_ptr_vec: Vec<NonNull<u8>> = cache.ptr_vec_cache.take_cached();
-        let mut from_compid_vec: Vec<ComponentId> = cache.compid_vec_cache.take_cached();
-        let from_row_base_ptr = unsafe {
-            from.vec
-                .data_ptr
-                .add(from.vec.elem_layout.size() * entity.row_id.id_usize())
-        };
-        from.type_meta_data
-            .iter()
-            .map(|tmd| {
-                (tmd.comp_id, unsafe {
-                    from_row_base_ptr.add(tmd.ptr_offset)
-                })
-            })
-            .for_each(|(compid, ptr)| {
-                from_compid_vec.push(compid);
-                from_ptr_vec.push(ptr);
-            });
-
-        // add new components id and current ptr
-        from_compid_vec.push(comp_id);
-        from_ptr_vec.push(NonNull::from_mut(&mut component).cast());
-
+        let from_iter = from
+            .columns
+            .iter_mut()
+            .filter(|(tid, _)| **tid != TypeId::of::<T>());
+        //SAFETY: from_len and the from_iter are from the same table, so from_len and the single
+        //columns should have the same length
         unsafe {
-            to.insert(component_infos, &from_compid_vec, &from_ptr_vec, cache);
+            Self::transfer_entity(from.len, from_iter, to, entity);
         }
-        cache.ptr_vec_cache.insert(from_ptr_vec);
-        cache.compid_vec_cache.insert(from_compid_vec);
-
-        // forget this added component, to prevent it from being dropped
-        // it now lives type erased inside of the aos table
-        std::mem::forget(component);
-
-        // remove transfered entity from old table
+        let to_col_added_comp = to.columns.get_mut(&TypeId::of::<T>())
+            .expect("TableSoA to move entity to does not contain needed column to add the new component to.");
         unsafe {
-            from.vec
-                .dont_drop_replace_with_last(from.len, entity.row_id.id_usize());
+            to_col_added_comp.push_typed(to.cap, to.len, component);
         }
-
         from.len -= 1;
         let new_to_table_entity_row_id = to.len.into();
+        to.update_capacity();
         to.len += 1;
         new_to_table_entity_row_id
+    }
+
+    unsafe fn transfer_entity<'to>(
+        from_len: usize,
+        from_iter: impl Iterator<Item = (&'to TypeId, &'to mut ThinBlobVec)>,
+        to: &mut TableAoS,
+        entity: &Entity,
+    ) {
+        for (type_id, from_col) in from_iter {
+            let to_col = to
+                .columns
+                .get_mut(type_id)
+                .expect("TableSoA to move entity to does not contain needed component column.");
+            let from_row_id = entity.row_id.id_usize();
+            let from_col_elem_ptr = from_col.get_ptr_untyped(from_row_id, from_col.elem_layout);
+            //SAFETY: from_len needs to be equal to the length of the columns in the from_iter
+            unsafe {
+                to_col.push_untyped(to.cap, to.len, from_col_elem_ptr);
+                from_col.dont_drop_replace_with_last(from_len, from_row_id);
+            }
+        }
     }
 
     /*

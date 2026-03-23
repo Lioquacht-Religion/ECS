@@ -9,7 +9,7 @@ use crate::{
         entity::{Entities, Entity, EntityKey, TableRowId},
         prelude::StorageTypes,
         query::{QueryParam, QueryParamMetaData, QueryState},
-        storages::table_soa::TableSoA,
+        storages::{table_aos::TableAoS, table_soa::TableSoA},
     },
     utils::{
         ecs_id::EcsId,
@@ -241,7 +241,7 @@ impl EntityStorage {
         &mut self,
         entity_key: EntityKey,
         component: T,
-        overwrite: bool
+        overwrite: bool,
     ) -> Result<Entity, EntStoreErr> {
         if let Some(entity) = self.entities.get_mut(entity_key) {
             let entity = entity.clone();
@@ -252,81 +252,128 @@ impl EntityStorage {
                 // same archetype found, component was already removed from entity
                 Err(EntStoreErr::SameArch) => {
                     println!("IGNORED: Current archetype of entity already contains component.");
-                    return Err(EntStoreErr::SameArch) 
-                },
+                    return Err(EntStoreErr::SameArch);
+                }
                 // entity does not contain any components anymore and should be removed, should not
                 // be possible when adding components
-                Err(EntStoreErr::EmptyArch) => panic!("IMPLEMENTATION ERROR: Entity should not become empty when adding component."),
                 // should not happen here, implementation error
+                Err(EntStoreErr::EmptyArch) => panic!(
+                    "IMPLEMENTATION ERROR: Entity should not become empty when adding component."
+                ),
                 Err(EntStoreErr::MultSameKindComp) => {
-                    if overwrite{
-                        // overwritten with old component with new data
+                    if overwrite {
+                        // overwrite old component with new data
                         self.replace_component_of_entity(entity, component);
                         return Err(EntStoreErr::MultSameKindComp);
-                    }
-                    else{
-                        println!("IGNORED: Current archetype of entity already contains component.");
+                    } else {
+                        println!(
+                            "IGNORED: Current archetype of entity already contains component."
+                        );
                         return Err(EntStoreErr::MultSameKindComp);
                     }
-                },
-                Err(EntStoreErr::EntityNotFound) => panic!("IMPLEMENTATION ERROR: Should be checked already."),
+                }
+                Err(EntStoreErr::EntityNotFound) => {
+                    panic!("IMPLEMENTATION ERROR: Should be checked already.")
+                }
             };
 
-            return Ok(self.transfer_ent_w_new_comp(entity, to_table_arch_id, entity_key, component));
+            return Ok(self.transfer_ent_w_new_comp(
+                entity,
+                to_table_arch_id,
+                entity_key,
+                component,
+            ));
         }
         Err(EntStoreErr::EntityNotFound)
     }
 
-    fn replace_component_of_entity<T: Component>(&mut self, entity: Entity, mut component: T){
+    fn replace_component_of_entity<T: Component>(&mut self, entity: Entity, mut component: T) {
         let table_arch_id = entity.archetype_id;
-        let table = self.tables.get_mut(&table_arch_id).expect("Table should exist at this point.");
+        let table = self
+            .tables
+            .get_mut(&table_arch_id)
+            .expect("Table should exist at this point.");
         match T::STORAGE {
             StorageTypes::TableAoS => todo!(),
             StorageTypes::TableSoA => {
-                let col = table.table_soa.columns.get_mut(&TypeId::of::<T>()).expect("Component is not contained by table.");
+                let col = table
+                    .table_soa
+                    .columns
+                    .get_mut(&TypeId::of::<T>())
+                    .expect("Component is not contained by table.");
                 //TODO: call on remove hook here, before replacing component
                 //if let Some(on_remove) = T::on_remove(){}
-                let cur_component = unsafe{ col.get_mut_typed::<T>(entity.row_id.id_usize()) };
+                let cur_component = unsafe { col.get_mut_typed::<T>(entity.row_id.id_usize()) };
                 std::mem::swap(cur_component, &mut component);
                 // moved out component will be dropped here
-            },
+            }
             StorageTypes::SparseSet => todo!(),
         }
     }
 
-    fn transfer_ent_w_new_comp<T: Component>(&mut self, entity: Entity, to_table_arch_id: ArchetypeId, entity_key: EntityKey, component: T) -> Entity{
-            let row_id = if let Ok((table_from, table_to)) = self
-                .tables
-                .split_mut2(&entity.archetype_id, &to_table_arch_id)
-            {
-                Self::call_transfer_ent_w_new_comp_for_tables(
-                    entity_key, entity, component, table_from, table_to,
-                )
-            } else {
-                panic!("Tables for both from and to archetypes should exist at this point.")
-            };
-            // update row id and archetype id, if replacement entity was needed to fill gap
-            if let Some((entity_key, row_id)) = row_id.1{
-                let entity = self.entities.get_mut(entity_key).unwrap();
-                entity.row_id = row_id;
-            }
-            // update row id and archetype id, because entity moved tables
+    fn transfer_ent_w_new_comp<T: Component>(
+        &mut self,
+        entity: Entity,
+        to_table_arch_id: ArchetypeId,
+        entity_key: EntityKey,
+        component: T,
+    ) -> Entity {
+        let comp_id = self.create_or_get_component::<T>();
+        let row_id = if let Ok((table_from, table_to)) = self
+            .tables
+            .split_mut2(&entity.archetype_id, &to_table_arch_id)
+        {
+            Self::call_transfer_ent_w_new_comp_for_tables(
+                &self.components,
+                &mut self.cache,
+                entity_key,
+                entity,
+                component,
+                comp_id,
+                table_from,
+                table_to,
+            )
+        } else {
+            panic!("Tables for both from and to archetypes should exist at this point.")
+        };
+        // update row id and archetype id, if replacement entity was needed to fill gap
+        if let Some((entity_key, row_id)) = row_id.1 {
             let entity = self.entities.get_mut(entity_key).unwrap();
-            entity.row_id = row_id.0;
-            entity.archetype_id = to_table_arch_id;
-            
-            *entity
+            entity.row_id = row_id;
+        }
+        // update row id and archetype id, because entity moved tables
+        let entity = self.entities.get_mut(entity_key).unwrap();
+        entity.row_id = row_id.0;
+        entity.archetype_id = to_table_arch_id;
+
+        *entity
     }
 
     fn call_transfer_ent_w_new_comp_for_tables<T: Component>(
+        component_infos: &[ComponentInfo],
+        cache: &mut EntityStorageCache,
         entity_key: EntityKey,
         entity: Entity,
         component: T,
+        comp_id: ComponentId,
         table_from: &mut TableStorage,
         table_to: &mut TableStorage,
     ) -> (TableRowId, Option<(EntityKey, TableRowId)>) {
         let new_to_row_id = match T::STORAGE {
-            StorageTypes::TableAoS => todo!(),
+            StorageTypes::TableAoS => {
+                let row_id = unsafe {
+                    TableAoS::transfer_entity_with_new_comp(
+                        component_infos,
+                        cache,
+                        &mut table_from.table_aos,
+                        &mut table_to.table_aos,
+                        &entity,
+                        component,
+                        comp_id,
+                    )
+                };
+                row_id
+            }
             StorageTypes::TableSoA => {
                 //TODO: need to transfer aos and soa simultanously
                 let row_id = TableSoA::transfer_entity_with_new_comp(
@@ -363,8 +410,8 @@ impl EntityStorage {
                 Err(EntStoreErr::EmptyArch) => {
                     println!("Entity does not contain any components anymore and will be removed.");
                     self.remove_entity(entity_key);
-                    return Err(EntStoreErr::EmptyArch)
-                },
+                    return Err(EntStoreErr::EmptyArch);
+                }
                 // should not happen here, implementation error
                 Err(EntStoreErr::MultSameKindComp) => panic!(
                     "INVALID: Multiple of the same kind of component should not occur in one archetype."
@@ -376,9 +423,13 @@ impl EntityStorage {
                 .split_mut2(&entity.archetype_id, &to_table_arch_id)
             {
                 Ok((table_from, table_to)) => {
-                    let row_id = Self::call_remove_component_for_tables::<T>(entity, table_from, table_to);
+                    let row_id =
+                        Self::call_remove_component_for_tables::<T>(entity, table_from, table_to);
+                    //TODO: extract into methods
                     // update row id and archetype id, if replacement entity was needed to fill gap
-                    if let Some((entity_key, row_id)) = table_from.remove_replace_with_last_entity_key(entity){
+                    if let Some((entity_key, row_id)) =
+                        table_from.remove_replace_with_last_entity_key(entity)
+                    {
                         let entity = self.entities.get_mut(entity_key).unwrap();
                         entity.row_id = row_id;
                     }
@@ -559,7 +610,11 @@ impl EntityStorage {
         self.tables
             .insert(archetype_id, TableStorage::new(archetype_id, self));
         // update queries for relevant archetypes
-        self.depend_graph.insert_archetype_components(&mut self.query_data, archetype_id, &comp_ids.get_vec());
+        self.depend_graph.insert_archetype_components(
+            &mut self.query_data,
+            archetype_id,
+            &comp_ids.get_vec(),
+        );
         self.compids_archid_map.insert(comp_ids, archetype_id);
 
         archetype_id
@@ -717,17 +772,17 @@ pub mod test {
     }
 
     struct ToRemove();
-    impl Component for ToRemove{}
+    impl Component for ToRemove {}
 
     struct DoubleRemoveEk(Option<EntityKey>);
 
     fn test_remove_comps_until_empty(
-        mut commands : Commands, 
-        mut double_rem_ek : ResMut<DoubleRemoveEk>, 
-        mut query : Query<(EntityKey, &Comp1, &Comp2), With<ToRemove>>
-    ){
+        mut commands: Commands,
+        mut double_rem_ek: ResMut<DoubleRemoveEk>,
+        mut query: Query<(EntityKey, &Comp1, &Comp2), With<ToRemove>>,
+    ) {
         assert_eq!(1, query.iter().count());
-        for (ek, c1, c2) in query.iter(){
+        for (ek, c1, c2) in query.iter() {
             assert_eq!(&Comp1(90), c1);
             assert_eq!(&Comp2(7, String::from("abw")), c2);
             double_rem_ek.0.replace(ek);
@@ -738,12 +793,12 @@ pub mod test {
     }
 
     fn test_if_comps_removed(
-        mut commands : Commands, 
-        double_rem_ek: Res<DoubleRemoveEk>, 
-        mut query : Query<(&Comp1, &Comp2), With<ToRemove>>
-    ){
+        mut commands: Commands,
+        double_rem_ek: Res<DoubleRemoveEk>,
+        mut query: Query<(&Comp1, &Comp2), With<ToRemove>>,
+    ) {
         assert_eq!(0, query.iter().count());
-        for (c1, c2) in query.iter(){
+        for (c1, c2) in query.iter() {
             assert_eq!(&Comp1(90), c1);
             assert_eq!(&Comp2(7, String::from("abw")), c2);
         }
@@ -754,17 +809,18 @@ pub mod test {
         commands.remove_component::<ToRemove>(ek);
     }
 
-    fn test_readd_comps_to_empty_entity(
-        mut commands : Commands, 
-    ){
-        commands.spawn((Comp1(90), Comp2(7, "abw".to_string()), ToRemove(), Comp3(250)));
+    fn test_readd_comps_to_empty_entity(mut commands: Commands) {
+        commands.spawn((
+            Comp1(90),
+            Comp2(7, "abw".to_string()),
+            ToRemove(),
+            Comp3(250),
+        ));
     }
 
-    fn test_if_comps_readded(
-        mut query : Query<(&Comp1, &Comp2, &Comp3), With<ToRemove>>
-    ){
+    fn test_if_comps_readded(mut query: Query<(&Comp1, &Comp2, &Comp3), With<ToRemove>>) {
         assert_eq!(1, query.iter().count());
-        for (c1, c2, c3) in query.iter(){
+        for (c1, c2, c3) in query.iter() {
             assert_eq!(&Comp1(90), c1);
             assert_eq!(&Comp2(7, String::from("abw")), c2);
             assert_eq!(&Comp3(250), c3);
@@ -776,15 +832,14 @@ pub mod test {
         let mut world = World::new();
         world.add_systems(
             (
-                test_remove_comps_until_empty, 
+                test_remove_comps_until_empty,
                 test_if_comps_removed,
                 test_readd_comps_to_empty_entity,
-                test_if_comps_readded
-            ).chain()
+                test_if_comps_readded,
+            )
+                .chain(),
         );
-        world.add_entity(
-            (Comp1(90), Comp2(7, "abw".to_string()), ToRemove())
-        );
+        world.add_entity((Comp1(90), Comp2(7, "abw".to_string()), ToRemove()));
         world.add_resource(DoubleRemoveEk(None));
         for _i in 0..10 {
             world.add_entity(Comp1(90));

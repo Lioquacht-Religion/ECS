@@ -139,7 +139,7 @@ impl TableStorage {
     }
 
     /// Removes supplied entity with all its components from table.
-    /// One entity gets removed and another may need to be moved in the table 
+    /// One entity gets removed and another may need to be moved in the table
     /// to fill the empty spot of removed entity.
     /// Returns a tuple of the EntityKey and the entities new row id in the table.
     pub(crate) fn remove_entity(&mut self, entity: Entity) -> Option<(EntityKey, TableRowId)> {
@@ -149,7 +149,8 @@ impl TableStorage {
         if self.entities.len() <= entity.row_id.id_usize() {
             println!(
                 "Row id of entity from despawn command is not contained in table with length {}. {:?}",
-                self.entities.len(), entity
+                self.entities.len(),
+                entity
             );
             return None;
         }

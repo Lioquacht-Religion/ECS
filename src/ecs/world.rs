@@ -163,11 +163,11 @@ impl WorldData {
         }
     }
 
-    pub(crate) fn get_query_data(&self) -> &[QueryState]{
+    pub(crate) fn get_query_data(&self) -> &[QueryState] {
         &self.entity_storage.query_data
     }
 
-    pub(crate) fn get_query_data_mut(&mut self) -> &mut Vec<QueryState>{
+    pub(crate) fn get_query_data_mut(&mut self) -> &mut Vec<QueryState> {
         &mut self.entity_storage.query_data
     }
 
@@ -193,15 +193,22 @@ impl WorldData {
         self.entity_storage.remove_entity(entity_key);
     }
 
-    pub fn add_component_to_entity<T: Component>(&mut self, entity_key: EntityKey, component: T, overwrite: bool) {
+    pub fn add_component_to_entity<T: Component>(
+        &mut self,
+        entity_key: EntityKey,
+        component: T,
+        overwrite: bool,
+    ) {
         //TODO: add hooks
-        let _ = self.entity_storage
+        let _ = self
+            .entity_storage
             .add_component_to_entity(entity_key, component, overwrite);
     }
 
     pub fn remove_component_from_entity<T: Component>(&mut self, entity_key: EntityKey) {
         //TODO: add hooks
-        let _ = self.entity_storage
+        let _ = self
+            .entity_storage
             .remove_component_from_entity::<T>(entity_key);
     }
 

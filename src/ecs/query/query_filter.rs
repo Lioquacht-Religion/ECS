@@ -62,10 +62,8 @@ pub enum FilterElem {
 }
 
 impl QueryFilter for () {
-    fn get_and_filters(_es: &mut WorldData, _filter_elems: &mut Vec<FilterElem>) {
-    }
-    fn get_or_filters(_es: &mut WorldData, _filter_elems: &mut Vec<Vec<FilterElem>>) {
-    }
+    fn get_and_filters(_es: &mut WorldData, _filter_elems: &mut Vec<FilterElem>) {}
+    fn get_or_filters(_es: &mut WorldData, _filter_elems: &mut Vec<Vec<FilterElem>>) {}
 }
 impl<T: Component> QueryFilter for With<T> {
     fn get_and_filters(es: &mut WorldData, filter_elems: &mut Vec<FilterElem>) {

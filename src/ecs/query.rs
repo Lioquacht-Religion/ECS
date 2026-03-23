@@ -1,11 +1,20 @@
 // query.rs
 
-use std::{any::TypeId, collections::{hash_set, HashSet}, hash::Hash, marker::PhantomData};
+use std::{
+    any::TypeId,
+    collections::{HashSet, hash_set},
+    hash::Hash,
+    marker::PhantomData,
+};
 
 use crate::{
     all_tuples,
     ecs::{
-        ecs_dependency_graph::QueryId, entity::EntityKey, query::query_filter::{FilterElem, QueryFilter}, storages::table_storage::TableStorageTupleIter, system::{SystemId, SystemParamId}
+        ecs_dependency_graph::QueryId,
+        entity::EntityKey,
+        query::query_filter::{FilterElem, QueryFilter},
+        storages::table_storage::TableStorageTupleIter,
+        system::{SystemId, SystemParamId},
     },
     utils::{
         ecs_id::EcsId,
@@ -117,7 +126,7 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> QueryIter<'w, 's, T, F> {
             cur_arch_query: arch_query,
             cur_arch_index: arch_ids_iter,
         }
-    } 
+    }
 }
 
 impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F> {
@@ -128,11 +137,11 @@ impl<'w, 's, T: QueryParam, F: QueryFilter> Iterator for QueryIter<'w, 's, T, F>
                 match <_ as Iterator>::next(cur_query) {
                     Some(elem) => return Some(elem),
                     None => {
-                        if let Some(next_arch_id) = <_ as Iterator>::next(&mut self.cur_arch_index){
+                        if let Some(next_arch_id) = <_ as Iterator>::next(&mut self.cur_arch_index)
+                        {
                             self.cur_arch_query =
                                 Some(unsafe { self.query.get_arch_query_iter(*next_arch_id) });
-                        }
-                        else{
+                        } else {
                             return None;
                         }
                     }
@@ -220,9 +229,12 @@ impl<'w, 's, P: QueryParam, F: QueryFilter> SystemParam for Query<'w, 's, P, F> 
         depend_graph.insert_query_archetypes(next_query_id, &arch_ids);
         depend_graph.insert_system_query(system_id, next_query_id);
 
-        let QueryStateKey { comp_ids: _comp_ids, filter } = query_state_key;
+        let QueryStateKey {
+            comp_ids: _comp_ids,
+            filter,
+        } = query_state_key;
 
-        let arch_ids : HashSet<ArchetypeId> = arch_ids.iter().map(|aid| aid.clone()).collect();
+        let arch_ids: HashSet<ArchetypeId> = arch_ids.iter().map(|aid| aid.clone()).collect();
         let query_data = QueryState {
             query_param_meta_data: query_prm_meta_data,
             arch_ids: arch_ids,

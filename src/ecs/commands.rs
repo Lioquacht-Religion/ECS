@@ -125,7 +125,7 @@ impl Command for DespawnCommand {
 pub(crate) struct ComponentAddCommand<T: Component> {
     entity_key: EntityKey,
     component: T,
-    overwrite: bool
+    overwrite: bool,
 }
 
 impl<T: Component> Command for ComponentAddCommand<T> {
@@ -170,11 +170,16 @@ impl<'w, 's> Commands<'w, 's> {
             .push(Box::new(DespawnCommand { entity_key }));
     }
 
-    pub fn add_component<T: Component>(&mut self, entity_key: EntityKey, component: T, overwrite: bool) {
+    pub fn add_component<T: Component>(
+        &mut self,
+        entity_key: EntityKey,
+        component: T,
+        overwrite: bool,
+    ) {
         self.command_queue.push(Box::new(ComponentAddCommand {
             entity_key,
             component,
-            overwrite
+            overwrite,
         }));
     }
 

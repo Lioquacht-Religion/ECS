@@ -62,8 +62,10 @@ impl AnyMap {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::{any_map::AnyMap, gen_vec::{GenVec, Key}};
-
+    use crate::utils::{
+        any_map::AnyMap,
+        gen_vec::{GenVec, Key},
+    };
 
     #[derive(Debug, PartialEq, Eq)]
     #[allow(unused)]

@@ -1,12 +1,19 @@
 // ecs_dependeny_graph.rs
 
-use std::{collections::{HashMap, HashSet}, };
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ecs::{
-        component::{ArchetypeId, ComponentId}, prelude::EntityStorage, query::{query_filter, QueryParamMetaData, QueryState, RefKind}, resource::ResourceId, system::SystemId
+        component::{ArchetypeId, ComponentId},
+        prelude::EntityStorage,
+        query::{QueryParamMetaData, QueryState, RefKind, query_filter},
+        resource::ResourceId,
+        system::SystemId,
     },
-    utils::{ecs_id::{impl_ecs_id, EcsId}, sorted_vec::SortedVec},
+    utils::{
+        ecs_id::{EcsId, impl_ecs_id},
+        sorted_vec::SortedVec,
+    },
 };
 
 pub enum EcsNode {
@@ -230,31 +237,37 @@ impl EcsDependencyGraph {
 
         // update archetypes of query nodes
         let arch: &mut ArchetypeNode = &mut self.archetypes[arch_key as usize];
-        let mut query_ids : HashSet<QueryId> = HashSet::new();
-        arch.component_edges.iter().for_each(|(c_row_id, _edge)|{
-            self.components[*c_row_id as usize].system_edges.iter()
-                .for_each(|(s_row_id, _edge)|{
-                    self.systems[*s_row_id as usize].query_edges.iter()
-                        .map(|(q_row_id, _edge)|{
-                            self.queries[*q_row_id as usize].query_id.clone()
-                        })
-                    .for_each(|qid| {
-                        query_ids.insert(qid);
-                    });
+        let mut query_ids: HashSet<QueryId> = HashSet::new();
+        arch.component_edges.iter().for_each(|(c_row_id, _edge)| {
+            self.components[*c_row_id as usize]
+                .system_edges
+                .iter()
+                .for_each(|(s_row_id, _edge)| {
+                    self.systems[*s_row_id as usize]
+                        .query_edges
+                        .iter()
+                        .map(|(q_row_id, _edge)| self.queries[*q_row_id as usize].query_id.clone())
+                        .for_each(|qid| {
+                            query_ids.insert(qid);
+                        });
                 })
         });
-        let arch_comp_ids_set : HashSet<ComponentId> = comp_ids.iter().map(|cid| *cid).collect();
-        let arch_comp_ids : SortedVec<ComponentId> = comp_ids.iter().map(|cid| *cid).collect::<Vec<ComponentId>>().into();
-        for qid in query_ids.iter(){
+        let arch_comp_ids_set: HashSet<ComponentId> = comp_ids.iter().map(|cid| *cid).collect();
+        let arch_comp_ids: SortedVec<ComponentId> = comp_ids
+            .iter()
+            .map(|cid| *cid)
+            .collect::<Vec<ComponentId>>()
+            .into();
+        for qid in query_ids.iter() {
             let qnode = &mut self.queries[qid.id_usize()];
-            let query_comp_row_ids : HashSet<u32> = qnode.component_edges
-                .keys().map(|c_row_id|{ *c_row_id }).collect();
+            let query_comp_row_ids: HashSet<u32> = qnode
+                .component_edges
+                .keys()
+                .map(|c_row_id| *c_row_id)
+                .collect();
             let query_state = &mut query_stati[qid.id_usize()];
 
-            if EntityStorage::is_subset_of(
-                &query_state.query_param_meta_data, 
-                &arch_comp_ids
-            ){
+            if EntityStorage::is_subset_of(&query_state.query_param_meta_data, &arch_comp_ids) {
                 let not_filtered_out = query_filter::comp_ids_compatible_with_filter(
                     &arch_comp_ids_set,
                     &query_state.filter,
