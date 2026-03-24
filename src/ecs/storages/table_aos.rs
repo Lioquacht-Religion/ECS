@@ -270,6 +270,81 @@ impl TableAoS {
         new_to_table_entity_row_id
     }
 
+
+    pub(crate) unsafe fn transfer_entity(
+        component_infos: &[ComponentInfo],
+        cache: &mut EntityStorageCache,
+        from: &mut TableAoS,
+        to: &mut TableAoS,
+        entity: &Entity,
+    ) -> TableRowId {
+        // transfers entities components to different archetype table
+        let mut from_ptr_vec: Vec<NonNull<u8>> = cache.ptr_vec_cache.take_cached();
+        let mut from_compid_vec: Vec<ComponentId> = cache.compid_vec_cache.take_cached();
+        let from_row_base_ptr = unsafe {
+            from.vec
+                .data_ptr
+                .add(from.vec.elem_layout.size() * entity.row_id.id_usize())
+        };
+        from.type_meta_data
+            .iter()
+            .map(|tmd| {
+                (tmd.comp_id, unsafe {
+                    from_row_base_ptr.add(tmd.ptr_offset)
+                })
+            })
+            .for_each(|(compid, ptr)| {
+                from_compid_vec.push(compid);
+                from_ptr_vec.push(ptr);
+            });
+
+        unsafe {
+            to.insert(component_infos, &from_compid_vec, &from_ptr_vec, cache);
+        }
+        cache.ptr_vec_cache.insert(from_ptr_vec);
+        cache.compid_vec_cache.insert(from_compid_vec);
+
+        // remove transfered entity from old table
+        unsafe {
+            from.vec
+                .dont_drop_replace_with_last(from.len, entity.row_id.id_usize());
+        }
+
+        from.len -= 1;
+        let new_to_table_entity_row_id = to.len.into();
+        to.len += 1;
+        new_to_table_entity_row_id
+    }
+
+    //TODO
+    fn get_compid_ptr_vecs(
+        component_infos: &[ComponentInfo],
+        cache: &mut EntityStorageCache,
+        from: &mut TableAoS,
+        to: &mut TableAoS,
+        entity: &Entity,
+    ){
+        let mut from_ptr_vec: Vec<NonNull<u8>> = cache.ptr_vec_cache.take_cached();
+        let mut from_compid_vec: Vec<ComponentId> = cache.compid_vec_cache.take_cached();
+        let from_row_base_ptr = unsafe {
+            from.vec
+                .data_ptr
+                .add(from.vec.elem_layout.size() * entity.row_id.id_usize())
+        };
+        from.type_meta_data
+            .iter()
+            .map(|tmd| {
+                (tmd.comp_id, unsafe {
+                    from_row_base_ptr.add(tmd.ptr_offset)
+                })
+            })
+            .for_each(|(compid, ptr)| {
+                from_compid_vec.push(compid);
+                from_ptr_vec.push(ptr);
+            });
+    }
+
+
     /*
     #[allow(unused)]
     pub(crate) unsafe fn tuple_iter<'a, TC: TupleIterConstructor<TableAoS>>(

@@ -294,7 +294,15 @@ impl EntityStorage {
             .get_mut(&table_arch_id)
             .expect("Table should exist at this point.");
         match T::STORAGE {
-            StorageTypes::TableAoS => todo!(),
+            StorageTypes::TableAoS => {
+                let tmd_id= table.table_aos.type_meta_data_map.get(&TypeId::of::<T>()).expect("TypeId is not contained in table.");
+                let tmd = &table.table_aos.type_meta_data.get_vec()[*tmd_id];
+                let cur_component = unsafe{
+                    table.table_aos.vec.get_mut_inner_typed_lifetime::<T>(entity.row_id.id_usize(), tmd.ptr_offset)
+                };
+                std::mem::swap(cur_component, &mut component);
+                // moved out component will be dropped here
+            }
             StorageTypes::TableSoA => {
                 let col = table
                     .table_soa
